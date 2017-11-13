@@ -2486,10 +2486,10 @@ search_rtpp_node(struct rtpp_set *set, char * url)
 	found = 0;
 	for (node=set->rn_first; node!=NULL; node=node->rn_next) {
 		if (strcmp(node->rn_url.s, url) == 0) {
-			node->rn_disabled = rtpp_test(node, 1, 0);
-			if (node->rn_disabled == 0) {
+			if (node->rn_disabled && node->rn_recheck_ticks <= get_ticks())
+				node->rn_disabled = rtpp_test(node, 1, 0);
+			if (node->rn_disabled == 0)
 				found = 1;
-			}
 			break;
 		}
 	}
