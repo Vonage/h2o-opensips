@@ -2366,7 +2366,7 @@ select_rtpp_node(struct sip_msg * msg,
 	pv_value_t val;
 
 	my_version = *list_version;
-	/* check last list version 
+	/* skip healthcheck on each call (check last list version)
 	if (my_version != *list_version && update_rtpp_proxies() < 0) {
 		LM_ERR("cannot update rtpp proxies list\n");
 		return 0;
@@ -2473,11 +2473,12 @@ search_rtpp_node(struct rtpp_set *set, char * url)
 	}
 
 	LM_DBG("Searching for node with url=%s\n", url);
-	/* check last list version */
+	my_version = *list_version;
+	/* skip healthcheck on each call (check last list version)
 	if (my_version != *list_version && update_rtpp_proxies() < 0) {
 		LM_ERR("cannot update rtpp proxies list\n");
 		return NULL;
-	}
+	} */
 
 	if (!set) {
 		LM_ERR("no set specified\n");
