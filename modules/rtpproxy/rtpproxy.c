@@ -261,7 +261,7 @@ static int fixup_engage(void **param,int param_no);
 static int force_rtp_proxy(struct sip_msg *, char *, char *, char *, char *, int, char *);
 static int start_recording_f(struct sip_msg *, char *, char *);
 static int rtpproxy_answer5_f(struct sip_msg *, char *, char *, char *, char *, char *);
-static int rtpproxy_offer4_f(struct sip_msg *, char *, char *, char *, char *);
+static int rtpproxy_offer5_f(struct sip_msg *, char *, char *, char *, char *, char *);
 
 static int add_rtpproxy_socks(struct rtpp_set * rtpp_list, char * rtpproxy);
 static int fixup_set_id(void ** param);
@@ -430,19 +430,19 @@ static cmd_export_t cmds[] = {
 	{"rtpproxy_start_recording", (cmd_function)start_recording_f,      2,
 		fixup_two_options, 0,
 		REQUEST_ROUTE|ONREPLY_ROUTE|BRANCH_ROUTE|FAILURE_ROUTE},
-	{"rtpproxy_offer",        (cmd_function)rtpproxy_offer4_f,      0,
+	{"rtpproxy_offer",        (cmd_function)rtpproxy_offer5_f,      0,
 		0, 0,
 		REQUEST_ROUTE|ONREPLY_ROUTE|FAILURE_ROUTE|BRANCH_ROUTE|LOCAL_ROUTE},
-	{"rtpproxy_offer",        (cmd_function)rtpproxy_offer4_f,      1,
+	{"rtpproxy_offer",        (cmd_function)rtpproxy_offer5_f,      1,
 		fixup_spve_null, 0,
 		REQUEST_ROUTE|ONREPLY_ROUTE|FAILURE_ROUTE|BRANCH_ROUTE|LOCAL_ROUTE},
-	{"rtpproxy_offer",        (cmd_function)rtpproxy_offer4_f,      2,
+	{"rtpproxy_offer",        (cmd_function)rtpproxy_offer5_f,      2,
 		fixup_spve_spve, 0,
 		REQUEST_ROUTE|ONREPLY_ROUTE|FAILURE_ROUTE|BRANCH_ROUTE|LOCAL_ROUTE},
-	{"rtpproxy_offer",        (cmd_function)rtpproxy_offer4_f,      3,
+	{"rtpproxy_offer",        (cmd_function)rtpproxy_offer5_f,      3,
 		fixup_offer_answer, 0,
 		REQUEST_ROUTE|ONREPLY_ROUTE|FAILURE_ROUTE|BRANCH_ROUTE|LOCAL_ROUTE},
-	{"rtpproxy_offer",        (cmd_function)rtpproxy_offer4_f,      4,
+	{"rtpproxy_offer",        (cmd_function)rtpproxy_offer5_f,      4,
 		fixup_offer_answer, 0,
 		REQUEST_ROUTE|ONREPLY_ROUTE|FAILURE_ROUTE|BRANCH_ROUTE|LOCAL_ROUTE},
 	{"rtpproxy_answer",      (cmd_function)rtpproxy_answer5_f,      0,
@@ -2664,7 +2664,7 @@ static int rtpp_get_var_svalue(struct sip_msg *msg, gparam_p gp, str *val, int n
 }
 
 static int
-rtpproxy_offer4_f(struct sip_msg *msg, char *param1, char *param2, char *param3, char *param4)
+rtpproxy_offer5_f(struct sip_msg *msg, char *param1, char *param2, char *param3, char *param4, char *param5)
 {
 	str aux_str;
 
@@ -2696,7 +2696,15 @@ rtpproxy_offer4_f(struct sip_msg *msg, char *param1, char *param2, char *param3,
 		param2 = aux_str.s;
 	}
 
-	return force_rtp_proxy(msg, param1, param2, param3, param4, 1, NULL);
+    if (param5) {
+            if (rtpp_get_Var_svalue(msg, (gparam_p)param5, &aux_str, 2)>0) {
+                LM_INFO("Ignoring url parameter\n");
+            }
+    else {
+            param5 = aux_str.s;
+    }
+
+	return force_rtp_proxy(msg, param1, param2, param3, param4, 1, param5);
 }
 
 static int
@@ -3849,7 +3857,7 @@ force_rtp_proxy_body(struct sip_msg* msg, struct force_rtpp_args *args, pv_spec_
 
 				/* if not successful choose a different rtpproxy */
 				if (!args->node) {
-					if ((args->offer == 0) && use_url) {
+					if ( use_url) {
 						// for rtpproxy_answer, if provided OFFER stage rtpproxy 
 						// URL, we will search in
 						// the node list to find a matching one and use it
