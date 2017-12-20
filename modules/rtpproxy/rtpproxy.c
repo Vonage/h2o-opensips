@@ -2697,11 +2697,13 @@ rtpproxy_offer5_f(struct sip_msg *msg, char *param1, char *param2, char *param3,
 	}
 
     if (param5) {
-            if (rtpp_get_Var_svalue(msg, (gparam_p)param5, &aux_str, 2)>0) {
+            if (rtpp_get_var_svalue(msg, (gparam_p)param5, &aux_str, 2)<0) {
                 LM_INFO("Ignoring url parameter\n");
             }
+
     else {
             param5 = aux_str.s;
+    }
     }
 
 	return force_rtp_proxy(msg, param1, param2, param3, param4, 1, param5);
