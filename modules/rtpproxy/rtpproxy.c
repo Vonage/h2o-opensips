@@ -2465,10 +2465,11 @@ done:
 }
 
 struct rtpp_node *
-search_rtpp_node(struct rtpp_set *set, char * url)
+search_rtpp_node(struct rtpp_set *set, char * url, int offer, pv_spec_p spec, struct sip_msg * msg)
 {
 	struct rtpp_node* node = NULL;
 	int found;
+    pv_value_t val;
 
 	if (!url) {
 		return NULL;
@@ -2497,6 +2498,17 @@ search_rtpp_node(struct rtpp_set *set, char * url)
 		}
 	}
 	if (found == 1) {
+        if ( offer == 0) {
+            LM_DBG("node search on offer\n");
+            if (spec) {
+                memset(&val, 0, sizeof(pv_value_t));
+                val.flags = PV_VAL_STR;
+                val.rs = node->rn_url;
+                if(pv_set_value(msg, spec, (int)EQ_T, &val)<0)
+                    LM_ERR("setting PV failed\n");
+            }
+
+        }
 		LM_DBG("Found node with url=%s\n", url);
 		return node;
 	}
@@ -2671,6 +2683,7 @@ rtpproxy_offer5_f(struct sip_msg *msg, char *param1, char *param2, char *param3,
 {
 	str aux_str;
 
+    LM_DBG("rtpproxy offer 5 is being called\n");
 	if(rtpp_notify_socket.s)
 	{
 		if ( (!msg->to && parse_headers(msg, HDR_TO_F,0)<0) || !msg->to ) {
@@ -3365,6 +3378,7 @@ force_rtp_proxy(struct sip_msg* msg, char* str1, char* str2, char *setid, char *
 
 	for (p = m->first; p != NULL; p = p->next)
 	{
+        LM_DBG("For each SDP body!\n");
 		int ret = 0;
 		if (p->content_type != ((TYPE_APPLICATION << 16) + SUBTYPE_SDP))
 			continue;
@@ -3760,6 +3774,7 @@ force_rtp_proxy_body(struct sip_msg* msg, struct force_rtpp_args *args, pv_spec_
 	m_opts = opts;
 
 	for(;;) {
+        LM_DBG("For each session in SDP\n");
 		/* Per-session iteration. */
 		v1p = v2p;
 		if (v1p == NULL || v1p >= bodylimit)
@@ -3789,9 +3804,13 @@ force_rtp_proxy_body(struct sip_msg* msg, struct force_rtpp_args *args, pv_spec_
 		/* Have session. Iterate media descriptions in session */
 		m2p = m1p;
 		for (;;) {
+            LM_DBG("For each media in session\n");
 			m_opts.oidx = opts.oidx;
 
 			m1p = m2p;
+            LM_DBG("m1p: %s\n", m1p);
+            LM_DBG("v2p: %s\n", v2p);
+
 			if (m1p == NULL || m1p >= v2p)
 				break;
 			m2p = find_next_sdp_line(m1p, v2p, 'm', v2p);
@@ -3863,10 +3882,11 @@ force_rtp_proxy_body(struct sip_msg* msg, struct force_rtpp_args *args, pv_spec_
 				/* if not successful choose a different rtpproxy */
 				if (!args->node) {
 					if ( use_url) {
+                        LM_DBG("use url is set! %s\n", use_url);
 						// for rtpproxy_answer, if provided OFFER stage rtpproxy 
 						// URL, we will search in
 						// the node list to find a matching one and use it
-						args->node = search_rtpp_node(args->set, use_url);
+						args->node = search_rtpp_node(args->set, use_url, args->offer, (pv_spec_p)var, msg);
 					}
 
 					if (!args->node) {
@@ -3970,6 +3990,7 @@ force_rtp_proxy_body(struct sip_msg* msg, struct force_rtpp_args *args, pv_spec_
 			cpend=cp+strlen(cp);
 			next=eat_token_end(cp, cpend);
 			for (ap=argv; cp<cpend; cp=next+1, next=eat_token_end(cp, cpend)){
+                LM_DBG("For each argument in response\n");
 				*next=0;
 				if (*cp != '\0') {
 					*ap=cp;
