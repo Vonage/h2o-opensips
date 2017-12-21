@@ -2469,7 +2469,7 @@ search_rtpp_node(struct rtpp_set *set, char * url, int offer, pv_spec_p spec, st
 {
 	struct rtpp_node* node = NULL;
 	int found;
-    pv_value_t val;
+	pv_value_t val;
 
 	if (!url) {
 		return NULL;
@@ -2498,16 +2498,13 @@ search_rtpp_node(struct rtpp_set *set, char * url, int offer, pv_spec_p spec, st
 		}
 	}
 	if (found == 1) {
-        if ( offer == 1) {
-            if (spec) {
-                memset(&val, 0, sizeof(pv_value_t));
-                val.flags = PV_VAL_STR;
-                val.rs = node->rn_url;
-                if(pv_set_value(msg, spec, (int)EQ_T, &val)<0)
-                    LM_ERR("setting PV failed\n");
-            }
-
-        }
+		if ( offer == 1 && spec) {
+			memset(&val, 0, sizeof(pv_value_t));
+			val.flags = PV_VAL_STR;
+			val.rs = node->rn_url;
+			if(pv_set_value(msg, spec, (int)EQ_T, &val)<0)
+				LM_ERR("setting PV failed\n");
+        	}
 		LM_DBG("Found node with url=%s\n", url);
 		return node;
 	}
@@ -2710,15 +2707,14 @@ rtpproxy_offer5_f(struct sip_msg *msg, char *param1, char *param2, char *param3,
 		param2 = aux_str.s;
 	}
 
-    if (param5) {
-            if (rtpp_get_var_svalue(msg, (gparam_p)param5, &aux_str, 2)<0) {
-                LM_INFO("Ignoring url parameter\n");
-            }
-
-    else {
-            param5 = aux_str.s;
-    }
-    }
+	if (param5) {
+		if (rtpp_get_var_svalue(msg, (gparam_p)param5, &aux_str, 2)<0) {
+			LM_INFO("Ignoring url parameter\n");
+		}
+		else {
+			param5 = aux_str.s;
+		}
+	}
 
 	return force_rtp_proxy(msg, param1, param2, param3, param4, 1, param5);
 }
