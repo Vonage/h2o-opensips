@@ -1197,6 +1197,8 @@ db_res_t * build_db_result(xmlNodePtr list_node, int n_result_cols)
 	xmlNodePtr node, subnode;
 	int i;
 	str uri;
+    str display;
+    char displayname[128];
 	str *normalized_uri;
 	db_res_t * result;
 	db_row_t* row;
@@ -1263,6 +1265,21 @@ db_res_t * build_db_result(xmlNodePtr list_node, int n_result_cols)
 					}
 					xmlFree(uri.s);
 
+					display.s = XMLNodeGetAttrContentByName(subnode, "display");
+					if(display.s == NULL)
+					{
+                        display.len = 0;
+                        strncpy(displayname, normalized_uri->s, 127);
+                        displayname[127] = 0;
+                    }
+                    else
+                    {
+                        display.len = strlen(display.s);
+                        strncpy(displayname, display.s, 127);
+                        displayname[127] = 0;
+                        xmlFree(display.s);
+                    }
+
 					row = &(RES_ROWS(result)[i]);
 					ROW_N(row) = n_result_cols;
 
@@ -1291,7 +1308,7 @@ db_res_t * build_db_result(xmlNodePtr list_node, int n_result_cols)
 					char username[512];
 					extractSipUsername(normalized_uri->s, username);
 					char buf[1024];
-					snprintf(buf, 1023, "<?xml version=\"1.0\"?><dialog-info xmlns=\"urn:ietf:params:xml:ns:dialog-info\" version=\"169\" state=\"full\" entity=\"%s\"><dialog id=\"zxcnm3\" direction=\"receiver\"><state>terminated</state><remote><local><identity display=\"%s\">%s</identity></local></remote></dialog></dialog-info>", normalized_uri->s, username, normalized_uri->s);
+					snprintf(buf, 1023, "<?xml version=\"1.0\"?><dialog-info xmlns=\"urn:ietf:params:xml:ns:dialog-info\" version=\"169\" state=\"full\" entity=\"%s\"><dialog id=\"zxcnm3\" direction=\"receiver\"><state>terminated</state><remote><local><identity display=\"%s\">%s</identity></local></remote></dialog></dialog-info>", normalized_uri->s, username, displayname);
 					val = &(ROW_VALUES(row)[pres_state_col]);
 					VAL_TYPE(val) = DB_STRING;
 					VAL_NULL(val) = 0;
