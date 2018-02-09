@@ -313,7 +313,7 @@ error:
 }
 
 
-int add_resource_instance(char* uri, xmlNodePtr resource_node,
+int add_resource_instance(char* uri, char* display, xmlNodePtr resource_node,
 		db_res_t* result, str* cid_array)
 {
 	xmlNodePtr instance_node= NULL;
@@ -336,9 +336,9 @@ int add_resource_instance(char* uri, xmlNodePtr resource_node,
 
 		if(cmp_code== 0)
 		{
-            char username[512];
-            extractSipUsername(uri, username);
-            xmlNewChild(resource_node, NULL, BAD_CAST "name", BAD_CAST username);
+            //char username[512];
+            //extractSipUsername(uri, username);
+            xmlNewChild(resource_node, NULL, BAD_CAST "name", BAD_CAST display);
 
 			instance_node= xmlNewChild(resource_node, NULL,
 					BAD_CAST "instance", NULL);
@@ -386,7 +386,7 @@ error:
 	return -1;
 }
 
-int add_resource(char* uri, void* param)
+int add_resource(char* uri, char* display, void* param)
 {
 	str* cid_array= ((res_param_t*)param)->cid_array;
 	xmlNodePtr list_node= ((res_param_t*)param)->list_node;
@@ -402,7 +402,7 @@ int add_resource(char* uri, void* param)
 	}
 	xmlNewProp(resource_node, BAD_CAST "uri", BAD_CAST uri);
 
-	if(add_resource_instance(uri, resource_node, result, cid_array)< 0)
+	if(add_resource_instance(uri, display, resource_node, result, cid_array)< 0)
 	{
 		LM_ERR("while adding resource instance node\n");
 		goto error;
@@ -903,6 +903,8 @@ int process_list_and_exec(xmlNodePtr list_node, str username, str domain,
 	xmlNodePtr node;
 	int res = 0;
 	str uri;
+    str display;
+    char displayname[128];
 	str *normalized_uri;
 	xcap_uri_t xcap_uri;
 
@@ -977,9 +979,24 @@ int process_list_and_exec(xmlNodePtr list_node, str username, str domain,
                         }
 			xmlFree(uri.s);
 
+			display.s = XMLNodeGetAttrContentByName(node, "display");
+			if(display.s == NULL)
+			{
+                display.len = 0;
+                strncpy(displayname, normalized_uri->s, 127);
+                displayname[127] = 0;
+            }
+            else
+            {
+                display.len = strlen(display.s);
+                strncpy(displayname, display.s, 127);
+                displayname[127] = 0;
+                xmlFree(display.s);
+            }
+
 			if(cont_no)
 			        *cont_no = *cont_no+1;
-			if(function(normalized_uri->s, param)< 0)
+			if(function(normalized_uri->s, displayname, param)< 0)
 			{
 				LM_ERR("in function given as a parameter\n");
 				return -1;
