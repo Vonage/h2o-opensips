@@ -336,8 +336,6 @@ int add_resource_instance(char* uri, char* display, xmlNodePtr resource_node,
 
 		if(cmp_code== 0)
 		{
-            //char username[512];
-            //extractSipUsername(uri, username);
             xmlNewChild(resource_node, NULL, BAD_CAST "name", BAD_CAST display);
 
 			instance_node= xmlNewChild(resource_node, NULL,
@@ -904,7 +902,7 @@ int process_list_and_exec(xmlNodePtr list_node, str username, str domain,
 	int res = 0;
 	str uri;
     str display;
-    char displayname[128];
+    char displayname[512];
 	str *normalized_uri;
 	xcap_uri_t xcap_uri;
 
@@ -983,14 +981,13 @@ int process_list_and_exec(xmlNodePtr list_node, str username, str domain,
 			if(display.s == NULL)
 			{
                 display.len = 0;
-                strncpy(displayname, normalized_uri->s, 127);
-                displayname[127] = 0;
+                extractSipUsername(normalized_uri->s, displayname);
             }
             else
             {
                 display.len = strlen(display.s);
-                strncpy(displayname, display.s, 127);
-                displayname[127] = 0;
+                strncpy(displayname, display.s, 511);
+                displayname[511] = 0;
                 xmlFree(display.s);
             }
 
@@ -1347,22 +1344,27 @@ db_res_t * build_db_result(xmlNodePtr list_node, int n_result_cols)
 	return result;
 }
 
+// username must be at least 512 bytes - char username[512]
 void extractSipUsername(char * uri, char * username)
 {
     char * savedPtr;
     char buf[512];
     strncpy(buf, uri, 511);
+    buf[511] = 0;
     strncpy(username, buf, 511);
+    username[511] = 0;
     char * t = strtok_r(buf, ":@", &savedPtr);
     if (t) {
         if (strcmp(t, "sip") == 0) {
             t = strtok_r(NULL, ":@", &savedPtr);
             if (t) {
                 strncpy(username, t, 511);
+                username[511] = 0;
             }
         }
         else {
             strncpy(username, t, 511);
+            username[511] = 0;
         }
     }
 }
