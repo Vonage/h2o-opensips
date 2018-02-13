@@ -336,7 +336,16 @@ int add_resource_instance(char* uri, char* display, xmlNodePtr resource_node,
 
 		if(cmp_code== 0)
 		{
-            xmlNewChild(resource_node, NULL, BAD_CAST "name", BAD_CAST display);
+			if (display == 0)
+			{
+				char username[512];
+				extractSipUsername(uri, username);
+				xmlNewChild(resource_node, NULL, BAD_CAST "name", BAD_CAST username);
+			}
+			else
+			{
+				xmlNewChild(resource_node, NULL, BAD_CAST "name", BAD_CAST display);
+			}
 
 			instance_node= xmlNewChild(resource_node, NULL,
 					BAD_CAST "instance", NULL);
@@ -901,8 +910,8 @@ int process_list_and_exec(xmlNodePtr list_node, str username, str domain,
 	xmlNodePtr node;
 	int res = 0;
 	str uri;
-    str display;
-    char displayname[512];
+	str display;
+	char displayname[512];
 	str *normalized_uri;
 	xcap_uri_t xcap_uri;
 
@@ -980,16 +989,16 @@ int process_list_and_exec(xmlNodePtr list_node, str username, str domain,
 			display.s = XMLNodeGetAttrContentByName(node, "display");
 			if(display.s == NULL)
 			{
-                display.len = 0;
-                extractSipUsername(normalized_uri->s, displayname);
-            }
-            else
-            {
-                display.len = strlen(display.s);
-                strncpy(displayname, display.s, 511);
-                displayname[511] = 0;
-                xmlFree(display.s);
-            }
+				display.len = 0;
+				extractSipUsername(normalized_uri->s, displayname);
+			}
+			else
+			{
+				display.len = strlen(display.s);
+				strncpy(displayname, display.s, 511);
+				displayname[511] = 0;
+				xmlFree(display.s);
+			}
 
 			if(cont_no)
 			        *cont_no = *cont_no+1;
