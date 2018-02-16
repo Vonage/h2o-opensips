@@ -346,7 +346,7 @@ static int mod_init(void)
 	rlsubs_table.len= strlen(rlsubs_table.s);
 	rlpres_table.len= strlen(rlpres_table.s);
 	rls_xcap_table.len= strlen(rls_xcap_table.s);
-    rls_displayname_table.len= strlen(rls_displayname_table.s);
+	rls_displayname_table.len= strlen(rls_displayname_table.s);
 
 	/* binding to mysql module  */
 	if (db_bind_mod(&db_url, &rls_dbf))
