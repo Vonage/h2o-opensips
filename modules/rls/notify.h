@@ -56,7 +56,7 @@ static inline int append_multipart_body(char **buf, int *buf_len, int *size, str
 
 		remain_size = *size - *buf_len;
 		ret = snprintf(*buf + *buf_len, remain_size, "--%.*s\r\nContent-Transfer-Encoding: binary\r\n", bstr->len, bstr->s);
-		if (ret >= remain_size) {
+		if (ret < 0 || ret >= remain_size) {
 			LM_ERR("append_multipart_body : snprintf exceeds size\n");
 			return -1;
 		}
@@ -66,7 +66,7 @@ static inline int append_multipart_body(char **buf, int *buf_len, int *size, str
 		{
 			remain_size = *size - *buf_len;
 			ret = snprintf(*buf + *buf_len, remain_size, "Content-ID: <%.*s>\r\nContent-Type: %.*s\r\n\r\n%.*s\r\n",cid->len, cid->s, ctype->len, ctype->s, body->len, body->s);
-			if (ret >= remain_size) {
+			if (ret < 0 || ret >= remain_size) {
 				LM_ERR("append_multipart_body : snprintf exceeds size\n");
 				return -1;
 			}
@@ -75,7 +75,7 @@ static inline int append_multipart_body(char **buf, int *buf_len, int *size, str
 
 		remain_size = *size - *buf_len;
 		ret = snprintf(*buf + *buf_len, remain_size, "\r\n");
-		if (ret >= remain_size) {
+		if (ret < 0 || ret >= remain_size) {
 			LM_ERR("append_multipart_body : snprintf exceeds size\n");
 			return -1;
 		}
