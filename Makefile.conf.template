@@ -70,8 +70,8 @@ DEFS+= -DSTATISTICS #Enables the statistics manager
 DEFS+= -DHAVE_RESOLV_RES #Support for changing some of the resolver parameters
 #DEFS_GROUP_START
 ##DEFS+= -DVQ_MALLOC #Very quick & wasteful mem allocator (currently disabled)
-#DEFS+= -DQM_MALLOC #Quality assurance memory allocator with runtime safety checks
-DEFS+= -DF_MALLOC #Fast memory allocator with minimal runtime overhead
+DEFS+= -DQM_MALLOC #Quality assurance memory allocator with runtime safety checks
+#DEFS+= -DF_MALLOC #Fast memory allocator with minimal runtime overhead
 #DEFS+= -DHP_MALLOC #High performance allocator with fine-grained locking
 #DEFS_GROUP_END
 #DEFS+= -DDBG_MALLOC #Enables debugging for memory allocators
