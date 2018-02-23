@@ -1078,7 +1078,7 @@ char* generate_cid(char* uri, int uri_len)
 	len= snprintf(cid, max_contentid_len, "%d.%.*s.%d", (int)time(NULL), uri_len, uri, rand());
     if (len > max_contentid_len) 
     {
-		LM_ERR("generate_cid : snprintf exceeds size. But it is protected and fixed. uri_len = %d, len = %d, max_contentid_len = %d\n", uri_len, len, max_contentid_len);
+		LM_DBG("generate_cid : snprintf exceeds size. But it is protected and fixed. uri_len = %d, len = %d, max_contentid_len = %d\n", uri_len, len, max_contentid_len);
         len = max_contentid_len;
     }
 	cid[len]= '\0';
