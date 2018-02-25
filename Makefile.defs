@@ -768,7 +768,7 @@ ifneq (,$(findstring DBG_MALLOC, $(DEFS)))
 endif
 
 ifeq	($(CC_NAME), gcc)
-	CC_OPTIMIZE_FLAG?=-O9
+	CC_OPTIMIZE_FLAG?=-O2
 endif
 ifeq	($(CC_NAME), icc)
 	CC_OPTIMIZE_FLAG?=-O3
