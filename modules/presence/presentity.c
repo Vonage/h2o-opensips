@@ -1155,7 +1155,7 @@ char* get_sphere(str* pres_uri)
 	{
 		if(p->sphere)
 		{
-			sphere= (char*)pkg_malloc(strlen(p->sphere));
+			sphere= (char*)pkg_malloc(strlen(p->sphere)+1);
 			if(sphere== NULL)
 			{
 				lock_release(&pres_htable[hash_code].lock);
