@@ -236,7 +236,7 @@ int agg_body_sendn_update(str* rl_uri, str bstr, str* rlmi_body,
 	str body= {0, 0};
 	int init_len;
 	int body_len;
-    int ret, remain_size;
+	int ret, remain_size;
 
 	cid.s= generate_cid(rl_uri->s, rl_uri->len);
 	if(cid.s == NULL)
@@ -259,21 +259,21 @@ int agg_body_sendn_update(str* rl_uri, str bstr, str* rlmi_body,
 	}
 
 	ret =  snprintf(body.s, init_len, "--%.*s\r\nContent-Transfer-Encoding: binary\r\nContent-ID: <%.*s>\r\nContent-Type: application/rlmi+xml;charset=\"UTF-8\"\r\n\r\n", bstr.len, bstr.s, cid.len, cid.s);
-    if (ret >= init_len)
-    {
+	if (ret >= init_len)
+	{
 		LM_ERR("agg_body_sendn_update : snprintf exceeds size\n");
 		return -1;
 	}
 
-    len = ret;
+	len = ret;
 	body_len = rlmi_body->len;
 	memcpy(body.s+ len, rlmi_body->s, body_len);
 	len+= body_len;
     
-    remain_size = init_len - len;
+	remain_size = init_len - len;
 	ret = snprintf(body.s+ len, remain_size, "\r\n"); /*blank line*/
-    if (ret >= remain_size)
-    {
+	if (ret >= remain_size)
+	{
 		LM_ERR("agg_body_sendn_update : snprintf exceeds size\n");
 		return -1;
 	}
@@ -285,14 +285,14 @@ int agg_body_sendn_update(str* rl_uri, str bstr, str* rlmi_body,
 		len+= multipart_body->len;
 	}
 
-    remain_size = init_len - len;
+	remain_size = init_len - len;
 	ret = snprintf(body.s+ len, remain_size, "--%.*s--\r\n", bstr.len, bstr.s);
-    if (ret >= remain_size)
-    {
+	if (ret >= remain_size)
+	{
 		LM_ERR("agg_body_sendn_update : snprintf exceeds size\n");
 		return -1;
 	}
-    len += ret;
+	len += ret;
 
 	if(init_len< len)
 	{
@@ -1076,11 +1076,11 @@ char* generate_cid(char* uri, int uri_len)
 	}
 
 	len= snprintf(cid, max_contentid_len, "%d.%.*s.%d", (int)time(NULL), uri_len, uri, rand());
-    if (len > max_contentid_len) 
-    {
+	if (len > max_contentid_len) 
+	{
 		LM_DBG("generate_cid : snprintf exceeds size. But it is protected and fixed. uri_len = %d, len = %d, max_contentid_len = %d\n", uri_len, len, max_contentid_len);
-        len = max_contentid_len;
-    }
+		len = max_contentid_len;
+	}
 	cid[len]= '\0';
 
 	return cid;
