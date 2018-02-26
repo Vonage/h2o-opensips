@@ -43,7 +43,7 @@ static inline int append_multipart_body(char **buf, int *buf_len, int *size, str
 		int remain_size, ret;
 
 		add_body = !!body->len;
-        /* keep a redundency of 32 bytes */
+		/* keep a redundency of 32 bytes */
 		len = 4+bstr->len + 35 + 2 + 32;
 		if (add_body)
 			len += 16+cid->len + 18+ctype->len +2+body->len;
