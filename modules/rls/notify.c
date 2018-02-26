@@ -250,6 +250,7 @@ int agg_body_sendn_update(str* rl_uri, str bstr, str* rlmi_body,
 	if(multipart_body)
 		len+= multipart_body->len;
 
+    /* keep a redundency of 32 bytes */
 	init_len= len + 32;
 
 	body.s= (char*)pkg_malloc(len);
