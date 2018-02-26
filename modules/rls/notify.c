@@ -278,7 +278,7 @@ int agg_body_sendn_update(str* rl_uri, str bstr, str* rlmi_body,
 		LM_ERR("agg_body_sendn_update : snprintf exceeds size\n");
 		return -1;
 	}
-    len += ret;
+	len += ret;
 
 	if(multipart_body)
 	{
