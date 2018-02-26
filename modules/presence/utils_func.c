@@ -124,8 +124,8 @@ int send_error_reply(struct sip_msg* msg, int reply_code, str reply_str)
 		memcpy(hdr_append.s+ hdr_append.len, CRLF, CRLF_LEN);
 		hdr_append.len+=  CRLF_LEN;
 		hdr_append.s[hdr_append.len]= '\0';
-        if (hdr_append.len >= 256)
-        {
+		if (hdr_append.len >= 256)
+		{
 			LM_ERR("send_error_reply : snprintf exceeds size\n");
 		}
 
