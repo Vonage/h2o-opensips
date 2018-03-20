@@ -618,8 +618,8 @@ void timer_send_notify(unsigned int ticks,void *param)
 		char displayname[512];
 		extractSipUsername(resource_uri, displayname);
 
-        if (findDisplayName(body, displayname) == -1)
-            continue;
+		if (findDisplayName(body, displayname) == -1)
+			continue;
 
 		/* if all the info for one dialog have been collected -> send notify */
 		/* the 'dialog' variable must be filled with the dialog info */
@@ -767,8 +767,8 @@ void timer_send_notify(unsigned int ticks,void *param)
 			body.len = strlen(body.s);
 		        trim(&body);
 
-            if (findDisplayName(body, displayname) == -1)
-			    break;
+			if (findDisplayName(body, displayname) == -1)
+				break;
 		}
 
 		prev_did= curr_did;
@@ -832,96 +832,96 @@ void rls_presentity_clean(unsigned int ticks,void *param)
 }
 
 /* 
-    find display name from NOTIFY body xml :
-    If state='full', the event was created by presence in response to SUBSCRIBE, ignore it - return -1.
-    otherwise, return 0
-    Input: char displayname[512]
+	find display name from NOTIFY body xml :
+	If state='full', the event was created by presence in response to SUBSCRIBE, ignore it - return -1.
+	otherwise, return 0
+	Input: char displayname[512]
 
-    - A typical BLF event looks like :
+	- A typical BLF event looks like :
 <dialog-info xmlns="urn:ietf:params:xml:ns:dialog-info" version="4" entity="sip:412@account-123456" state="partial">
-    <dialog id="412@account-123456">
-        <state>confirmed</state>
-        <duration>274</duration>
-        <local>
-            <identity display="412-firstname lastname">sip:412@account-123456</identity>
-            <target uri="sip:VH654321@account-123456"/>
-        </local>
-        <remote>
-            <identity display="402">sip:402@account-123456</identity>
-            <target uri="sip:402@account-123456"/>
-        </remote>
-    </dialog>
+	<dialog id="412@account-123456">
+		<state>confirmed</state>
+		<duration>274</duration>
+		<local>
+			<identity display="412-firstname lastname">sip:412@account-123456</identity>
+			<target uri="sip:VH654321@account-123456"/>
+		</local>
+		<remote>
+			<identity display="402">sip:402@account-123456</identity>
+			<target uri="sip:402@account-123456"/>
+		</remote>
+	</dialog>
 </dialog-info>
 
-    - A typical event created by presence looks like:
-<dialog-info xmlns="urn:ietf:params:xml:ns:dialog-info" version="0"           state="full" entity="sip:412@account-123456"><dialog id="zxcnm3" direction="receiver"><state>terminated</state><remote><local><identity display="412">sip:412@account-123456</identity></local></remote></dialog></dialog-info>
+	- A typical event created by presence looks like:
+<dialog-info xmlns="urn:ietf:params:xml:ns:dialog-info" version="0"		   state="full" entity="sip:412@account-123456"><dialog id="zxcnm3" direction="receiver"><state>terminated</state><remote><local><identity display="412">sip:412@account-123456</identity></local></remote></dialog></dialog-info>
 
 */
 int findDisplayName(str body, char * displayname)
 {
-    xmlDocPtr xmldoc = NULL;
-    xmlNodePtr node, sub1, sub2, sub3;
-    char * buf;
+	xmlDocPtr xmldoc = NULL;
+	xmlNodePtr node, sub1, sub2, sub3;
+	char * buf;
 
-    if (body.len <= 0)
-        goto dn_error;
+	if (body.len <= 0)
+		goto dn_error;
 
-    xmldoc = xmlParseMemory(body.s, body.len);
-    if (xmldoc == NULL)
-        goto dn_error;
+	xmldoc = xmlParseMemory(body.s, body.len);
+	if (xmldoc == NULL)
+		goto dn_error;
 
-    node = XMLDocGetNodeByName(xmldoc,"dialog-info", NULL);
-    if (node == NULL)
-        goto dn_error;
+	node = XMLDocGetNodeByName(xmldoc,"dialog-info", NULL);
+	if (node == NULL)
+		goto dn_error;
 
-    buf = XMLNodeGetAttrContentByName(node, "state");
-    if (buf)
-    {
-        if (strncasecmp(buf, "full", 4) == 0)
-        {
-            xmlFree(buf);
-            goto dn_skip;
-        }
-        xmlFree(buf);
-    }
+	buf = XMLNodeGetAttrContentByName(node, "state");
+	if (buf)
+	{
+		if (strncasecmp(buf, "full", 4) == 0)
+		{
+			xmlFree(buf);
+			goto dn_skip;
+		}
+		xmlFree(buf);
+	}
 
-    for(sub1 = node->children; sub1; sub1 = sub1->next)
-    {
-        if(xmlStrcasecmp(sub1->name, (unsigned char*)"dialog")== 0) 
-        {
-            for (sub2 = sub1->children; sub2; sub2 = sub2->next)
-            {
-                if(xmlStrcasecmp(sub2->name, (unsigned char*)"local")== 0)
-                {
-                    for (sub3 = sub2->children; sub3; sub3 = sub3->next)
-                    {
-                        if(xmlStrcasecmp(sub3->name, (unsigned char*)"identity")== 0)
-                        {
-                            buf = XMLNodeGetAttrContentByName(sub3, "display");
-                            if (buf)
-                            {
-                                strncpy(displayname, buf, 511);
-                                displayname[511] = 0;
-                                xmlFree(buf);
-                                /* xml format matches with PUBLISH event */
-                                goto dn_normal;
-                            }
-                        }
-                    }
-                }
-            }
-        }
-    }
+	for(sub1 = node->children; sub1; sub1 = sub1->next)
+	{
+		if(xmlStrcasecmp(sub1->name, (unsigned char*)"dialog")== 0) 
+		{
+			for (sub2 = sub1->children; sub2; sub2 = sub2->next)
+			{
+				if(xmlStrcasecmp(sub2->name, (unsigned char*)"local")== 0)
+				{
+					for (sub3 = sub2->children; sub3; sub3 = sub3->next)
+					{
+						if(xmlStrcasecmp(sub3->name, (unsigned char*)"identity")== 0)
+						{
+							buf = XMLNodeGetAttrContentByName(sub3, "display");
+							if (buf)
+							{
+								strncpy(displayname, buf, 511);
+								displayname[511] = 0;
+								xmlFree(buf);
+								/* xml format matches with PUBLISH event */
+								goto dn_normal;
+							}
+						}
+					}
+				}
+			}
+		}
+	}
 
 dn_normal:
 dn_error:
-    if (xmldoc)
-        xmlFreeDoc(xmldoc);
-    return 0;
+	if (xmldoc)
+		xmlFreeDoc(xmldoc);
+	return 0;
 
 dn_skip:
-    /* skip events which was created by presence in response to SUBSCRIBE */
-    if (xmldoc)
-        xmlFreeDoc(xmldoc);
-    return -1;
+	/* skip events which was created by presence in response to SUBSCRIBE */
+	if (xmldoc)
+		xmlFreeDoc(xmldoc);
+	return -1;
 }
