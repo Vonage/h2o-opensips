@@ -99,7 +99,7 @@ void replicate_ucontact_insert(urecord_t *r, str *contact, ucontact_info_t *ci)
 	bin_push_str(&st);
 
 	bin_push_str(ci->sock?&ci->sock->sock_str:NULL);
-	bin_push_int(ci->cseq);
+	bin_push_uint32(ci->cseq);
 	bin_push_int(ci->flags);
 	bin_push_int(ci->cflags);
 	bin_push_int(ci->methods);
@@ -143,7 +143,7 @@ void replicate_ucontact_update(urecord_t *r, str *contact, ucontact_info_t *ci)
 	bin_push_str(&st);
 
 	bin_push_str(ci->sock?&ci->sock->sock_str:NULL);
-	bin_push_int(ci->cseq);
+	bin_push_uint32(ci->cseq);
 	bin_push_int(ci->flags);
 	bin_push_int(ci->cflags);
 	bin_push_int(ci->methods);
@@ -169,7 +169,7 @@ void replicate_ucontact_delete(urecord_t *r, ucontact_t *c)
 	bin_push_str(&r->aor);
 	bin_push_str(&c->c);
 	bin_push_str(&c->callid);
-	bin_push_int(c->cseq);
+	bin_push_uint32(c->cseq);
 
 	if (clusterer_api.send_to(ul_replicate_cluster, PROTO_BIN) < 0) {
 		LM_DBG("replicate ucontact delete failed\n");
@@ -304,7 +304,7 @@ static int receive_ucontact_insert(void)
 		ci.sock =  NULL;
 	}
 
-	bin_pop_int(&ci.cseq);
+	bin_pop_uint32(&ci.cseq);
 	bin_pop_int(&ci.flags);
 	bin_pop_int(&ci.cflags);
 	bin_pop_int(&ci.methods);
@@ -403,7 +403,7 @@ static int receive_ucontact_update(void)
 		ci.sock = NULL;
 	}
 
-	bin_pop_int(&ci.cseq);
+	bin_pop_uint32(&ci.cseq);
 	bin_pop_int(&ci.flags);
 	bin_pop_int(&ci.cflags);
 	bin_pop_int(&ci.methods);
@@ -472,13 +472,14 @@ static int receive_ucontact_delete(void)
 	urecord_t *record;
 	ucontact_t *contact;
 	str d, aor, contact_str, callid;
-	int cseq, rc;
+	uint32_t cseq;
+	int rc;
 
 	bin_pop_str(&d);
 	bin_pop_str(&aor);
 	bin_pop_str(&contact_str);
 	bin_pop_str(&callid);
-	bin_pop_int(&cseq);
+	bin_pop_uint32(&cseq);
 
 	if (find_domain(&d, &domain) != 0) {
 		LM_ERR("domain '%.*s' is not local\n", d.len, d.s);

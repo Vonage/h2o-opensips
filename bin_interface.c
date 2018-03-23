@@ -143,6 +143,26 @@ int bin_push_int(int info)
 	return (int)(cpos - send_buffer);
 }
 
+/*
+ * adds a new 32 bit integer value at the 'cpos' position in the buffer
+ *
+ * @return:
+ *		> 0: success, the size of the buffer
+ *		< 0: internal buffer limit reached
+ */
+int bin_push_uint32(uint32_t info)
+{
+	if (!cpos || (cpos + sizeof(info) - send_buffer) > BUF_SIZE)
+		return -1;
+
+	memcpy(cpos, &info, sizeof(info));
+	cpos += sizeof(info);
+
+	set_len(send_buffer, cpos);
+	
+	return (int)(cpos - send_buffer);
+}
+
 int bin_get_buffer(str *buffer)
 {
 	if (!buffer)
@@ -275,6 +295,32 @@ int bin_pop_int(void *info)
 
 	memcpy(info, cpos, sizeof(int));
 	cpos += sizeof(int);
+
+	return 0;
+}
+
+/*
+ * pops a 32 bit integer value from the current position in the buffer
+ * @info:   pointer to store the result
+ *
+ * @return:
+ *		0 (success): info retrieved
+ *		1 (success): nothing returned, all data has been consumed!
+ *		< 0: error
+ */
+int bin_pop_uint32(void *info)
+{
+	if (cpos == rcv_end)
+		return 1;
+
+
+	if (cpos + sizeof(uint32_t) > rcv_end) {
+		LM_ERR("Receive binary packet buffer overflow");
+		return -1;
+	}
+
+	memcpy(info, cpos, sizeof(int32_t));
+	cpos += sizeof(uint32_t);
 
 	return 0;
 }

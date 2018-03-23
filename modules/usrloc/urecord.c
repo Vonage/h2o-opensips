@@ -595,7 +595,7 @@ static inline struct ucontact* contact_callid_match( ucontact_t* ptr,
  *     -1 - invalid found
  *     -2 - found, but to be skipped (same cseq)
  */
-int get_ucontact(urecord_t* _r, str* _c, str* _callid, int _cseq,
+int get_ucontact(urecord_t* _r, str* _c, str* _callid, uint32_t _cseq,
 														struct ucontact** _co)
 {
 	ucontact_t* ptr;

@@ -219,7 +219,7 @@ static inline ucontact_info_t* pack_ci( struct sip_msg* _m, contact_t* _c,
 		ci.callid = &callid;
 
 		/* Get CSeq number of the message */
-		if (str2int(&get_cseq(_m)->number, (unsigned int*)&ci.cseq) < 0) {
+		if (str2int32(&get_cseq(_m)->number, &ci.cseq) < 0) {
 			rerrno = R_INV_CSEQ;
 			LM_ERR("failed to convert cseq number\n");
 			goto error;

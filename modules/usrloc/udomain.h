@@ -178,6 +178,6 @@ int delete_urecord(udomain_t* _d, str* _aor, struct urecord* _r,
 
 
 void ul_raise_contact_event(event_id_t _e, str *addr, str *callid, str *recv,
-		str *aor, int cseq);
+		str *aor, uint32_t cseq);
 
 #endif /* UDOMAIN_H */

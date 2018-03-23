@@ -115,6 +115,7 @@ int bin_push_str(const str *info);
  *		< 0: internal buffer limit reached
  */
 int bin_push_int(int info);
+int bin_push_uint32(uint32_t info);
 
 /* TODO - comment, lol */
 int bin_get_buffer(str *buffer);
@@ -147,6 +148,7 @@ int bin_pop_str(str *info);
  * Note: Information is retrieved in the same order it was stored
  */
 int bin_pop_int(void *info);
+int bin_pop_uint32(void *info);
 
 /*
  * skips @count integers from a received binary packet

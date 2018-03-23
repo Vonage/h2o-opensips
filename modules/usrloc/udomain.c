@@ -255,7 +255,7 @@ static void ul_raise_event(event_id_t _e, struct urecord* _r)
 }
 
 void ul_raise_contact_event(event_id_t _e, str *addr, str *callid, str *recv,
-		str *aor, int cseq)
+		str *aor, uint32_t cseq)
 {
 	if (_e == EVI_ERROR) {
 		LM_ERR("event not yet registered %d\n", _e);

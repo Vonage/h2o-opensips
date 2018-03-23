@@ -136,9 +136,9 @@ int delete_ucontact(urecord_t* _r, struct ucontact* _c, char is_replicated);
 /*
  * Get pointer to ucontact with given contact
  */
-typedef int (*get_ucontact_t)(urecord_t* _r, str* _c, str* _callid, int _cseq,
+typedef int (*get_ucontact_t)(urecord_t* _r, str* _c, str* _callid, uint32_t _cseq,
 		struct ucontact** _co);
-int get_ucontact(urecord_t* _r, str* _c, str* _callid, int _cseq,
+int get_ucontact(urecord_t* _r, str* _c, str* _callid, uint32_t _cseq,
 		struct ucontact** _co);
 int get_simple_ucontact(urecord_t* _r, str* _c, struct ucontact** _co);
 

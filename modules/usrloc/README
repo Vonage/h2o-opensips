@@ -823,7 +823,7 @@ modparam("usrloc", "regen_broken_contactid", 1)
        was received from. If these have the same value as the
        contact's address (see the address parameter) then the
        received parameter will be an empty string.
-     * cseq - The cseq number as an int value.
+     * cseq - The cseq number as an uint32_t value.
 
 1.7.4.  E_UL_CONTACT_DELETE
 
@@ -840,7 +840,7 @@ modparam("usrloc", "regen_broken_contactid", 1)
        was received from. If these have the same value as the
        contact's address (see the address parameter) then the
        received parameter will be an empty string.
-     * cseq - The cseq number as an int value.
+     * cseq - The cseq number as an uint32_t value.
 
 1.7.5.  E_UL_CONTACT_UPDATE
 
@@ -855,7 +855,7 @@ modparam("usrloc", "regen_broken_contactid", 1)
        was received from. If these have the same value as the
        contact's address (see the address parameter) then the
        received parameter will be an empty string.
-     * cseq - The cseq number as an int value.
+     * cseq - The cseq number as an uint32_t value.
 
 Chapter 2. Developer Guide
 
