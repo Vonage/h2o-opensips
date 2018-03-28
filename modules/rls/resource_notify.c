@@ -833,8 +833,8 @@ void rls_presentity_clean(unsigned int ticks,void *param)
 
 /* 
 	find display name from NOTIFY body xml :
-	If state='full', the event was created by presence in response to SUBSCRIBE, ignore it - return -1.
-	otherwise, return 0
+	If xml syntax error, or found display name from PUBLISH body, return 0
+	otherwise, return -1
 	Input: char displayname[512]
 
 	- A typical BLF event looks like :
@@ -874,17 +874,6 @@ int findDisplayName(str body, char * displayname)
 	if (node == NULL)
 		goto dn_error;
 
-	buf = XMLNodeGetAttrContentByName(node, "state");
-	if (buf)
-	{
-		if (strncasecmp(buf, "full", 4) == 0)
-		{
-			xmlFree(buf);
-			goto dn_skip;
-		}
-		xmlFree(buf);
-	}
-
 	for(sub1 = node->children; sub1; sub1 = sub1->next)
 	{
 		if(xmlStrcasecmp(sub1->name, (unsigned char*)"dialog")== 0) 
@@ -913,15 +902,14 @@ int findDisplayName(str body, char * displayname)
 		}
 	}
 
+dn_skip:
+	if (xmldoc)
+		xmlFreeDoc(xmldoc);
+	return -1;
+
 dn_normal:
 dn_error:
 	if (xmldoc)
 		xmlFreeDoc(xmldoc);
 	return 0;
-
-dn_skip:
-	/* skip events which was created by presence in response to SUBSCRIBE */
-	if (xmldoc)
-		xmlFreeDoc(xmldoc);
-	return -1;
 }
