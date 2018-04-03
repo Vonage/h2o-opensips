@@ -771,6 +771,7 @@ int save(struct sip_msg* _m, char* _d, char* _f, char* _s)
 				requested_exp = ((exp_body_t*)(msg->expires->parsed))->val;
 			} else {
 				LM_WARN("No expired defined\n");
+				requested_rexp = 3600;
 			}
 		} else {
 			if (str2int(&(request_c->expires->body), (unsigned int*)&requested_exp)<0) {
