@@ -190,6 +190,7 @@ char* parse_hname2(char* begin, char* end, struct hdr_field* hdr)
 				case 'c': PARSE_COMPACT(HDR_CONTENTTYPE_T);   break;
 				case 'o': PARSE_COMPACT(HDR_EVENT_T);         break;
 				case 'x': PARSE_COMPACT(HDR_SESSION_EXPIRES_T); break;
+				case 'r': PARSE_COMPACT(HDR_REFER_TO_T); break;
 			}
 			goto other;
 	}
