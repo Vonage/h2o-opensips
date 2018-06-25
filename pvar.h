@@ -197,6 +197,7 @@ typedef struct _pv_export {
 	pv_setf_t  setf;               /*!< function to set the value */
 	pv_parse_name_f parse_name;    /*!< function to parse the inner name */
 	pv_parse_index_f parse_index;  /*!< function to parse the index of PV */
+	pv_parse_index_f parse_index;  /*!< function to parse the index of PV */
 	pv_init_param_f init_param;    /*!< function to init the PV spec */
 	int iparam;                    /*!< parameter for the init function */
 } pv_export_t;

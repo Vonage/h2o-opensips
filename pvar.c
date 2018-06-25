@@ -4422,7 +4422,7 @@ int pv_print_buf_size = 1024;
 int pv_printf_s(struct sip_msg* msg, pv_elem_p list, str *s)
 {
 	static int buf_itr = 0;
-	static char buf[PV_PRINT_BUF_NO][pv_print_buf_size];
+	char buf[PV_PRINT_BUF_NO][pv_print_buf_size];
 
 	if (list->next==0 && list->spec.getf==0) {
 		*s = list->text;
