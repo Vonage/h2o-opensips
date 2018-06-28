@@ -4413,7 +4413,7 @@ void pv_value_destroy(pv_value_t *val)
 	memset(val, 0, sizeof(pv_value_t));
 }
 
-#define PV_PRINT_BUF_SIZE  1024
+#define PV_PRINT_BUF_SIZE  2048
 #define PV_PRINT_BUF_NO    7
 /*IMPORTANT NOTE - even if the function prints and returns a static buffer, it
  * has built-in support for 3 levels of nesting (or concurrent usage).
