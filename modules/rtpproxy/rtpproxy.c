@@ -2289,7 +2289,7 @@ send_rtpp_command(struct rtpp_node *node, struct iovec *v, int vcnt)
 				LM_ERR("error while draining rtpproxy socket %d!\n", errno);
 				break;
 			} else if (rc == 0) {
-                break;
+				break;
             }
 		}
 		v[0].iov_base = gencookie();
