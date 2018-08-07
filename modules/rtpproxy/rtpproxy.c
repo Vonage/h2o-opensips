@@ -2271,7 +2271,7 @@ send_rtpp_command(struct rtpp_node *node, struct iovec *v, int vcnt)
 			goto badproxy;
 		}
 	} else {
-        int rc = 0;
+                int rc = 0;
 		fds[0].fd = rtpp_socks[node->idx];
 		fds[0].events = POLLIN;
 		fds[0].revents = 0;
@@ -2289,8 +2289,9 @@ send_rtpp_command(struct rtpp_node *node, struct iovec *v, int vcnt)
 				LM_ERR("error while draining rtpproxy socket %d!\n", errno);
 				break;
 			} else if (rc == 0) {
+				LM_ERR("warning end-of-file returned while draining rtpproxy socket %d\n", fds[0].fd)
 				break;
-            }
+                        }
 		}
 		v[0].iov_base = gencookie();
 		v[0].iov_len = strlen(v[0].iov_base);
