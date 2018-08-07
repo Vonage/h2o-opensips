@@ -2289,9 +2289,9 @@ send_rtpp_command(struct rtpp_node *node, struct iovec *v, int vcnt)
 				LM_ERR("error while draining rtpproxy socket %d!\n", errno);
 				break;
 			} else if (rc == 0) {
-				LM_ERR("warning end-of-file returned while draining rtpproxy socket %d\n", fds[0].fd)
+				LM_ERR("warning end-of-file returned while draining rtpproxy socket %d\n", fds[0].fd);
 				break;
-                        }
+			}
 		}
 		v[0].iov_base = gencookie();
 		v[0].iov_len = strlen(v[0].iov_base);
