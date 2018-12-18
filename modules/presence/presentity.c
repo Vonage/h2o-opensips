@@ -62,21 +62,21 @@ xmlNodePtr xmlNodeGetNodeByName(xmlNodePtr node, const char *name,
 static str pu_200_rpl  = str_init("OK");
 static str pu_412_rpl  = str_init("Conditional request failed");
 
-static char etag_buf[ETAG_LEN];
+static char etag_buf[ETAG_LEN+1];
 
 int generate_ETag(int publ_count, str* etag)
 {
 	etag->s = etag_buf;
-	memset(etag_buf, 0, ETAG_LEN);
+	memset(etag_buf, 0, ETAG_LEN+1);
 
-	etag->len = sprintf (etag_buf, "%c.%d.%d.%d.%d",
+	etag->len = snprintf (etag_buf, ETAG_LEN, "%c.%d.%d.%d.%d",
 			prefix, (int)startup_time, pid, counter, publ_count);
 	if( etag->len <0 )
 	{
 		LM_ERR("unsuccessful sprintf\n");
 		return -1;
 	}
-	if(etag->len > ETAG_LEN)
+	if(etag->len >= ETAG_LEN)
 	{
 		LM_ERR("buffer size overflown\n");
 		return -1;
@@ -563,6 +563,8 @@ int update_presentity(struct sip_msg* msg, presentity_t* presentity,
 			/* wait to get our turn as order of handling pubishs
 			   (need to wait the ongoing published to terminate
 			   before starting */
+ 			int i = 0;
+ 			int loop = fix_loop_timeout * 1000 / 100 + rand()%10;  /* convert to msec / 100 usec */
 			while (p && turn!=p->current_turn) {
 				lock_release(&pres_htable[hash_code].lock);
 				sleep_us(100);
@@ -570,6 +572,18 @@ int update_presentity(struct sip_msg* msg, presentity_t* presentity,
 				p = search_phtable_etag(&pres_uri,
 					presentity->event->evp->parsed, &presentity->old_etag,
 					hash_code);
+ 				i ++;
+ 				if ((loop > 0) && (i >= loop) && p && (turn!=p->current_turn)) {
+ 					if ((fix_loop_skipevent == 0) && (turn == p->current_turn + 1)) {
+ 						LM_INFO("loop detected (%d loops), process event : pres_uri= %.*s, event=%d, etag= %.*s, turn = %d, current_turn = %d, last_turn = %d\n", i, pres_uri.len,  pres_uri.s, presentity->event->evp->parsed, presentity->etag.len, presentity->etag.s, turn, p->current_turn, p->last_turn);
+ 						break;
+ 					}
+ 					else {
+ 						lock_release(&pres_htable[hash_code].lock);
+ 						LM_INFO("loop detected (%d loops), skip event : pres_uri= %.*s, event=%d, etag= %.*s, turn = %d, current_turn = %d, last_turn = %d\n", i, pres_uri.len,  pres_uri.s, presentity->event->evp->parsed, presentity->etag.len, presentity->etag.s, turn, p->current_turn, p->last_turn);
+ 						goto done;
+ 					}
+ 				}
 			}
 
 		} else {
@@ -594,6 +608,7 @@ int update_presentity(struct sip_msg* msg, presentity_t* presentity,
 			if (result->n <= 0)
 			{
 					pa_dbf.free_result(pa_db, result);
+					result = 0;
 					LM_ERR("No E_Tag match [%.*s]\n", presentity->old_etag.len,
 							presentity->old_etag.s);
 					if (msg && sigb.reply(msg, 412, &pu_412_rpl, 0)==-1 )
@@ -1296,7 +1311,7 @@ char* get_sphere(str* pres_uri)
 	{
 		if(p->sphere)
 		{
-			sphere= (char*)pkg_malloc(strlen(p->sphere));
+			sphere= (char*)pkg_malloc(strlen(p->sphere)+1);
 			if(sphere== NULL)
 			{
 				lock_release(&pres_htable[hash_code].lock);

@@ -793,7 +793,7 @@ error:
 	return -1;
 }
 
-int send_resource_subs(char* uri, void* param)
+int send_resource_subs(char* uri, char* display, void* param)
 {
         int duplicate = 0;
 	str pres_uri;
@@ -908,7 +908,7 @@ int resource_subscriptions(subs_t* subs, xmlNodePtr rl_node)
 		{
 			LM_DBG("Removing subscription for %.*s\n", tmp_str->len, tmp_str->s);
 			s.expires = 0;
-			send_resource_subs(tmp_str->s, params);
+			send_resource_subs(tmp_str->s, "", params);
 			pkg_free(tmp_str->s);
 			pkg_free(tmp_str);
 		}

@@ -47,7 +47,7 @@
 #include <libxml/xpath.h>
 #include <libxml/xpathInternals.h>
 
-char* global_instance_id = "Scf8UhwQ";
+char* global_instance_id = "Sc8";
 
 typedef struct res_param
 {
@@ -72,6 +72,7 @@ void rls_notify_callback( struct cell *t, int type, struct tmcb_params *ps);
 int rls_get_resource_list(str *filename, str *selector, str *username, str *domain,
 		          xmlNodePtr *rl_node, xmlDocPtr *xmldoc);
 
+db_res_t * build_db_result(xmlNodePtr list_node, int col_num);
 
 int send_full_notify(subs_t* subs, xmlNodePtr service_node, int version, str* rl_uri,
 		unsigned int hash_code)
@@ -111,13 +112,16 @@ int send_full_notify(subs_t* subs, xmlNodePtr service_node, int version, str* rl
 		goto error;
 	}
 
+	/*
 	if(rls_dbf.query(rls_db, query_cols, 0, query_vals, result_cols,
 					1, n_result_cols, &str_resource_uri_col, &result )< 0)
 	{
 		LM_ERR("in sql query\n");
 		goto error;
 	}
-	if(result== NULL)
+	*/
+	/ build result instead of query in DB since initial query result is guaranteed to be empty
+ 	if ((result = build_db_result(service_node, n_result_cols)) == 0)
 		goto error;
 
 	rlmi_body= constr_rlmi_doc(result, rl_uri, version, service_node, &cid_array, subs->from_user, subs->from_domain);
@@ -231,6 +235,7 @@ int agg_body_sendn_update(str* rl_uri, str bstr, str* rlmi_body,
 	str body= {0, 0};
 	int init_len;
 	int body_len;
+	int ret, remain_size;
 
 	cid.s= generate_cid(rl_uri->s, rl_uri->len);
 	if(cid.s == NULL)
@@ -244,19 +249,23 @@ int agg_body_sendn_update(str* rl_uri, str bstr, str* rlmi_body,
 	if(multipart_body)
 		len+= multipart_body->len;
 
-	init_len= len;
+	init_len= len + 32;
 
 	body.s= (char*)pkg_malloc(len);
 	if(body.s== NULL)
 	{
 		ERR_MEM(PKG_MEM_STR);
 	}
-	len=  sprintf(body.s, "--%.*s\r\n", bstr.len, bstr.s);
-	len+= sprintf(body.s+ len , "Content-Transfer-Encoding: binary\r\n");
-	len+= sprintf(body.s+ len , "Content-ID: <%.*s>\r\n", cid.len, cid.s);
-	len+= sprintf(body.s+ len ,
-			"Content-Type: application/rlmi+xml;charset=\"UTF-8\"\r\n");
-	len+= sprintf(body.s+ len, "\r\n"); /*blank line*/
+
+ 	remain_size = init_len - len;
+ 	ret = snprintf(body.s+ len, remain_size, "\r\n"); /*blank line*/
+ 	if (ret >= remain_size)
+ 	{
+ 		LM_ERR("agg_body_sendn_update : snprintf exceeds size\n");
+ 		return -1;
+ 	}
+ 	len += ret;
+
 	body_len = rlmi_body->len;
 	memcpy(body.s+ len, rlmi_body->s, body_len);
 	len+= body_len;
@@ -267,7 +276,15 @@ int agg_body_sendn_update(str* rl_uri, str bstr, str* rlmi_body,
 		memcpy(body.s+ len, multipart_body->s, multipart_body->len);
 		len+= multipart_body->len;
 	}
-	len+= sprintf(body.s+ len, "--%.*s--\r\n", bstr.len, bstr.s);
+
+ 	remain_size = init_len - len;
+ 	ret = snprintf(body.s+ len, remain_size, "--%.*s--\r\n", bstr.len, bstr.s);
+ 	if (ret >= remain_size)
+ 	{
+ 		LM_ERR("agg_body_sendn_update : snprintf exceeds size\n");
+ 		return -1;
+ 	}
+ 	len += ret;
 
 	if(init_len< len)
 	{
@@ -307,8 +324,7 @@ error:
 	return -1;
 }
 
-
-int add_resource_instance(char* uri, xmlNodePtr resource_node,
+int add_resource_instance(char* uri, char* display, xmlNodePtr resource_node,
 		db_res_t* result, str* cid_array)
 {
 	xmlNodePtr instance_node= NULL;
@@ -327,10 +343,22 @@ int add_resource_instance(char* uri, xmlNodePtr resource_node,
 		cmp_code= strncmp(row_vals[resource_uri_col].val.string_val, uri,
 				strlen(uri));
 		if(cmp_code> 0)
-			break;
+			continue;
 
 		if(cmp_code== 0)
 		{
+
+ 			if (display == 0)
+ 			{
+ 				char username[512];
+ 				extractSipUsername(uri, username);
+ 				xmlNewChild(resource_node, NULL, BAD_CAST "name", BAD_CAST username);
+ 			}
+ 			else
+ 			{
+ 				xmlNewChild(resource_node, NULL, BAD_CAST "name", BAD_CAST display);
+ 			}
+ 
 			instance_node= xmlNewChild(resource_node, NULL,
 					BAD_CAST "instance", NULL);
 			if(instance_node== NULL)
@@ -377,7 +405,7 @@ error:
 	return -1;
 }
 
-int add_resource(char* uri, void* param)
+int add_resource(char* uri, char* display, void* param)
 {
 	str* cid_array= ((res_param_t*)param)->cid_array;
 	xmlNodePtr list_node= ((res_param_t*)param)->list_node;
@@ -393,7 +421,7 @@ int add_resource(char* uri, void* param)
 	}
 	xmlNewProp(resource_node, BAD_CAST "uri", BAD_CAST uri);
 
-	if(add_resource_instance(uri, resource_node, result, cid_array)< 0)
+	if(add_resource_instance(uri, display, resource_node, result, cid_array)< 0)
 	{
 		LM_ERR("while adding resource instance node\n");
 		goto error;
@@ -666,6 +694,8 @@ void rls_free_td(dlg_t* td)
 {
 		pkg_free(td->loc_uri.s);
 		pkg_free(td->rem_uri.s);
+ 		if (td->route_set)
+ 			pkg_free(td->route_set);
 		pkg_free(td);
 }
 
@@ -894,6 +924,8 @@ int process_list_and_exec(xmlNodePtr list_node, str username, str domain,
 	xmlNodePtr node;
 	int res = 0;
 	str uri;
+ 	str display;
+ 	char displayname[512];
 	str *normalized_uri;
 	xcap_uri_t xcap_uri;
 
@@ -968,9 +1000,23 @@ int process_list_and_exec(xmlNodePtr list_node, str username, str domain,
                         }
 			xmlFree(uri.s);
 
+ 			display.s = XMLNodeGetAttrContentByName(node, "display");
+ 			if(display.s == NULL)
+ 			{
+ 				display.len = 0;
+ 				extractSipUsername(normalized_uri->s, displayname);
+ 			}
+ 			else
+ 			{
+ 				display.len = strlen(display.s);
+ 				strncpy(displayname, display.s, 511);
+ 				displayname[511] = 0;
+ 				xmlFree(display.s);
+ 			} 
+
 			if(cont_no)
 			        *cont_no = *cont_no+1;
-			if(function(normalized_uri->s, param)< 0)
+			if(function(normalized_uri->s, displayname, param)< 0)
 			{
 				LM_ERR("in function given as a parameter\n");
 				return -1;
@@ -1016,14 +1062,23 @@ char* generate_cid(char* uri, int uri_len)
 	char* cid;
 	int len;
 
-	cid = (char*) pkg_malloc(uri_len + 30);
+	cid = (char*) pkg_malloc(max_contentid_len+2);
 	if(cid == NULL)
 	{
 		LM_ERR("no more memory\n");
 		return NULL;
 	}
 
-	len= sprintf(cid, "%d.%.*s.%d", (int)time(NULL), uri_len, uri, rand());
+     if (reduce_notify_size)
+ 	    len= snprintf(cid, max_contentid_len, "%.*s", uri_len, uri);
+     else
+ 	    len= snprintf(cid, max_contentid_len, "%d.%.*s.%d", (int)time(NULL), uri_len, uri, rand());
+ 	if (len > max_contentid_len) 
+ 	{
+ 		LM_DBG("generate_cid : snprintf exceeds size. But it is protected and fixed. uri_len = %d, len = %d, max_contentid_len = %d\n", uri_len, len, max_contentid_len);
+ 		len = max_contentid_len;
+ 	}
+
 	cid[len]= '\0';
 
 	return cid;
@@ -1183,3 +1238,178 @@ error:
 	return -1;
 }
 
+ db_res_t * build_db_result(xmlNodePtr list_node, int n_result_cols)
+ {
+ 	xmlNodePtr node, subnode;
+ 	int i;
+ 	str uri;
+ 	str *normalized_uri;
+ 	db_res_t * result;
+ 	db_row_t* row;
+ 	db_val_t* val;
+ 
+ 	LM_DBG("start\n");
+ 
+ 	// pass 1 : find how many entries in service_node
+ 	int count = 0;
+ 	for(node= list_node->children; node; node= node->next)
+ 	{
+ 		if(xmlStrcasecmp(node->name,(unsigned char*)"list")== 0) {
+ 			for (subnode= node->children; subnode; subnode= subnode->next) {
+ 				if(xmlStrcasecmp(subnode->name,(unsigned char*)"entry")== 0)
+ 					count ++;
+ 			}
+ 			break;
+ 		}
+ 	}
+ 
+ 	// pass 2 : build result
+ 	if ((result = db_new_result()) == 0)
+ 		return 0;
+ 	RES_ROW_N(result) = 0;
+ 
+ 	if (count <= 0)
+ 		return result;
+ 
+ 	if (db_allocate_columns(result, n_result_cols) == -1) {
+ 		db_free_result(result);
+ 		return 0;
+ 	}
+ 	RES_COL_N(result) = n_result_cols;
+ 	if (db_allocate_rows(result, count) == -1) {
+ 		db_free_result(result);
+ 		return 0;
+ 	}
+ 	RES_ROW_N(result) = count;
+ 
+ 	i = 0;
+ 	for(node= list_node->children; node; node= node->next)
+ 	{
+ 		if(xmlStrcasecmp(node->name,(unsigned char*)"list")== 0) {
+ 			for (subnode= node->children; subnode; subnode= subnode->next) {
+ 				if(xmlStrcasecmp(subnode->name,(unsigned char*)"entry")== 0)
+ 				{
+ 					uri.s = XMLNodeGetAttrContentByName(subnode, "uri");
+ 					if(uri.s == NULL)
+ 					{
+ 						LM_ERR("when extracting entry uri attribute\n");
+ 						db_free_result(result);
+ 						return 0;
+ 					}
+ 					uri.len = strlen(uri.s);
+ 					LM_DBG("uri= %.*s\n", uri.len, uri.s);
+ 
+ 					normalized_uri = normalizeSipUri(&uri);
+ 					if (normalized_uri->s == NULL || normalized_uri->len == 0)
+ 					{
+ 						LM_ERR("failed to normalize entry URI\n");
+ 						xmlFree(uri.s);
+ 						db_free_result(result);
+ 						return 0;
+ 					}
+ 					xmlFree(uri.s);
+ 
+ 					row = &(RES_ROWS(result)[i]);
+ 					ROW_N(row) = n_result_cols;
+ 
+ 					val = &(ROW_VALUES(row)[resource_uri_col]);
+ 					VAL_TYPE(val) = DB_STRING;
+ 					VAL_NULL(val) = 0;
+ 					VAL_FREE(val) = 1;
+ 					if ((VAL_STRING(val) = (char *) pkg_malloc(normalized_uri->len+1)) == NULL) {
+ 						LM_ERR("no more pkg mem!\n");
+ 						db_free_result(result);
+ 						return 0;
+ 					}
+ 					strcpy((char *) VAL_STRING(val), normalized_uri->s);
+ 
+ 					val = &(ROW_VALUES(row)[ctype_col]);
+ 					VAL_TYPE(val) = DB_STRING;
+ 					VAL_NULL(val) = 0;
+ 					VAL_FREE(val) = 1;
+ 					if ((VAL_STRING(val) = (char *) pkg_malloc(32)) == NULL) {
+ 						LM_ERR("no more pkg mem!\n");
+ 						db_free_result(result);
+ 						return 0;
+ 					}
+ 					strcpy((char *) VAL_STRING(val), "application/dialog-info+xml");
+ 
+ 					str display;
+ 					char username[512];
+ 					extractSipUsername(normalized_uri->s, username);
+ 
+ 					display.s = XMLNodeGetAttrContentByName(subnode, "display");
+ 					if(display.s != NULL)
+ 					{
+ 						display.len = strlen(display.s);
+ 						strncpy(username, display.s, 511);
+ 						username[511] = 0;
+ 						xmlFree(display.s);
+ 					}
+ 					char buf[1024];
+                     if (reduce_notify_size)
+ 					    snprintf(buf, 1023, "<?xml version=\"1.0\"?><dialog-info xmlns=\"urn:ietf:params:xml:ns:dialog-info\" version=\"9\" state=\"full\" entity=\"%s\"><dialog id=\"zx3\"><state>terminated</state><remote><local><identity display=\"%s\">%s</identity></local></remote></dialog></dialog-info>", normalized_uri->s, username, normalized_uri->s);
+                     else 
+ 					    snprintf(buf, 1023, "<?xml version=\"1.0\"?><dialog-info xmlns=\"urn:ietf:params:xml:ns:dialog-info\" version=\"169\" state=\"full\" entity=\"%s\"><dialog id=\"zxcnm3\"><state>terminated</state><remote><local><identity display=\"%s\">%s</identity></local></remote></dialog></dialog-info>", normalized_uri->s, username, normalized_uri->s);
+ 					val = &(ROW_VALUES(row)[pres_state_col]);
+ 					VAL_TYPE(val) = DB_STRING;
+ 					VAL_NULL(val) = 0;
+ 					VAL_FREE(val) = 1;
+ 					if ((VAL_STRING(val) = (char *) pkg_malloc(strlen(buf)+1)) == NULL) {
+ 						LM_ERR("no more pkg mem!\n");
+ 						db_free_result(result);
+ 						return 0;
+ 					}
+ 					strcpy((char *) VAL_STRING(val), buf);
+ 
+ 					val = &(ROW_VALUES(row)[auth_state_col]);
+ 					VAL_TYPE(val) = DB_INT;
+ 					VAL_NULL(val) = 0;
+ 					VAL_FREE(val) = 1;
+ 					VAL_INT(val) = 2;
+ 
+ 					val = &(ROW_VALUES(row)[reason_col]);
+ 					VAL_TYPE(val) = DB_STRING;
+ 					VAL_NULL(val) = 0;
+ 					VAL_FREE(val) = 1;
+ 					if ((VAL_STRING(val) = (char *) pkg_malloc(4)) == NULL) {
+ 						LM_ERR("no more pkg mem!\n");
+ 						db_free_result(result);
+ 						return 0;
+ 					}
+ 					strcpy((char *) VAL_STRING(val), "");
+ 
+ 					i++;
+ 				}
+ 			}
+ 			break;
+ 		}
+ 	}
+ 	LM_DBG("node count = %d, result->n=%d", count, result->n);
+ 	return result;
+ }
+ 
+ // username must be at least 512 bytes - char username[512]
+ void extractSipUsername(char * uri, char * username)
+ {
+     char * savedPtr;
+     char buf[512];
+     strncpy(buf, uri, 511);
+     buf[511] = 0;
+     strncpy(username, buf, 511);
+     username[511] = 0;
+     char * t = strtok_r(buf, ":@", &savedPtr);
+     if (t) {
+         if (strcmp(t, "sip") == 0) {
+             t = strtok_r(NULL, ":@", &savedPtr);
+             if (t) {
+                 strncpy(username, t, 511);
+                 username[511] = 0;
+             }
+         }
+         else {
+             strncpy(username, t, 511);
+             username[511] = 0;
+         }
+     }
+ }
