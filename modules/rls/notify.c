@@ -120,7 +120,7 @@ int send_full_notify(subs_t* subs, xmlNodePtr service_node, int version, str* rl
 		goto error;
 	}
 	*/
-	/ build result instead of query in DB since initial query result is guaranteed to be empty
+	// build result instead of query in DB since initial query result is guaranteed to be empty
  	if ((result = build_db_result(service_node, n_result_cols)) == 0)
 		goto error;
 
@@ -257,19 +257,26 @@ int agg_body_sendn_update(str* rl_uri, str bstr, str* rlmi_body,
 		ERR_MEM(PKG_MEM_STR);
 	}
 
- 	remain_size = init_len - len;
- 	ret = snprintf(body.s+ len, remain_size, "\r\n"); /*blank line*/
- 	if (ret >= remain_size)
- 	{
- 		LM_ERR("agg_body_sendn_update : snprintf exceeds size\n");
- 		return -1;
- 	}
- 	len += ret;
+    ret =  snprintf(body.s, init_len, "--%.*s\r\nContent-Transfer-Encoding: binary\r\nContent-ID: <%.*s>\r\nContent-Type: application/rlmi+xml;charset=\"UTF-8\"\r\n\r\n", bstr.len, bstr.s, cid.len, cid.s);
+    if (ret >= init_len)
+    {
+        LM_ERR("agg_body_sendn_update : snprintf exceeds size\n");
+        return -1;
+    }
+    len = ret;
 
 	body_len = rlmi_body->len;
 	memcpy(body.s+ len, rlmi_body->s, body_len);
 	len+= body_len;
-	len+= sprintf(body.s+ len, "\r\n"); /*blank line*/
+
+    remain_size = init_len - len;
+    ret = snprintf(body.s+ len, remain_size, "\r\n"); /*blank line*/
+    if (ret >= remain_size)
+    {
+        LM_ERR("agg_body_sendn_update : snprintf exceeds size\n");
+        return -1;
+    }
+    len += ret;
 
 	if(multipart_body)
 	{

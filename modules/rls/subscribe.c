@@ -795,7 +795,7 @@ error:
 
 int send_resource_subs(char* uri, char* display, void* param)
 {
-        int duplicate = 0;
+    int duplicate = 0;
 	str pres_uri;
 	str *tmp_str;
 	subs_info_t *s = (subs_info_t *) ((void**)param)[0];
