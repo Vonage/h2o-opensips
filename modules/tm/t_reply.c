@@ -311,7 +311,13 @@ static int send_ack(struct sip_msg* rpl, struct cell *trans, int branch)
 		goto error;
 	}
 
+	if (trans->uac[branch].br_flags & tcp_no_new_conn_bflag)
+		tcp_no_new_conn = 1;
+
 	SEND_PR_BUFFER(&trans->uac[branch].request, ack_p, ack_len);
+
+	tcp_no_new_conn = 0;
+
 	shm_free(ack_p);
 
 	return 0;
@@ -415,9 +421,15 @@ static int _reply_light( struct cell *trans, char* buf, unsigned int len,
 	if (!trans->uas.response.dst.send_sock) {
 		LM_CRIT("send_sock is NULL\n");
 	}
+
+	if(trans->uas.request && trans->uas.request->flags&tcp_no_new_conn_rplflag)
+		tcp_no_new_conn = 1;
+
 	SEND_PR_BUFFER( rb, buf, len );
 	LM_DBG("reply sent out. buf=%p: %.9s..., "
 		"shmem=%p: %.9s\n", buf, buf, rb->buffer.s, rb->buffer.s );
+
+	tcp_no_new_conn = 0;
 
 	/* run the POST send callbacks */
 	if (code>=200&&!is_local(trans)&&has_tran_tmcbs(trans,TMCB_RESPONSE_OUT)) {
@@ -1000,7 +1012,12 @@ int t_retransmit_reply( struct cell *t )
 	}
 	memcpy( b, t->uas.response.buffer.s, len );
 	UNLOCK_REPLIES( t );
+
+	if (t->uas.request && t->uas.request->flags & tcp_no_new_conn_rplflag)
+		tcp_no_new_conn = 1;
 	SEND_PR_BUFFER( & t->uas.response, b, len );
+	tcp_no_new_conn = 0;
+
 	LM_DBG("buf=%p: %.9s..., shmem=%p: %.9s\n",b, b, t->uas.response.buffer.s,
 			t->uas.response.buffer.s );
 	return 1;
@@ -1244,7 +1261,12 @@ enum rps relay_reply( struct cell *t, struct sip_msg *p_msg, int branch,
 			run_trans_callbacks_locked(TMCB_RESPONSE_PRE_OUT,t,t->uas.request,
 				relayed_msg, relayed_code);
 		}
+
+		if (t->uas.request && t->uas.request->flags & tcp_no_new_conn_rplflag)
+			tcp_no_new_conn = 1;
 		SEND_PR_BUFFER( uas_rb, buf, res_len );
+		tcp_no_new_conn = 0;
+
 		LM_DBG("sent buf=%p: %.9s..., shmem=%p: %.9s\n",
 			buf, buf, uas_rb->buffer.s, uas_rb->buffer.s );
 		/* run the POST sending out callback */
