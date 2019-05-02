@@ -112,7 +112,10 @@ void cancel_branch( struct cell *t, int branch )
 	}
 
 	LM_DBG("sending cancel...\n");
+	if (t->uac[branch].br_flags & tcp_no_new_conn_bflag)
+		tcp_no_new_conn = 1;
 	SEND_BUFFER( crb );
+	tcp_no_new_conn = 0;
 
 	/*sets and starts the FINAL RESPONSE timer */
 	start_retr( crb );
