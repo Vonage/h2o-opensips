@@ -50,7 +50,7 @@ auto_gen=lex.yy.c cfg.tab.c   #lexx, yacc etc
 skip_cfg_install?=
 
 #extra modules to exclude
-skip_modules?= aaa_radius snmp_stats
+skip_modules?=
 
 # whether or not to overwrite TLS certificates
 tls_overwrite_certs?=
