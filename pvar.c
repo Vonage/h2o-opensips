@@ -2670,8 +2670,8 @@ int pv_set_ruri_user(struct sip_msg* msg, pv_param_t *param,
 	{
 		memset(&act, 0, sizeof(act));
 		act.type = SET_USER_T;
-		act.elem[0].type = STRING_ST;
-		act.elem[0].u.string = "";
+		act.elem[0].type = STR_ST;
+		act.elem[0].u.s = str_empty;
 		if (do_action(&act, msg)<0)
 		{
 			LM_ERR("do action failed)\n");
@@ -3317,7 +3317,7 @@ int pv_get_log_level(struct sip_msg *msg,  pv_param_t *param, pv_value_t *res)
 	}
 
 	res->ri = *log_level;
-	res->rs.s = int2str( (unsigned long)res->ri, &l);
+	res->rs.s = sint2str( (long)res->ri, &l);
 	res->rs.len = l;
 
 	res->flags = PV_VAL_STR|PV_VAL_INT|PV_TYPE_INT;
@@ -5068,6 +5068,7 @@ static int pv_get_param(struct sip_msg *msg,  pv_param_t *ip, pv_value_t *res)
 		if(pv_get_spec_value(msg, (pv_spec_p)(ip->pvn.u.dname), &tv)!=0)
 		{
 			LM_ERR("cannot get spec value\n");
+			route_rec_level++;
 			return -1;
 		}
 		route_rec_level++;
@@ -5094,7 +5095,6 @@ static int pv_get_param(struct sip_msg *msg,  pv_param_t *ip, pv_value_t *res)
 	index--;
 	switch (route_params[route_rec_level][index].type)
 	{
-
 	case NULLV_ST:
 		res->rs.s = NULL;
 		res->rs.len = res->ri = 0;
@@ -5118,15 +5118,16 @@ static int pv_get_param(struct sip_msg *msg,  pv_param_t *ip, pv_value_t *res)
 		if(pv_get_spec_value(msg, (pv_spec_p)route_params[route_rec_level + 1][index].u.data, res)!=0)
 		{
 			LM_ERR("cannot get spec value\n");
+			route_rec_level++;
 			return -1;
 		}
 		route_rec_level++;
 		break;
 
-		default:
-			LM_ALERT("BUG: invalid parameter type %d\n",
-					 route_params[route_rec_level][index].type);
-			return -1;
+	default:
+		LM_ALERT("BUG: invalid parameter type %d\n",
+				 route_params[route_rec_level][index].type);
+		return -1;
 	}
 
 	return 0;

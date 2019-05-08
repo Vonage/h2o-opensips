@@ -99,6 +99,7 @@ int dlg_replicated_create(bin_packet_t *packet, struct dlg_cell *cell, str *ftag
 	unsigned int dir, dst_leg;
 	str callid = { NULL, 0 }, from_uri, to_uri, from_tag, to_tag;
 	str cseq1, cseq2, contact1, contact2, rroute1, rroute2, mangled_fu, mangled_tu;
+	str sdp1, sdp2;
 	str sock, vars, profiles;
 	struct dlg_cell *dlg = NULL;
 	struct socket_info *caller_sock, *callee_sock;
@@ -178,13 +179,14 @@ int dlg_replicated_create(bin_packet_t *packet, struct dlg_cell *cell, str *ftag
 	DLG_BIN_POP(str, packet, contact2, pre_linking_error);
 	DLG_BIN_POP(str, packet, mangled_fu, pre_linking_error);
 	DLG_BIN_POP(str, packet, mangled_tu, pre_linking_error);
+	DLG_BIN_POP(str, packet, sdp1, pre_linking_error);
+	DLG_BIN_POP(str, packet, sdp2, pre_linking_error);
 
 	/* add the 2 legs */
-	/* TODO - sdp here */
 	if (dlg_update_leg_info(0, dlg, &from_tag, &rroute1, &contact1,
-		&cseq1, caller_sock, 0, 0,0) != 0 ||
+		&cseq1, caller_sock, 0, 0, &sdp1) != 0 ||
 		dlg_update_leg_info(1, dlg, &to_tag, &rroute2, &contact2,
-		&cseq2, callee_sock, &mangled_fu, &mangled_tu,0) != 0) {
+		&cseq2, callee_sock, &mangled_fu, &mangled_tu, &sdp2) != 0) {
 		LM_ERR("dlg_set_leg_info failed\n");
 		goto pre_linking_error;
 	}
@@ -347,7 +349,7 @@ int dlg_replicated_update(bin_packet_t *packet)
 		goto error;
 	}
 
-	bin_skip_str(packet, 6);
+	bin_skip_str(packet, 8);
 	bin_pop_str(packet, &vars);
 	bin_pop_str(packet, &profiles);
 	bin_pop_int(packet, &dlg->user_flags);
@@ -504,6 +506,8 @@ void bin_push_dlg(bin_packet_t *packet, struct dlg_cell *dlg)
 	bin_push_str(packet, &dlg->legs[callee_leg].contact);
 	bin_push_str(packet, &dlg->legs[callee_leg].from_uri);
 	bin_push_str(packet, &dlg->legs[callee_leg].to_uri);
+	bin_push_str(packet, &dlg->legs[DLG_CALLER_LEG].adv_sdp);
+	bin_push_str(packet, &dlg->legs[callee_leg].adv_sdp);
 
 	/* give modules the chance to write values/profiles before replicating */
 	run_dlg_callbacks(DLGCB_WRITE_VP, dlg, NULL, DLG_DIR_NONE, NULL, 1, 1);
@@ -599,6 +603,11 @@ void replicate_dialog_updated(struct dlg_cell *dlg)
 
 
 	dlg_lock_dlg(dlg);
+	if (dlg->state < DLG_STATE_CONFIRMED_NA) {
+		LM_DBG("not replicating update in state %d (%.*s)\n", dlg->state,
+				dlg->callid.len, dlg->callid.s);
+		goto end;
+	}
 	if (dlg->state == DLG_STATE_DELETED) {
 		/* we no longer need to update anything */
 		LM_WARN("not replicating dlg update message due to bad state %d (%.*s)\n",
@@ -722,33 +731,30 @@ struct dlg_sharing_tag *get_shtag_unsafe(str *tag_name)
 	return tag;
 }
 
-/* you must release the lock for switchable reading if @lock_stop_r = 0
- * in case of error the lock is released by the function
- */
-struct dlg_sharing_tag *get_shtag(str *tag_name, int lock_stop_r)
+int get_shtag(str *tag_name)
 {
 	struct dlg_sharing_tag *tag;
-	int lock_old_flag;
+	int ret;
 
-	lock_start_sw_read(shtags_lock);
+	lock_start_read(shtags_lock);
 
 	for (tag = *shtags_list; tag && str_strcmp(&tag->name, tag_name);
 		tag = tag->next) ;
 	if (!tag) {
-		lock_switch_write(shtags_lock, lock_old_flag);
-		if ((tag = create_dlg_shtag(tag_name)) == NULL) {
-			LM_ERR("Failed to create sharing tag\n");
-			lock_switch_read(shtags_lock, lock_old_flag);
-			lock_stop_sw_read(shtags_lock);
-			return NULL;
-		}
-		lock_switch_read(shtags_lock, lock_old_flag);
+		lock_stop_read(shtags_lock);
+		lock_start_write(shtags_lock);
+
+		tag = get_shtag_unsafe(tag_name);
+		ret = (tag == NULL) ? -1 : tag->state;
+
+		lock_stop_write(shtags_lock);
+	} else {
+		ret = tag->state;
+
+		lock_stop_read(shtags_lock);
 	}
 
-	if (lock_stop_r)
-		lock_stop_sw_read(shtags_lock);
-
-	return tag;
+	return ret;
 }
 
 void free_active_msgs_info(struct dlg_sharing_tag *tag)
@@ -1201,7 +1207,7 @@ void receive_prof_repl(bin_packet_t *packet)
 				if (!rp->rcv_counters)
 					rp->rcv_counters = repl_prof_allocate();
 				if (rp->rcv_counters) {
-					lock_release(&rp->rcv_counters->lock);
+					lock_get(&rp->rcv_counters->lock);
 					destination = find_destination(rp->rcv_counters, packet->src_id);
 					if (destination == NULL) {
 						lock_release(&rp->rcv_counters->lock);
@@ -1333,7 +1339,6 @@ static void broadcast_profiles(utime_t ticks, void *param)
 {
 #define REPL_PROF_TRYSEND() \
 	do { \
-		nr++; \
 		if (ret > repl_prof_buffer_th) { \
 			/* send the buffer */ \
 			if (nr) \
@@ -1348,7 +1353,7 @@ static void broadcast_profiles(utime_t ticks, void *param)
 	unsigned int count;
 	int i;
 	int nr = 0;
-	int ret;
+	int ret = 0;
 	void **dst;
 	str *value;
 	bin_packet_t packet;
@@ -1369,6 +1374,7 @@ static void broadcast_profiles(utime_t ticks, void *param)
 			if ((ret = repl_prof_add(&packet, &profile->name, 0, NULL, count)) < 0)
 				goto error;
 			/* check if the profile should be sent */
+			nr++;
 			REPL_PROF_TRYSEND();
 		} else {
 			for (i = 0; i < profile->size; i++) {
@@ -1389,10 +1395,11 @@ static void broadcast_profiles(utime_t ticks, void *param)
 						goto next_val;
 					}
 					count = prof_val_get_local_count(dst, 0);
-					if ((ret = repl_prof_add(&packet, &profile->name, 1, value, count)) < 0)
+					if ((ret = repl_prof_add(&packet, &profile->name, 1, value, count)) < 0) {
+						lock_set_release(profile->locks, i);
 						goto error;
-					/* check if the profile should be sent */
-					REPL_PROF_TRYSEND();
+					}
+					nr++;
 
 next_val:
 					if (iterator_next(&it) < 0)
@@ -1400,6 +1407,8 @@ next_val:
 				}
 next_entry:
 				lock_set_release(profile->locks, i);
+				/* check if the profile should be sent */
+				REPL_PROF_TRYSEND();
 			}
 		}
 	}
@@ -1408,7 +1417,6 @@ next_entry:
 
 error:
 	LM_ERR("cannot add any more profiles in buffer\n");
-	bin_free_packet(&packet);
 done:
 	/* check if there is anything else left to replicate */
 	if (nr)
@@ -1430,7 +1438,7 @@ struct mi_root* mi_sync_cl_dlg(struct mi_root *cmd, void *param)
 
 int set_dlg_shtag(struct dlg_cell *dlg, str *tag_name)
 {
-	if (get_shtag(tag_name, 1) == NULL) {
+	if (get_shtag(tag_name) < 0) {
 		LM_ERR("Unable to fetch sharing tag\n");
 		return -1;
 	}
@@ -1480,7 +1488,6 @@ struct mi_root *mi_set_shtag_active(struct mi_root *cmd_tree, void *param)
 int get_shtag_state(struct dlg_cell *dlg)
 {
 	str tag_name;
-	struct dlg_sharing_tag *tag;
 	int rc;
 
 	if (!dlg)
@@ -1495,16 +1502,7 @@ int get_shtag_state(struct dlg_cell *dlg)
 		return -2;
 	}
 
-	if ((tag = get_shtag(&tag_name, 0)) == NULL) {
-		LM_ERR("Unable to fetch sharing tag\n");
-		return -1;
-	}
-
-	rc = tag->state;
-
-	lock_stop_sw_read(shtags_lock);
-
-	return rc;
+	return get_shtag(&tag_name);
 }
 
 int dlg_sharing_tag_paramf(modparam_t type, void *val)

@@ -154,6 +154,9 @@ cl_send_all_having(bin_packet_t *packet, int dst_cluster_id,
                    enum cl_node_match_op match_op);
 int cl_register_cap(str *cap, cl_packet_cb_f packet_cb, cl_event_cb_f event_cb,
             int cluster_id, int require_sync, enum cl_node_match_op sync_cond);
+struct local_cap *dup_caps(struct local_cap *caps);
+
+int preserve_reg_caps(struct cluster_info *new_info);
 
 struct mi_root *run_rcv_mi_cmd(str *cmd_name, str *cmd_params, int nr_params);
 

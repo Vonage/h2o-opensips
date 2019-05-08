@@ -355,6 +355,9 @@ static int mod_init(void)
 			LM_ERR("Failed to load info from DB\n");
 			goto error;
 		}
+
+		dr_dbf.close(db_hdl);
+		db_hdl = NULL;
 	}
 
 	/* register timer */
@@ -375,11 +378,11 @@ static int mod_init(void)
 		}
 	}
 
-	if (bin_register_cb(&cl_internal_cap, bin_rcv_cl_packets, NULL) < 0) {
+	if (bin_register_cb(&cl_internal_cap, bin_rcv_cl_packets, NULL, 0) < 0) {
 		LM_CRIT("Cannot register clusterer binary packet callback!\n");
 		goto error;
 	}
-	if (bin_register_cb(&cl_extra_cap, bin_rcv_cl_extra_packets, NULL) < 0) {
+	if (bin_register_cb(&cl_extra_cap, bin_rcv_cl_extra_packets, NULL, 0) < 0) {
 		LM_CRIT("Cannot register extra clusterer binary packet callback!\n");
 		goto error;
 	}
@@ -404,6 +407,13 @@ error:
 /* initialize child */
 static int child_init(int rank)
 {
+	if (db_mode) {
+		/* init DB connection */
+		if ((db_hdl = dr_dbf.init(&clusterer_db_url)) == 0) {
+			LM_ERR("cannot initialize database connection\n");
+			return -1;
+		}
+	}
 	return 0;
 }
 
@@ -423,6 +433,15 @@ static struct mi_root* clusterer_reload(struct mi_root* root, void *param)
 	}
 
 	lock_start_write(cl_list_lock);
+	if (preserve_reg_caps(new_info) < 0) {
+		lock_stop_write(cl_list_lock);
+		LM_ERR("Failed to preserve registered capabilities\n");
+
+		if (new_info)
+			free_info(new_info);
+
+		return init_mi_tree(500, "Failed to reload", 16);
+	}
 	old_info = *cluster_list;
 	*cluster_list = new_info;
 	lock_stop_write(cl_list_lock);

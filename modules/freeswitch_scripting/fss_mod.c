@@ -113,14 +113,11 @@ struct module_exports exports= {
 };
 
 /* temporarily dup the URL modparams in shm until mod_init() runs */
-struct list_head startup_fs_subs;
+struct list_head startup_fs_subs = LIST_HEAD_INIT(startup_fs_subs);
 static int fs_sub_add_url(modparam_t type, void *string)
 {
 	struct str_dlist *strl;
 	str url = {string, strlen(string)};
-
-	if (!startup_fs_subs.next)
-		INIT_LIST_HEAD(&startup_fs_subs);
 
 	strl = shm_malloc(sizeof *strl);
 	if (!strl) {
