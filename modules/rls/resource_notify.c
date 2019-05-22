@@ -831,14 +831,14 @@ void rls_presentity_clean(unsigned int ticks,void *param)
 }
 
  
- /* 
+/* 
  	find display name from NOTIFY body xml :
  	If xml syntax error, or found display name from PUBLISH body, return 0
  	otherwise, return -1
  	Input: char displayname[512]
  
  	- A typical BLF event looks like :
- <dialog-info xmlns="urn:ietf:params:xml:ns:dialog-info" version="4" entity="sip:412@account-123456" state="partial">
+<dialog-info xmlns="urn:ietf:params:xml:ns:dialog-info" version="4" entity="sip:412@account-123456" state="partial">
  	<dialog id="412@account-123456">
  		<state>confirmed</state>
  		<duration>274</duration>
@@ -851,14 +851,14 @@ void rls_presentity_clean(unsigned int ticks,void *param)
  			<target uri="sip:402@account-123456"/>
  		</remote>
  	</dialog>
- </dialog-info>
+</dialog-info>
  
  	- A typical event created by presence looks like:
- <dialog-info xmlns="urn:ietf:params:xml:ns:dialog-info" version="0"		   state="full" entity="sip:412@account-123456"><dialog id="zxcnm3" direction="receiver"><state>terminated</state><remote><local><identity display="412">sip:412@account-123456</identity></local></remote></dialog></dialog-info>
+<dialog-info xmlns="urn:ietf:params:xml:ns:dialog-info" version="0"		   state="full" entity="sip:412@account-123456"><dialog id="zxcnm3" direction="receiver"><state>terminated</state><remote><local><identity display="412">sip:412@account-123456</identity></local></remote></dialog></dialog-info>
  
- */
- int findDisplayName(str body, char * displayname)
- {
+*/
+int findDisplayName(str body, char * displayname)
+{
  	xmlDocPtr xmldoc = NULL;
  	xmlNodePtr node, sub1, sub2, sub3;
  	char * buf;
@@ -902,14 +902,14 @@ void rls_presentity_clean(unsigned int ticks,void *param)
  		}
  	}
  
- dn_skip:
+dn_skip:
  	if (xmldoc)
  		xmlFreeDoc(xmldoc);
  	return -1;
  
- dn_normal:
- dn_error:
+dn_normal:
+dn_error:
  	if (xmldoc)
  		xmlFreeDoc(xmldoc);
  	return 0;
- }
+}

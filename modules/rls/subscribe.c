@@ -269,6 +269,8 @@ error:
                         pkg_free(etag->s);
                 pkg_free(etag);
         }
+        if(xml_doc)
+                xmlFreeDoc(xml_doc);
         return -1;
 }
 

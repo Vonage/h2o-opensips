@@ -86,7 +86,7 @@ static inline int append_multipart_body(char **buf, int *buf_len, int *size, str
 		}
 		*buf_len += ret;
 
-return 0;
+		return 0;
 }
 
 

@@ -487,39 +487,39 @@ static str* _build_empty_dialoginfo(const char* pres_uri_char, str* extra_hdrs)
 
 	xmlNewProp(node, BAD_CAST "entity", BAD_CAST pres_uri_char);
 
-        dialog_node = xmlNewChild(node, NULL, BAD_CAST "dialog", NULL);
-        if(dialog_node== NULL)
-        {
-            LM_ERR("while adding dialog child\n");
-            goto error;
-        }
-        xmlNewProp(dialog_node, BAD_CAST "id", BAD_CAST "zxcnm3");
-        xmlNewProp(dialog_node, BAD_CAST "direction", BAD_CAST "receiver");
-        xmlNewChild(dialog_node, NULL, BAD_CAST "state", BAD_CAST "terminated");
+	dialog_node = xmlNewChild(node, NULL, BAD_CAST "dialog", NULL);
+	if(dialog_node== NULL)
+	{
+		LM_ERR("while adding dialog child\n");
+		goto error;
+	}
+	xmlNewProp(dialog_node, BAD_CAST "id", BAD_CAST "zxcnm3");
+	xmlNewProp(dialog_node, BAD_CAST "direction", BAD_CAST "receiver");
+	xmlNewChild(dialog_node, NULL, BAD_CAST "state", BAD_CAST "terminated");
  
-        remote_node = xmlNewChild(dialog_node, NULL, BAD_CAST "remote", NULL);
-        if(remote_node== NULL)
-        {
-            LM_ERR("while adding remote child\n");
-            goto error;
-        }
+	remote_node = xmlNewChild(dialog_node, NULL, BAD_CAST "remote", NULL);
+	if(remote_node== NULL)
+	{
+		LM_ERR("while adding remote child\n");
+		goto error;
+	}
  
-        local_node = xmlNewChild(remote_node, NULL, BAD_CAST "local", NULL);
-        if(local_node== NULL)
-        {
-            LM_ERR("while adding local child\n");
-            goto error;
-        }
+	local_node = xmlNewChild(remote_node, NULL, BAD_CAST "local", NULL);
+	if(local_node== NULL)
+	{
+		LM_ERR("while adding local child\n");
+		goto error;
+	}
  
-        identity_node = xmlNewChild(local_node, NULL, BAD_CAST "identity", BAD_CAST pres_uri_char);
-        if(identity_node== NULL)
-        {
-            LM_ERR("while adding identity child\n");
-            goto error;
-        }
-        char username[512];
-        extractSipUsername(pres_uri_char, username);
-        xmlNewProp(identity_node, BAD_CAST "display", BAD_CAST username);
+	identity_node = xmlNewChild(local_node, NULL, BAD_CAST "identity", BAD_CAST pres_uri_char);
+	if(identity_node== NULL)
+	{
+		LM_ERR("while adding identity child\n");
+		goto error;
+	}
+	char username[512];
+	extractSipUsername(pres_uri_char, username);
+	xmlNewProp(identity_node, BAD_CAST "display", BAD_CAST username);
  
 
 	xmlDocDumpMemory(doc,(xmlChar**)(void*)&nbody->s,

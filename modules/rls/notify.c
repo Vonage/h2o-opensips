@@ -1245,8 +1245,8 @@ error:
 	return -1;
 }
 
- db_res_t * build_db_result(xmlNodePtr list_node, int n_result_cols)
- {
+db_res_t * build_db_result(xmlNodePtr list_node, int n_result_cols)
+{
  	xmlNodePtr node, subnode;
  	int i;
  	str uri;
@@ -1394,29 +1394,29 @@ error:
  	}
  	LM_DBG("node count = %d, result->n=%d", count, result->n);
  	return result;
- }
+}
  
- // username must be at least 512 bytes - char username[512]
- void extractSipUsername(char * uri, char * username)
- {
-     char * savedPtr;
-     char buf[512];
-     strncpy(buf, uri, 511);
-     buf[511] = 0;
-     strncpy(username, buf, 511);
-     username[511] = 0;
-     char * t = strtok_r(buf, ":@", &savedPtr);
-     if (t) {
-         if (strcmp(t, "sip") == 0) {
-             t = strtok_r(NULL, ":@", &savedPtr);
-             if (t) {
-                 strncpy(username, t, 511);
-                 username[511] = 0;
-             }
-         }
-         else {
-             strncpy(username, t, 511);
-             username[511] = 0;
-         }
-     }
- }
+// username must be at least 512 bytes - char username[512]
+void extractSipUsername(char * uri, char * username)
+{
+	char * savedPtr;
+	char buf[512];
+	strncpy(buf, uri, 511);
+	buf[511] = 0;
+	strncpy(username, buf, 511);
+	username[511] = 0;
+	char * t = strtok_r(buf, ":@", &savedPtr);
+	if (t) {
+		if (strcmp(t, "sip") == 0) {
+			t = strtok_r(NULL, ":@", &savedPtr);
+			if (t) {
+				strncpy(username, t, 511);
+				username[511] = 0;
+			}
+		}
+		else {
+			strncpy(username, t, 511);
+			username[511] = 0;
+		}
+	}
+}
