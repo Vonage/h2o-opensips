@@ -333,7 +333,7 @@ again:
 	}
 error_timeout:
 	/* timeout */
-	LM_ERR("timeout %d ms elapsed from %d s\n", elapsed,
+	LM_ERR("connect timed out, %d us elapsed out of %d us\n", elapsed,
 		timeout*1000);
 error:
 	return -1;
@@ -933,18 +933,20 @@ struct tcp_connection* tcp_conn_new(int sock, union sockaddr_union* su,
 int tcp_conn_send(struct tcp_connection *c)
 {
 	long response[2];
-	int n;
+	int n, fd;
 
 	/* inform TCP main about this new connection */
 	if (c->state==S_CONN_CONNECTING) {
+		/* store the local fd now, before TCP main overwrites it */
+		fd = c->s;
 		response[0]=(long)c;
 		response[1]=ASYNC_CONNECT;
-		n=send_fd(unix_tcp_sock, response, sizeof(response), c->s);
+		n=send_fd(unix_tcp_sock, response, sizeof(response), fd);
 		if (n<=0) {
 			LM_ERR("Failed to send the socket to main for async connection\n");
 			goto error;
 		}
-		close(c->s);
+		close(fd);
 	} else {
 		response[0]=(long)c;
 		response[1]=CONN_NEW;

@@ -574,7 +574,6 @@ int save_aux(struct sip_msg* _m, str* forced_binding, char* _d, char* _f, char* 
 	int st;
 	str uri;
 	str flags_s;
-	pv_value_t val;
 
 	rerrno = R_FINE;
 	memset( &sctx, 0 , sizeof(sctx));
@@ -664,15 +663,10 @@ int save_aux(struct sip_msg* _m, str* forced_binding, char* _d, char* _f, char* 
 	update_act_time();
 
 	if (_s) {
-		if (pv_get_spec_value( _m, (pv_spec_p)_s, &val)!=0) {
+		if (fixup_get_svalue( _m, (gparam_p)_s, &uri)!=0) {
 			LM_ERR("failed to get PV value\n");
 			goto return_minus_one;
 		}
-		if ( (val.flags&PV_VAL_STR)==0 ) {
-			LM_ERR("PV vals is not string\n");
-			goto return_minus_one;
-		}
-		uri = val.rs;
 	} else {
 		uri = get_to(_m)->uri;
 	}
@@ -734,6 +728,7 @@ int save(struct sip_msg* _m, char* _d, char* _f, char* _s)
 	char forced_binding_buf[MAX_FORCED_BINDING_LEN];
 	str forced_binding = {NULL, 0};
 	str *binding_uri;
+	str path_bk;
 
 	if(_m->first_line.type != SIP_REPLY)
 		return save_aux(_m, NULL, _d, _f, _s);
@@ -759,6 +754,14 @@ int save(struct sip_msg* _m, char* _d, char* _f, char* _s)
 	if (parse_reg_headers(msg) < 0) return -1;
 	if (check_contacts(msg, &st) > 0) return -1;
 
+	/* detach the path vec from the msg as it is allocated in shm, and all
+	 * the parse/set ops (done below by save_aux) assume it is in pkg */
+	path_bk = msg->path_vec;
+	msg->path_vec.s = NULL;
+	msg->path_vec.len = 0;
+
+	ret = -1;
+
 	/* msg - request
 	   _m  - reply
 	*/
@@ -776,7 +779,7 @@ int save(struct sip_msg* _m, char* _d, char* _f, char* _s)
 			if (str2int(&(request_c->expires->body), (unsigned int*)&requested_exp)<0) {
 				LM_ERR("unable to get expires from [%.*s]\n",
 					request_c->expires->body.len, request_c->expires->body.s);
-				return -1;
+				goto done;
 			}
 		}
 		LM_DBG("Binding received from client [%.*s] with requested expires [%d]\n",
@@ -805,7 +808,7 @@ int save(struct sip_msg* _m, char* _d, char* _f, char* _s)
 							LM_ERR("unable to get expires from [%.*s]\n",
 								_c->expires->body.len,
 								_c->expires->body.s);
-							return -1;
+							goto done;
 						}
 						LM_DBG("Binding received from upper registrar"
 							" [%.*s] with imposed expires [%d]\n",
@@ -832,7 +835,7 @@ int save(struct sip_msg* _m, char* _d, char* _f, char* _s)
 							LM_ERR("forced binding to BIG:"
 								" %d > MAX_FORCED_BINDING_LEN\n",
 								forced_binding.len);
-							return -1;
+							goto done;
 						}
 					}
 				} else {
@@ -879,7 +882,11 @@ int save(struct sip_msg* _m, char* _d, char* _f, char* _s)
 	}
 
 done:
+	/* remove whatever was parsed and attached as pkg to the shm cloned req */
 	clean_msg_clone(t->uas.request, t->uas.request, t->uas.end_request);
+	/* free and restore the shm path vec */
+	if (msg->path_vec.s) pkg_free(msg->path_vec.s);
+	msg->path_vec = path_bk;
 
 	return ret;
 }
@@ -908,12 +915,11 @@ int w_remove_3(struct sip_msg *msg, char *udomain, char *aor_gp,
 int _remove(struct sip_msg *msg, char *udomain, char *aor_gp, char *contact_gp,
             char *next_hop_gp)
 {
-	struct sip_uri puri;
-	struct hostent delete_ct_he, delete_nh_he, *he;
+	struct hostent delete_nh_he, *he;
 	urecord_t *record;
 	ucontact_t *contact, *it;
 	str match_ct = STR_NULL, match_next_hop = STR_NULL;
-	str aor_uri, aor_user, delete_user = STR_NULL;
+	str aor_uri, aor_user;
 	int ret = 1;
 	unsigned short delete_port = 0;
 
@@ -952,6 +958,8 @@ int _remove(struct sip_msg *msg, char *udomain, char *aor_gp, char *contact_gp,
 			ret = E_UNSPEC;
 			goto out_unlock;
 		}
+		if (match_ct.s)
+			LM_DBG("Delete by contact: [%.*s]\n", match_ct.len, match_ct.s);
 	}
 
 	if (next_hop_gp) {
@@ -960,41 +968,6 @@ int _remove(struct sip_msg *msg, char *udomain, char *aor_gp, char *contact_gp,
 			ret = E_UNSPEC;
 			goto out_unlock;
 		}
-	}
-
-	if (match_ct.s) {
-		LM_DBG("parsing match ct: %.*s\n", match_ct.len, match_ct.s);
-
-		if (parse_uri(match_ct.s, match_ct.len, &puri) != 0) {
-			LM_ERR("failed to parse contact uri: '%.*s'\n",
-					match_ct.len, match_ct.s);
-			ret = E_BAD_URI;
-			goto out_unlock;
-		}
-
-		delete_user = puri.user;
-
-		he = sip_resolvehost(&puri.host, &delete_port, &puri.proto, 0, NULL);
-		if (!he) {
-			LM_ERR("cannot resolve contact URI: %.*s\n",
-			       match_ct.len, match_ct.s);
-			ret = E_UNSPEC;
-			goto out_unlock;
-		}
-
-		if (hostent_cpy(&delete_ct_he, he) != 0) {
-			LM_ERR("no more pkg mem\n");
-			ret = E_OUT_OF_MEM;
-			goto out_unlock;
-		}
-
-		if (puri.port_no > 0)
-			delete_port  = puri.port_no;
-
-		LM_DBG("Delete by contact: [ User %.*s | Host %s | Port %d ]\n",
-				delete_user.len, delete_user.s,
-				inet_ntoa(*(struct in_addr *)(he->h_addr_list[0])),
-				delete_port);
 	}
 
 	if (match_next_hop.s) {
@@ -1020,55 +993,41 @@ int _remove(struct sip_msg *msg, char *udomain, char *aor_gp, char *contact_gp,
 		contact = it;
 		it = it->next;
 
-		LM_DBG("parsing contact uri '%.*s'\n", contact->c.len, contact->c.s);
-
-		if (parse_uri(contact->c.s, contact->c.len, &puri) != 0) {
-			LM_ERR("failed to parse contact uri: '%.*s'\n",
-			        contact->c.len, contact->c.s);
-			ret = E_BAD_URI;
-			goto out_flush;
-		}
+		LM_DBG("checking contact uri '%.*s'\n", contact->c.len, contact->c.s);
 
 		he = sip_resolvehost(&contact->next_hop.name,
 		                     &contact->next_hop.port,
 		                     &contact->next_hop.proto, 0, NULL);
 		if (!he) {
 			LM_ERR("failed to resolve next hop %.*s of contact '%.*s'\n",
-			       contact->next_hop.name.len, contact->next_hop.name.s,
-			       contact->c.len, contact->c.s);
+				contact->next_hop.name.len, contact->next_hop.name.s,
+				contact->c.len, contact->c.s);
 			continue;
 		}
 
-		LM_DBG("Contact: [ User %.*s | Next Hop %s | Port %d ]\n",
-		        puri.user.len, puri.user.s,
-		        inet_ntoa(*(struct in_addr *)(he->h_addr_list[0])),
-				puri.port_no);
+		LM_DBG("next hop is [%.*s] resolving to [%s]\n",
+			contact->next_hop.name.len, contact->next_hop.name.s,
+			inet_ntoa(*(struct in_addr *)(he->h_addr_list[0])));
 
 		if (match_next_hop.s) {
 			if (memcmp(delete_nh_he.h_addr_list[0],
-			           he->h_addr_list[0], he->h_length))
+			he->h_addr_list[0], he->h_length))
 				continue;
 		}
 
 		if (match_ct.s) {
-			if (delete_user.len != puri.user.len ||
-			        delete_port != puri.port_no ||
-			        memcmp(delete_ct_he.h_addr_list[0],
-			               he->h_addr_list[0], he->h_length) ||
-				    memcmp(delete_user.s, puri.user.s, puri.user.len))
+			if (match_ct.len != contact->c.len ||
+			memcmp(match_ct.s, contact->c.s, match_ct.len))
 				continue;
 		}
 
 		ul.delete_ucontact(record, contact, 0);
 	}
 
-out_flush:
 	ul.release_urecord(record, 0);
 
 out_unlock:
 	ul.unlock_udomain((udomain_t *)udomain, &aor_user);
-	if (match_ct.s)
-		free_hostent(&delete_ct_he);
 	if (match_next_hop.s)
 		free_hostent(&delete_nh_he);
 

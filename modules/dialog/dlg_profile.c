@@ -655,8 +655,15 @@ static void destroy_linker(struct dlg_profile_link *l, struct dlg_cell *dlg,
 
 	map_t entry;
 	void ** dest;
+	str shtag = {0,0};
 
 	if (!(l->profile->repl_type==REPL_CACHEDB)) {
+		if (l->profile->repl_type==REPL_PROTOBIN &&
+			(fetch_dlg_value(dlg, &shtag_dlg_val, &shtag, 0) == -1)) {
+			LM_ERR("Unable to fetch dlg value for sharing tag\n");
+			return;
+		}
+
 		lock_set_get( l->profile->locks, l->hash_idx);
 
 		if( l->profile->has_value)
@@ -665,19 +672,27 @@ static void destroy_linker(struct dlg_profile_link *l, struct dlg_cell *dlg,
 			dest = map_find( entry, l->value );
 			if( dest )
 			{
-				prof_val_local_dec(dest, dlg);
+				prof_val_local_dec(dest, &shtag,
+					l->profile->repl_type==REPL_PROTOBIN);
 
 				if( *dest == 0 )
 				{
-					/* warn everybody we are deleting */
-					/* XXX: we should queue these */
-					repl_prof_remove(&l->profile->name, &l->value);
+					if (l->profile->repl_type==REPL_PROTOBIN)
+						/* warn everybody we are deleting */
+						/* XXX: we should queue these */
+						repl_prof_remove(&l->profile->name, &l->value);
+
 					map_remove(entry,l->value );
 				}
 			}
 		}
 		else {
-			remove_local_counter(&l->profile->noval_local_counters[l->hash_idx], dlg);
+			if (l->profile->repl_type==REPL_PROTOBIN && profile_repl_cluster)
+				remove_local_counter(&l->profile->noval_local_counters[l->hash_idx],
+					&shtag);
+			else
+				l->profile->noval_local_counters[l->hash_idx] =
+					(void *)((long)l->profile->noval_local_counters[l->hash_idx] - 1);
 		}
 
 		lock_set_release( l->profile->locks, l->hash_idx  );
@@ -761,6 +776,7 @@ static void link_dlg_profile(struct dlg_profile_link *linker,
 	struct dlg_entry *d_entry;
 	void ** dest;
 	struct prof_local_count *cnt;
+	str shtag = {0,0};
 
 	/* add the linker to the dialog */
 	/* FIXME zero h_id is not 100% for testing if the dialog is inserted
@@ -785,6 +801,12 @@ static void link_dlg_profile(struct dlg_profile_link *linker,
 		hash = calc_hash_profile(&linker->value, dlg, linker->profile);
 		linker->hash_idx = hash;
 
+		if (linker->profile->repl_type==REPL_PROTOBIN &&
+			(fetch_dlg_value(dlg, &shtag_dlg_val, &shtag, 0) == -1)) {
+			LM_ERR("Unable to fetch dlg value for sharing tag\n");
+			return;
+		}
+
 		lock_set_get( linker->profile->locks, hash );
 
 		LM_DBG("Entered here with hash = %d \n",hash);
@@ -797,19 +819,24 @@ static void link_dlg_profile(struct dlg_profile_link *linker,
 				lock_set_release( linker->profile->locks,hash );
 				return;
 			}
-			/* if we accept replicated stuff, we have to allocate the
-			 * structure for it and treat the counter differently */
-			prof_val_local_inc(dest, dlg);
+
+			prof_val_local_inc(dest, &shtag,
+				linker->profile->repl_type==REPL_PROTOBIN);
 		}
 		else {
-			cnt = get_local_counter(&linker->profile->noval_local_counters[hash], dlg);
-			if (!cnt) {
-				lock_set_release(linker->profile->locks, hash);
-				return;
-			}
+			if (linker->profile->repl_type==REPL_PROTOBIN && profile_repl_cluster) {
+				cnt = get_local_counter(&linker->profile->noval_local_counters[hash],
+					&shtag);
+				if (!cnt) {
+					lock_set_release(linker->profile->locks, hash);
+					return;
+				}
 
-			cnt->dlg = dlg;
-			cnt->n++;
+				cnt->n++;
+			} else {
+				linker->profile->noval_local_counters[hash] =
+					(void*)((long)linker->profile->noval_local_counters[hash] + 1);
+			}
 		}
 
 		lock_set_release( linker->profile->locks,hash );
@@ -964,10 +991,10 @@ int is_dlg_in_profile(struct dlg_cell *dlg, struct dlg_profile_table *profile,
 	dlg_lock( d_table, d_entry);
 	for( linker=dlg->profile_links ; linker ; linker=linker->next) {
 		if (linker->profile==profile) {
-			if (profile->has_value==0) {
+			if (profile->has_value==0 || (profile->has_value==1 && !value)) {
 				dlg_unlock( d_table, d_entry);
 				return 1;
-			} else if (value && value->len==linker->value.len &&
+			} else if (value->len==linker->value.len &&
 			memcmp(value->s,linker->value.s,value->len)==0){
 				dlg_unlock( d_table, d_entry);
 				return 1;
@@ -1045,7 +1072,8 @@ unsigned int get_profile_size(struct dlg_profile_table *profile, str *value)
 							goto next_val;
 						}
 
-						n += prof_val_get_count(dest, 0);
+						n += prof_val_get_count(dest, 0,
+								profile->repl_type == REPL_PROTOBIN);
 next_val:
 						if (iterator_next(&it) < 0)
 							break;
@@ -1080,7 +1108,8 @@ next_val:
 
 				dest = map_find(entry,*value);
 				if( dest )
-					n = prof_val_get_count(dest, 0);
+					n = prof_val_get_count(dest, 0,
+							profile->repl_type == REPL_PROTOBIN);
 
 				lock_set_release( profile->locks, i);
 
@@ -1099,6 +1128,7 @@ int noval_get_local_count(struct dlg_profile_table *profile)
 	int i;
 	int n = 0;
 	struct prof_local_count *cnt;
+	int rc;
 
 	for (i = 0; i < profile->size; i++) {
 		lock_set_get(profile->locks, i);
@@ -1108,14 +1138,20 @@ int noval_get_local_count(struct dlg_profile_table *profile)
 			continue;
 		}
 
-		for (cnt = profile->noval_local_counters[i]; cnt; cnt = cnt->next) {
-			if (profile_repl_cluster && dialog_repl_cluster) {
-				/* don't count dialogs for which we have a backup role */
-				if (cnt->dlg && get_shtag_state(cnt->dlg) != SHTAG_STATE_BACKUP)
+		if (profile->repl_type==REPL_PROTOBIN && profile_repl_cluster) {
+			for (cnt = profile->noval_local_counters[i]; cnt; cnt = cnt->next)
+				if (dialog_repl_cluster && cnt->shtag.s) {
+					/* don't count dialogs for which we have a backup role */
+					if ((rc = get_shtag(&cnt->shtag)) < 0)
+						LM_ERR("Failed to get state for sharing tag: <%.*s>\n",
+							cnt->shtag.len, cnt->shtag.s);
+
+					if (rc != SHTAG_STATE_BACKUP)
+						n += cnt->n;
+				} else
 					n += cnt->n;
-			} else
-				n += cnt->n;
-		}
+		} else
+			n += (long)profile->noval_local_counters[i];
 
 		lock_set_release(profile->locks, i);
 	}
@@ -1235,7 +1271,31 @@ static inline int add_val_to_rpl(void * param, str key, void * val)
 	if( node == NULL )
 		return -1;
 
-	counter = prof_val_get_count(&val, 0);
+	counter = prof_val_get_count(&val, 0, 0);
+	p= int2str((unsigned long)counter, &len);
+	attr = add_mi_attr(node, MI_DUP_VALUE, "count", 5,  p, len );
+
+	if( attr == NULL )
+		return -1;
+
+	return 0;
+}
+
+static inline int add_val_to_rpl_r(void * param, str key, void * val)
+{
+	struct mi_node* rpl = (struct mi_node* ) param;
+	struct mi_node* node;
+	struct mi_attr* attr;
+	int len;
+	char *p;
+	int counter;
+
+	node = add_mi_node_child(rpl, MI_DUP_VALUE, "value", 5, key.s , key.len );
+
+	if( node == NULL )
+		return -1;
+
+	counter = prof_val_get_count(&val, 0, 1);
 	p= int2str((unsigned long)counter, &len);
 	attr = add_mi_attr(node, MI_DUP_VALUE, "count", 5,  p, len );
 
@@ -1308,7 +1368,10 @@ struct mi_root * mi_get_profile_values(struct mi_root *cmd_tree, void *param )
 		for( i=0; i<profile->size; i++ )
 		{
 			lock_set_get( profile->locks, i);
-			ret |= map_for_each( profile->entries[i], add_val_to_rpl, rpl);
+			if (profile->repl_type == REPL_PROTOBIN)
+				ret |= map_for_each(profile->entries[i], add_val_to_rpl_r, rpl);
+			else
+				ret |= map_for_each(profile->entries[i], add_val_to_rpl, rpl);
 			lock_set_release( profile->locks, i);
 		}
 	}

@@ -58,17 +58,26 @@ static void tm_repl_cancel(bin_packet_t *packet, str *buf, struct receive_info *
 	msg.REQ_METHOD = METHOD_CANCEL;
 
 	msg.via1 = &via;
-	msg.via1->branch = &branch;
 
 	TM_BIN_POP(int, &itmp, "via branch offset");
-	msg.via1->branch->value.s = buf->s + itmp;
-	TM_BIN_POP(int, &msg.via1->branch->value.len, "via branch length");
+	if (itmp != 0) {
+		msg.via1->branch = &branch;
+		msg.via1->branch->value.s = buf->s + itmp;
+		TM_BIN_POP(int, &msg.via1->branch->value.len, "via branch length");
+	} else
+		msg.via1->branch = 0;
 	TM_BIN_POP(int, &itmp, "via host offset");
-	msg.via1->host.s = buf->s + itmp;
-	TM_BIN_POP(int, &msg.via1->host.len, "via host length");
+	if (itmp != 0) {
+		msg.via1->host.s = buf->s + itmp;
+		TM_BIN_POP(int, &msg.via1->host.len, "via host length");
+	} else
+		memset(&msg.via1->host, 0, sizeof(str));
 	TM_BIN_POP(int, &itmp, "via transport offset");
-	msg.via1->transport.s = buf->s + itmp;
-	TM_BIN_POP(int, &msg.via1->transport.len, "via transport length");
+	if (itmp != 0) {
+		msg.via1->transport.s = buf->s + itmp;
+		TM_BIN_POP(int, &msg.via1->transport.len, "via transport length");
+	} else
+		memset(&msg.via1->transport, 0, sizeof(str));
 	TM_BIN_POP(int, &msg.via1->port, "via port");
 	TM_BIN_POP(str, &stmp, "cancel reason");
 	TM_BIN_POP(int, &msg.hash_index, "hash index");
@@ -273,12 +282,21 @@ static void *tm_replicate_cancel(struct sip_msg *msg)
 	packet = *pckt;
 
 	/* send offset of the via information */
-	TM_BIN_PUSH(int, msg->via1->branch->value.s - msg->buf, "via branch offset");
-	TM_BIN_PUSH(int, msg->via1->branch->value.len, "via branch length");
-	TM_BIN_PUSH(int, msg->via1->host.s - msg->buf, "via host offset");
-	TM_BIN_PUSH(int, msg->via1->host.len, "via host length");
-	TM_BIN_PUSH(int, msg->via1->transport.s - msg->buf, "via transport offset");
-	TM_BIN_PUSH(int, msg->via1->transport.len, "via transport length");
+	if (msg->via1->branch) {
+		TM_BIN_PUSH(int, msg->via1->branch->value.s - msg->buf, "via branch offset");
+		TM_BIN_PUSH(int, msg->via1->branch->value.len, "via branch length");
+	} else
+		TM_BIN_PUSH(int, 0, "via branch offset");
+	if (msg->via1->host.s) {
+		TM_BIN_PUSH(int, msg->via1->host.s - msg->buf, "via host offset");
+		TM_BIN_PUSH(int, msg->via1->host.len, "via host length");
+	} else
+		TM_BIN_PUSH(int, 0, "via host offset");
+	if (msg->via1->transport.s) {
+		TM_BIN_PUSH(int, msg->via1->transport.s - msg->buf, "via transport offset");
+		TM_BIN_PUSH(int, msg->via1->transport.len, "via transport length");
+	} else
+		TM_BIN_PUSH(int, 0, "via transport offset");
 	TM_BIN_PUSH(int, msg->via1->port, "via port");
 	/* cancel reason */
 	get_cancel_reason(msg, T_CANCEL_REASON_FLAG, &reason);
@@ -414,7 +432,7 @@ int tm_reply_replicate(struct sip_msg *msg)
 	}
 	LM_DBG("reply should get to node %d\n", cid);
 	tm_replicate_reply(msg, cid);
-	return 0;
+	return 1;
 }
 
 static int tm_existing_trans(struct sip_msg *msg)
@@ -423,15 +441,15 @@ static int tm_existing_trans(struct sip_msg *msg)
 	if (t == T_UNDEFINED) {
 		if (t_lookup_request(msg, 0) != -1) {
 			LM_DBG("e2e ACK or known CANCEL, do not replicate\n");
-			return 0;
+			return 1;
 		}
 		t = get_t(); /* fetch again the transaction */
 	}
 	if (t) {
 		LM_DBG("transaction already present here, no need to replicate\n");
-		return 0;
+		return 1;
 	}
-	return -1;
+	return 0;
 }
 
 /**

@@ -2908,13 +2908,24 @@ static int engage_force_rtpproxy(struct dlg_cell *dlg, struct sip_msg *msg)
 		if (!offer && !has_sdp)
 			goto done;
 		/* late negotiation */
+		/* delete the value, to make sure we don't re-engage late again */
+		dlg_api.store_dlg_value(dlg, &late_name, NULL);
 	} else {
 		/* sequential request without SDP */
 		if (!has_sdp) {
+			if (msg->first_line.type == SIP_REQUEST &&
+					(method_id == METHOD_INVITE ||  method_id == METHOD_UPDATE)) {
+				/* indicate there's an ongoing late negociation happening */
+				if (dlg_api.store_dlg_value(dlg, &late_name, &late_name) < 0) {
+					LM_ERR("cannot store late_negotiation param into dialog\n");
+					goto error;
+				}
+			}
 			goto done;
 		}
 		/* if it is not an 200OK */
-		LM_DBG("handling 200 OK? - %d\n", msg->first_line.u.reply.statuscode);
+		if (msg->first_line.type == SIP_REPLY)
+			LM_DBG("handling 200 OK? - %d\n", msg->first_line.u.reply.statuscode);
 	}
 
 	/* try to move values */
@@ -3888,8 +3899,10 @@ int force_rtp_proxy_body(struct sip_msg* msg, struct force_rtpp_args *args,
 					vcnt = 23;
 					STR2IOVEC(rtpp_notify_socket, v[20]);
 					if (!HAS_CAP(args->node, NOTIFY_WILD)) {
-						v[20].iov_base += 4;
-						v[20].iov_len -= 4;
+						if (!rtpp_notify_socket_un) {
+							v[20].iov_base += 4;
+							v[20].iov_len -= 4;
+						}
 					}
 				} else {
 					vcnt = (to_tag.len > 0) ? 19 : 15;

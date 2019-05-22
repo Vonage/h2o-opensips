@@ -111,18 +111,27 @@ static inline prof_rcv_count_t *repl_prof_allocate(void)
 }
 
 static inline struct prof_local_count *get_local_counter(
-						struct prof_local_count **list, struct dlg_cell *dlg)
+						struct prof_local_count **list, str *shtag)
 {
 	struct prof_local_count *cnt;
 
-	for (cnt = *list; cnt && dlg != cnt->dlg; cnt = cnt->next);
+	for (cnt = *list; cnt &&
+		(shtag->len != cnt->shtag.len || memcmp(shtag->s, cnt->shtag.s, shtag->len));
+		cnt = cnt->next);
+
 	if (!cnt) {
 		cnt = shm_malloc(sizeof *cnt);
 		if (!cnt) {
-			LM_ERR("no more shm memory\n");
+			LM_ERR("oom\n");
 			return NULL;
 		}
 		memset(cnt, 0, sizeof *cnt);
+
+		if (shtag->len && shm_str_dup(&cnt->shtag, shtag) < 0) {
+			LM_ERR("oom\n");
+			return NULL;
+		}
+
 		cnt->next = *list;
 		*list = cnt;
 	}
@@ -131,28 +140,39 @@ static inline struct prof_local_count *get_local_counter(
 }
 
 static inline void remove_local_counter(struct prof_local_count **list,
-													struct dlg_cell *dlg)
+									str *shtag)
 {
 	struct prof_local_count *cnt, *cnt_prev = NULL;
 
-	for (cnt = *list; cnt && dlg != cnt->dlg; cnt_prev = cnt, cnt = cnt->next) ;
+	for (cnt = *list; cnt &&
+		(shtag->len != cnt->shtag.len || memcmp(shtag->s, cnt->shtag.s, shtag->len));
+		cnt_prev = cnt, cnt = cnt->next) ;
 	if (!cnt) {
-		LM_ERR("Failed to decrement profile counter, dialog not found\n");
+		LM_ERR("Failed to decrement profile counter, shtag not found\n");
 		return;
 	}
-	if (cnt_prev)
-		cnt_prev->next = cnt->next;
-	else
-		*list = cnt->next;
-	shm_free(cnt);
+
+	cnt->n--;
+	if (cnt->n == 0) {
+		if (cnt_prev)
+			cnt_prev->next = cnt->next;
+		else
+			*list = cnt->next;
+
+		if (cnt->shtag.s)
+			shm_free(cnt->shtag.s);
+		shm_free(cnt);
+	}
 }
 
-static inline void prof_val_local_inc(void **pv_info, struct dlg_cell *dlg)
+static inline void prof_val_local_inc(void **pv_info, str *shtag, int is_repl)
 {
 	prof_value_info_t *pvi;
 	struct prof_local_count *cnt;
 
-	if (profile_repl_cluster) {
+	/* if we accept replicated stuff, we have to allocate the
+	 * structure for it and treat the counter differently */
+	if (is_repl && profile_repl_cluster) {
 		/* if info does not exist, create it */
 		if (!*pv_info) {
 			pvi = shm_malloc(sizeof(prof_value_info_t));
@@ -163,50 +183,51 @@ static inline void prof_val_local_inc(void **pv_info, struct dlg_cell *dlg)
 			memset(pvi, 0, sizeof(prof_value_info_t));
 			*pv_info = pvi;
 
-			cnt = get_local_counter(&pvi->local_counters, dlg);
+			cnt = get_local_counter(&pvi->local_counters, shtag);
 			if (!cnt)
 				return;
 		} else {
 			pvi = (prof_value_info_t *)(*pv_info);
-			cnt = get_local_counter(&pvi->local_counters, dlg);
+			cnt = get_local_counter(&pvi->local_counters, shtag);
 			if (!cnt)
 				return;
 		}
 
-		cnt->dlg = dlg;
 		cnt->n++;
 	} else {
 		(*pv_info) = (void*)((long)(*pv_info) + 1);
 	}
 }
 
-/* @all - all counters(including dialogs tagged as backup) */
+/* This function is used only for /b profiles
+ * @all - all counters(including dialogs tagged as backup) */
 static inline int prof_val_get_local_count(void **pv_info, int all)
 {
 	prof_value_info_t *pvi;
 	struct prof_local_count *cnt;
 	int n = 0;
+	int rc;
 
-	if (profile_repl_cluster) {
-		pvi = (prof_value_info_t *)(*pv_info);
-		for (cnt = pvi->local_counters; cnt; cnt = cnt->next)
-			if (!all && dialog_repl_cluster) {
-				/* don't count dialogs for which we have a backup role */
-				if (cnt->dlg && (get_shtag_state(cnt->dlg) != SHTAG_STATE_BACKUP))
-					n += cnt->n;
-			} else
+	pvi = (prof_value_info_t *)(*pv_info);
+	for (cnt = pvi->local_counters; cnt; cnt = cnt->next)
+		if (!all && dialog_repl_cluster && cnt->shtag.s) {
+			/* don't count dialogs for which we have a backup role */
+			if ((rc = get_shtag(&cnt->shtag)) < 0)
+				LM_ERR("Failed to get state for sharing tag: <%.*s>\n",
+					cnt->shtag.len, cnt->shtag.s);
+
+			if (rc != SHTAG_STATE_BACKUP)
 				n += cnt->n;
-		return n;
-	} else {
-		return (int)(long)(*pv_info);
-	}
+		} else
+			n += cnt->n;
+	return n;
 }
 
 /* @all - all counters(including local dialogs tagged as backup) */
-static inline int prof_val_get_count(void **pv_info, int all)
+static inline int prof_val_get_count(void **pv_info, int all, int is_repl)
 {
 	prof_value_info_t *pvi;
-	if (profile_repl_cluster) {
+	if (is_repl && profile_repl_cluster) {
 		pvi = (prof_value_info_t *)(*pv_info);
 		return prof_val_get_local_count(pv_info, all) +
 				replicate_profiles_count(pvi->rcv_counters);
@@ -215,18 +236,18 @@ static inline int prof_val_get_count(void **pv_info, int all)
 	}
 }
 
-static inline void prof_val_local_dec(void **pv_info, struct dlg_cell *dlg)
+static inline void prof_val_local_dec(void **pv_info, str *shtag, int is_repl)
 {
 	prof_value_info_t *pvi;
 
-	if (profile_repl_cluster) {
+	if (is_repl	&& profile_repl_cluster) {
 		pvi = (prof_value_info_t *)(*pv_info);
 
-		remove_local_counter(&pvi->local_counters, dlg);
+		remove_local_counter(&pvi->local_counters, shtag);
 
 		/* check all the other counters(local + received) to see if we should
 		 * delete the profile */
-		if (prof_val_get_count(pv_info, 1) == 0) {
+		if (prof_val_get_count(pv_info, 1, 1) == 0) {
 			free_profile_val_t(pvi);
 			*pv_info = 0;
 		}

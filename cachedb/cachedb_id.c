@@ -55,7 +55,7 @@ static int dupl_string(char** dst, const char* begin, const char* end)
 
 /**
  * Parse a database URL of form
- * scheme[:group]://[username[:password]@]hostname[:port]/database
+ * scheme[:group]://[username[:password]@]hostname[:port]/database[?options]
  *
  * \param id filled id struct
  * \param url parsed URL
@@ -74,12 +74,14 @@ static int parse_cachedb_url(struct cachedb_id* id, const str* url)
 		ST_USER_HOST,  /* Username or hostname */
 		ST_PASS_PORT,  /* Password or port part */
 		ST_HOST,       /* Hostname part */
+		ST_HOST6,      /* Hostname part IPv6 */
 		ST_PORT,       /* Port part */
-		ST_DB          /* Database part */
+		ST_DB,         /* Database part */
+		ST_OPTIONS     /* Options part */
 	};
 
 	enum state st;
-	unsigned int len, i;
+	unsigned int len, i, ipv6_flag=0;
 	char* begin;
 	char* prev_token,*start_host=NULL,*start_prev=NULL,*ptr;
 
@@ -168,14 +170,16 @@ static int parse_cachedb_url(struct cachedb_id* id, const str* url)
 				begin = url->s + i + 1;
 				break;
 
+			case '[':
+				st = ST_HOST6;
+				begin = url->s + i + 1;
+				break;
+
 			case '/':
 				if (dupl_string(&id->host, begin, url->s + i) < 0) goto err;
-				if (url->s+i+1 == url->s + len) {
-					st = ST_DB;
-					break;
-				}
-				if (dupl_string(&id->database, url->s + i + 1, url->s + len) < 0) goto err;
-				return 0;
+				begin = url->s + i + 1;
+				st = ST_DB;
+				break;
 			}
 			break;
 
@@ -191,12 +195,10 @@ static int parse_cachedb_url(struct cachedb_id* id, const str* url)
 			case '/':
 				id->host = prev_token;
 				id->port = str2s(begin, url->s + i - begin, 0);
-				if (url->s+i+1 == url->s + len) {
-					st = ST_DB;
-					break;
-				}
-				if (dupl_string(&id->database, url->s + i + 1, url->s + len) < 0) goto err;
-				return 0;
+				begin = url->s + i + 1;
+				st = ST_DB;
+				break;
+
 			case ',':
 				st=ST_HOST;
 				start_host=start_prev;
@@ -207,6 +209,11 @@ static int parse_cachedb_url(struct cachedb_id* id, const str* url)
 
 		case ST_HOST:
 			switch(url->s[i]) {
+			case '[':
+				st = ST_HOST6;
+				begin = url->s + i + 1;
+				break;
+
 			case ':':
 				LM_DBG("in host - :\n");
 				if (id->flags & CACHEDB_ID_MULTIPLE_HOSTS) {
@@ -215,7 +222,7 @@ static int parse_cachedb_url(struct cachedb_id* id, const str* url)
 				}
 
 				st = ST_PORT;
-				if (dupl_string(&id->host, begin, url->s + i) < 0) goto err;
+				if (dupl_string(&id->host, begin, url->s + i - ipv6_flag) < 0) goto err;
 				start_host = begin;
 				begin = url->s + i + 1;
 				break;
@@ -226,13 +233,19 @@ static int parse_cachedb_url(struct cachedb_id* id, const str* url)
 				else
 					ptr = begin;
 
-				if (dupl_string(&id->host, ptr, url->s + i) < 0) goto err;
-				if (url->s+i+1 == url->s + len) {
-					st = ST_DB;
-					break;
-				}
-				if (dupl_string(&id->database, url->s + i + 1, url->s + len) < 0) goto err;
-				return 0;
+				if (dupl_string(&id->host, ptr, url->s + i - ipv6_flag) < 0) goto err;
+				begin = url->s + i + 1;
+				st = ST_DB;
+				break;
+			}
+			break;
+
+		case ST_HOST6:
+			switch(url->s[i]) {
+			case ']':
+				ipv6_flag = 1;
+				st = ST_HOST;
+				break;
 			}
 			break;
 
@@ -240,12 +253,10 @@ static int parse_cachedb_url(struct cachedb_id* id, const str* url)
 			switch(url->s[i]) {
 			case '/':
 				id->port = str2s(begin, url->s + i - begin, 0);
-				if (url->s+i+1 == url->s + len) {
-					st = ST_DB;
-					break;
-				}
-				if (dupl_string(&id->database, url->s + i + 1, url->s + len) < 0) goto err;
-				return 0;
+				begin = url->s + i + 1;
+				st = ST_DB;
+				break;
+
 			case ',':
 				st = ST_HOST;
 				pkg_free(id->host);
@@ -254,10 +265,30 @@ static int parse_cachedb_url(struct cachedb_id* id, const str* url)
 				id->flags |= CACHEDB_ID_MULTIPLE_HOSTS;
 				break;
 			}
+			break;
 
 		case ST_DB:
+			switch(url->s[i]) {
+			case '?':
+				if (dupl_string(&id->database, begin, url->s + i) < 0) goto err;
+				if (url->s + i + 1 == url->s + len) {
+					st = ST_OPTIONS;
+					break;
+				}
+				if (dupl_string(&id->extra_options, url->s + i + 1, url->s + len) < 0) goto err;
+				return 0;
+			}
+			break;
+
+		case ST_OPTIONS:
 			break;
 		}
+	}
+
+	if (st == ST_DB) {
+		if (begin < url->s + len &&
+				dupl_string(&id->database, begin, url->s + len) < 0) goto err;
+		return 0;
 	}
 
 	if (st == ST_USER_HOST && begin == url->s+url->len) {
@@ -268,7 +299,7 @@ static int parse_cachedb_url(struct cachedb_id* id, const str* url)
 		return 0;
 	}
 
-	if (st != ST_DB) goto err;
+	if (st != ST_DB && st != ST_OPTIONS) goto err;
 	return 0;
 
  err:
@@ -278,6 +309,7 @@ static int parse_cachedb_url(struct cachedb_id* id, const str* url)
 	if (id && id->password) pkg_free(id->password);
 	if (id && id->host) pkg_free(id->host);
 	if (id && id->database) pkg_free(id->database);
+	if (id && id->extra_options) pkg_free(id->extra_options);
 	if (prev_token) pkg_free(prev_token);
 	return -1;
 }
@@ -356,11 +388,17 @@ int cmp_cachedb_id(struct cachedb_id* id1, struct cachedb_id* id2)
 	if (id1->password && strcmp(id1->password,id2->password)) return 0;
 
 	if (strcmp(id1->host,id2->host)) return 0;
+
 	if ((id1->database == NULL && id2->database != NULL) ||
 			(id1->database != NULL && id2->database == NULL))
 		return 0;
 	if (id1->database && strcmp(id1->database,id2->database)) return 0;
 
+	if ((!id1->extra_options && id2->extra_options) ||
+			(id1->extra_options && !id2->extra_options))
+		return 0;
+	if (id1->extra_options &&
+			strcmp(id1->extra_options, id2->extra_options)) return 0;
 
 	if (id1->flags != CACHEDB_ID_MULTIPLE_HOSTS) {
 		/* also check port as it is not included in host member */
@@ -386,5 +424,6 @@ void free_cachedb_id(struct cachedb_id* id)
 	if (id->password) pkg_free(id->password);
 	if (id->host) pkg_free(id->host);
 	if (id->database) pkg_free(id->database);
+	if (id->extra_options) pkg_free(id->extra_options);
 	pkg_free(id);
 }

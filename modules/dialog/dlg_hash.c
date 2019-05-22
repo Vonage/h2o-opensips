@@ -59,6 +59,7 @@
 #include "dlg_replication.h"
 #include "../../evi/evi_params.h"
 #include "../../evi/evi_modules.h"
+#include "../../pt.h"
 
 #define MAX_LDG_LOCKS  2048
 #define MIN_LDG_LOCKS  2
@@ -331,10 +332,11 @@ struct dlg_cell* build_new_dlg( str *callid, str *from_uri, str *to_uri,
 
 int dlg_clone_callee_leg(struct dlg_cell *dlg, int cloned_leg_idx)
 {
-	struct dlg_leg *leg, *src_leg = &dlg->legs[cloned_leg_idx];
+	struct dlg_leg *leg, *src_leg;
 
 	if (ensure_leg_array(dlg->legs_no[DLG_LEGS_USED] + 1, dlg) != 0)
 		return -1;
+	src_leg = &dlg->legs[cloned_leg_idx];
 	leg = &dlg->legs[dlg->legs_no[DLG_LEGS_USED]];
 
 	if (dlg_has_reinvite_pinging(dlg)) {
@@ -844,7 +846,11 @@ void unref_dlg(struct dlg_cell *dlg, unsigned int cnt)
 	d_entry = &(d_table->entries[dlg->h_entry]);
 
 	dlg_lock( d_table, d_entry);
+	dlg->locked_by = process_no;
+
 	unref_dlg_unsafe( dlg, cnt, d_entry);
+
+	dlg->locked_by = 0;
 	dlg_unlock( d_table, d_entry);
 }
 
