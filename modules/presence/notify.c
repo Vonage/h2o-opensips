@@ -1129,7 +1129,7 @@ static str* get_p_notify_body(str pres_uri, pres_ev_t* event, str* etag,
 			LM_DBG("searched etag = %.*s len= %d\n",
 					etag->len, etag->s, etag->len);
 			LM_DBG("etag not NULL\n");
-                        for(i= (aggregate_presence == 0 ? n-1 : 0); i< n; i++)
+			for(i= (aggregate_presence == 0 ? n-1 : 0); i< n; i++)
 			{
 				row = &result->rows[i];
 				row_vals = ROW_VALUES(row);
