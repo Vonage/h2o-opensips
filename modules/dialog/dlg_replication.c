@@ -355,7 +355,7 @@ int dlg_replicated_update(void)
 			break;
 		case 1:
 			/* dlg inserted in timer list with new expire (reference it)*/
-			ref_dlg(dlg,1);
+			ref_dlg_unsafe(dlg,1);
 		}
 	}
 
