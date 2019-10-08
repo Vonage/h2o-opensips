@@ -279,6 +279,11 @@ int sr_load_module(char* path)
 		exit(0);
 	}
 
+	if (exp->load_f && exp->load_f() < 0) {
+		LM_ERR("could not initialize module %s\n", path);
+		goto error1;
+	}
+
 	/* launch register */
 	if (register_module(exp, path, handle)<0) goto error1;
 	return 0;
@@ -604,7 +609,6 @@ int init_child(int rank)
 	case PROC_TIMER:    type = "PROC_TIMER";    break;
 	case PROC_MODULE:   type = "PROC_MODULE";   break;
 	case PROC_TCP_MAIN: type = "PROC_TCP_MAIN"; break;
-	case PROC_BIN:      type = "PROC_BIN";      break;
 	}
 
 	if (!type) {
@@ -693,11 +697,24 @@ static int init_mod( struct sr_module* m, int skip_others)
  */
 int init_modules(void)
 {
+	struct sr_module *currentMod;
 	int ret;
 
 	if (testing_framework) {
 		init_unit_tests();
 		solve_module_dependencies(modules);
+	}
+
+	/* pre-initialize all modules */
+	for (currentMod=modules; currentMod; currentMod=currentMod->next) {
+		if (currentMod->exports->preinit_f == NULL)
+			continue;
+		ret = currentMod->exports->preinit_f();
+		if (ret < 0) {
+			LM_ERR("could not pre-initialize module %s!\n",
+					currentMod->exports->name);
+			return ret;
+		}
 	}
 
 	ret = init_mod(modules, 0);

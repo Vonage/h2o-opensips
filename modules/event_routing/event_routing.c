@@ -94,6 +94,8 @@ struct module_exports exports= {
 	MODULE_VERSION,
 	/* dlopen flags */
 	DEFAULT_DLFLAGS,
+	/* load function */
+	0,
 	/* OpenSIPS module dependencies */
 	NULL,
 	/* exported functions */
@@ -111,6 +113,8 @@ struct module_exports exports= {
 	/* exported transformations */
 	NULL,
 	/* extra processes */
+	NULL,
+	/* module pre-initialization function */
 	NULL,
 	/* module initialization function */
 	mod_init,

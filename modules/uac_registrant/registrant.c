@@ -166,6 +166,7 @@ struct module_exports exports= {
 	MOD_TYPE_DEFAULT,       /* class of this module */
 	MODULE_VERSION,			/* module version */
 	DEFAULT_DLFLAGS,		/* dlopen flags */
+	0,						/* load function */
 	&deps,                  /* OpenSIPS module dependencies */
 	cmds,				/* exported functions */
 	0,					/* exported async functions */
@@ -174,7 +175,8 @@ struct module_exports exports= {
 	mi_cmds,			/* exported MI functions */
 	NULL,				/* exported pseudo-variables */
 	0,					/* exported transformations */
-	0,				/* extra processes */
+	0,					/* extra processes */
+	0,					/* module pre-initialization function */
 	mod_init,			/* module initialization function */
 	(response_function) NULL,	/* response handling function */
 	(destroy_function) mod_destroy,	/* destroy function */

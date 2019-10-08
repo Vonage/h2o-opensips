@@ -572,7 +572,7 @@ static acmd_export_t acmds[] = {
 };
 
 static proc_export_t procs[] = {
-        {"RAW receiver",  0,  0, raw_socket_process, 1, 0},
+        {"RAW receiver",  0,  0, raw_socket_process, 1, PROC_FLAG_INITCHILD},
         {0,0,0,0,0,0}
 };
 
@@ -697,6 +697,7 @@ struct module_exports exports = {
 	MOD_TYPE_DEFAULT,/* class of this module */
 	MODULE_VERSION,
 	DEFAULT_DLFLAGS, /*!< dlopen flags */
+	0,				 /*!< load function */
 	&deps,           /* OpenSIPS module dependencies */
 	cmds,       /*!< Exported functions */
 	acmds,          /*!< Exported async functions */
@@ -710,6 +711,7 @@ struct module_exports exports = {
 	mod_items,          /*!< exported pseudo-variables */
 	0,                  /*!< exported transformations */
 	procs,          /*!< extra processes */
+	0,          /*!< module pre-initialization function */
 	mod_init,   /*!< module initialization function */
 	0,          /*!< response function */
 	destroy,    /*!< destroy function */

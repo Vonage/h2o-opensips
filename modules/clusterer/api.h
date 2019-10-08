@@ -173,7 +173,7 @@ typedef int (*register_capability_f)(str *cap, cl_packet_cb_f packet_cb,
 /*
  * Request to synchronize data for a given capability from another node.
  */
-typedef int (*request_sync_f)(str * capability, int cluster_id, int ignore_seed);
+typedef int (*request_sync_f)(str * capability, int cluster_id, int is_runtime);
 /*
  * Returns a BIN packet in which to include a distinct "chunk" of data
  * (e.g. info about a single usrloc contact) to sync.
@@ -181,9 +181,13 @@ typedef int (*request_sync_f)(str * capability, int cluster_id, int ignore_seed)
  * The same packet will be returned multiple times if there is enough space left
  * otherwise, a new packet will be built and the previous one will be sent out.
  *
+ * @data_version: a way for modules to avoid data corruption when receiving
+ *                sync packets from an OpenSIPS running a different version
+ *
  * This function should only be called from the callback for the SYNC_REQ_RCV event.
  */
-typedef bin_packet_t* (*sync_chunk_start_f)(str *capability, int cluster_id, int dst_id);
+typedef bin_packet_t* (*sync_chunk_start_f)(str *capability, int cluster_id,
+                                            int dst_id, short data_version);
 /*
  * Iterate over chunks of data from a received sync packet.
  *

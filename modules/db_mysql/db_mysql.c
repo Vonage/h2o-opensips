@@ -80,7 +80,8 @@ struct module_exports exports = {
 	MOD_TYPE_SQLDB,  /* class of this module */
 	MODULE_VERSION,
 	DEFAULT_DLFLAGS, /* dlopen flags */
-	NULL,            /* OpenSIPS module dependencies */
+	0,               /* load function */
+	0,            /* OpenSIPS module dependencies */
 	cmds,
 	0,               /* exported async functions */
 	params,          /* module parameters */
@@ -89,6 +90,7 @@ struct module_exports exports = {
 	0,               /* exported pseudo-variables */
 	0,				 /* exported transformations */
 	0,               /* extra processes */
+	0,               /* module pre-initialization function */
 	mysql_mod_init,  /* module initialization function */
 	0,               /* response function*/
 	0,               /* destroy function */

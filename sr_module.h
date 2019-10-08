@@ -57,6 +57,7 @@
 #include "sr_module_deps.h"
 
 typedef  struct module_exports* (*module_register)();
+typedef int (*load_function)(void);
 typedef  int (*cmd_function)(struct sip_msg*, char*, char*, char*, char*,
 			char*, char*);
 typedef  int (*acmd_function)(struct sip_msg*, async_ctx *ctx,
@@ -65,6 +66,7 @@ typedef  int (*fixup_function)(void** param, int param_no);
 typedef  int (*free_fixup_function)(void** param, int param_no);
 typedef  int (*response_function)(struct sip_msg*);
 typedef void (*destroy_function)();
+typedef int (*preinit_function)(void);
 typedef int (*init_function)(void);
 typedef int (*child_init_function)(int rank);
 
@@ -87,7 +89,6 @@ typedef int (*mod_proc_wrapper)();
 #define PROC_TIMER    -1  /* Timer attendant process */
 #define PROC_MODULE   -2  /* Extra process requested by modules */
 #define PROC_TCP_MAIN -4  /* TCP main process */
-#define PROC_BIN      -8  /* Any binary interface listener */
 
 #define DEFAULT_DLFLAGS	0 /* value that signals to module loader to
 							use default dlopen flags in opensips */
@@ -175,7 +176,11 @@ struct module_exports{
 	char *compile_flags;            /*!< compile flags used on the module */
 	unsigned int dlflags;           /*!< flags for dlopen */
 
+	load_function load_f;           /*!< function called immediately after a
+	                                   module was loaded by dlopen */
+
 	dep_export_t *deps;             /*!< module and modparam dependencies */
+
 
 	cmd_export_t* cmds;             /*!< null terminated array of the exported
 	                                   commands */
@@ -199,6 +204,7 @@ struct module_exports{
 	proc_export_t* procs;           /*!< null terminated array of the additional
 	                                   processes reqired by the module */
 
+	preinit_function preinit_f;     /*!< Pre-Initialization function */
 	init_function init_f;           /*!< Initialization function */
 	response_function response_f;   /*!< function used for responses,
 	                                   returns yes or no; can be null */
@@ -222,6 +228,7 @@ cmd_function find_mod_export(char* mod, char* name, int param_no, int flags);
 void destroy_modules();
 int init_child(int rank);
 int init_modules(void);
+int init_modules_deps(void);
 
 /*! \brief
  * Find a parameter with given type and return it's

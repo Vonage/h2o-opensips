@@ -43,6 +43,7 @@
 #include "../../parser/contact/parse_contact.h"
 #include "t_funcs.h"
 #include "t_msgbuilder.h"
+#include "cluster.h"
 #include "uac.h"
 
 
@@ -114,6 +115,7 @@ char *build_local(struct cell *Trans,unsigned int branch,
 	str from;
 	str to;
 	str cseq_n;
+	str *cid = NULL;
 
 	req = Trans->uas.request;
 	cseq_n = Trans->cseq_n;
@@ -155,6 +157,9 @@ char *build_local(struct cell *Trans,unsigned int branch,
 	*len=SIP_VERSION_LEN + method->len + 2 /* spaces */ + CRLF_LEN;
 	*len+=Trans->uac[branch].uri.len;
 
+	if (is_anycast(Trans->uac[branch].request.dst.send_sock))
+		cid = tm_via_cid();
+
 	/*via*/
 	branch_str.s=branch_buf;
 	if (!t_calc_branch(Trans,  branch, branch_str.s, &branch_str.len ))
@@ -165,7 +170,7 @@ char *build_local(struct cell *Trans,unsigned int branch,
 	if (Trans->uac[branch].adv_port.len)
 		hp.port = &Trans->uac[branch].adv_port;
 	via=via_builder(&via_len, Trans->uac[branch].request.dst.send_sock,
-		&branch_str, 0, Trans->uac[branch].request.dst.proto, &hp );
+		&branch_str, cid, Trans->uac[branch].request.dst.proto, &hp );
 	if (!via){
 		LM_ERR("no via header got from builder\n");
 		goto error;
@@ -603,7 +608,7 @@ static inline int print_cseq_num(str* _s, dlg_t* _d)
 /*
  * Create Via header
  */
-static inline int assemble_via(str* dest, struct cell* t, struct socket_info* sock, int branch)
+static inline int assemble_via(str* dest, struct cell* t, struct socket_info* sock, int branch, str *extra)
 {
 	static char branch_buf[MAX_BRANCH_PARAM_LEN];
 	char* via;
@@ -625,7 +630,7 @@ static inline int assemble_via(str* dest, struct cell* t, struct socket_info* so
 #endif
 
 	set_hostport(&hp, 0);
-	via = via_builder(&via_len, sock, &branch_str, 0, sock->proto, &hp);
+	via = via_builder(&via_len, sock, &branch_str, extra, sock->proto, &hp);
 	if (!via) {
 		LM_ERR("via building failed\n");
 		return -2;
@@ -786,6 +791,7 @@ char* build_uac_req(str* method, str* headers, str* body, dlg_t* dialog,
 {
 	char* buf, *w;
 	str content_length, cseq, via, mf;
+	str *cid = tm_via_cid();
 
 	if (!method || !dialog) {
 		LM_ERR("inalid parameter value\n");
@@ -802,7 +808,7 @@ char* build_uac_req(str* method, str* headers, str* body, dlg_t* dialog,
 	*len = method->len + 1 + dialog->hooks.request_uri->len + 1 +
 		SIP_VERSION_LEN + CRLF_LEN;
 
-	if (assemble_via(&via, t, dialog->send_sock, branch) < 0) {
+	if (assemble_via(&via, t, dialog->send_sock, branch, cid) < 0) {
 		LM_ERR("failed to assemble Via\n");
 		return 0;
 	}

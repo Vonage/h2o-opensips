@@ -307,6 +307,7 @@ struct module_exports exports = {
 	MOD_TYPE_DEFAULT,/* class of this module */
 	MODULE_VERSION,
 	DEFAULT_DLFLAGS, /* dlopen flags */
+	0,				 /* load function */
 	&deps,           /* OpenSIPS module dependencies */
 	cmds,
 	NULL,
@@ -316,6 +317,7 @@ struct module_exports exports = {
 	0,           /* exported pseudo-variables */
 	0,			 /* exported transformations */
 	0,           /* extra processes */
+	0,			 /* pre-init function */
 	mod_init,
 	0,           /* sipping_rpl_filter() - optional reply processing */
 	mod_destroy, /* destroy function */
@@ -1833,7 +1835,7 @@ int fix_ignore_rpl_codes(void)
 		return 0;
 
 	ignore_rpl_codes_str.len = strlen(ignore_rpl_codes_str.s);
-	chopped_codes = _parse_csv_record(&ignore_rpl_codes_str, CSV_SIMPLE);
+	chopped_codes = parse_csv_record(&ignore_rpl_codes_str);
 	if (!chopped_codes) {
 		LM_ERR("oom\n");
 		return -1;

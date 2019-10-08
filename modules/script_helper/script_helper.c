@@ -92,6 +92,7 @@ struct module_exports exports =
 	MOD_TYPE_DEFAULT, /* class of this module */
 	MODULE_VERSION,
 	DEFAULT_DLFLAGS,
+	0,
 	&deps,            /* OpenSIPS module dependencies */
 	cmds,
 	NULL,
@@ -100,6 +101,7 @@ struct module_exports exports =
 	NULL,
 	NULL,
 	NULL,			  /* exported transformations */
+	NULL,
 	NULL,
 	mod_init,
 	NULL,

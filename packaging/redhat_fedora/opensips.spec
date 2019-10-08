@@ -25,7 +25,7 @@
 
 Summary:  Open Source SIP Server
 Name:     opensips
-Version:  2.4.5
+Version:  2.4.6
 Release:  1%{?dist}
 License:  GPLv2+
 Group:    System Environment/Daemons
@@ -1056,6 +1056,7 @@ rm -rf $RPM_BUILD_ROOT
   exclude_modules="%EXCLUDE_MODULES" \
   basedir=%{buildroot} prefix=%{_prefix} \
   cfg_prefix=%{buildroot} \
+  cfg_target=%{_sysconfdir}/opensips/ \
   modules_prefix=%{buildroot}/%{_prefix} \
   modules_dir=%{_lib}/%{name}/modules \
   DBTEXTON=yes # fixed dbtext documentation installation
@@ -1772,7 +1773,7 @@ fi
 %doc docdir/README.xmpp
 
 %changelog
-* Wed Mar 28 2018 Nick Altmann <nick.altmann@gmail.com> - 2.4.5-1
+* Wed Mar 28 2018 Nick Altmann <nick.altmann@gmail.com> - 2.4.6-1
 - Specification updated for opensips 2.4
 - New packages: event_jsonrpc, jsonrpc, siprec
 

@@ -384,9 +384,9 @@ error:
  * WARNING: it only works with ipv6 addresses on FreeBSD
  * return: -1 on error, 0 on success
  */
-int add_interfaces(char* if_name, unsigned short port,
-					unsigned short proto, unsigned short children,
-					struct socket_info** list)
+int add_interfaces(char* if_name, unsigned short port, unsigned short proto,
+					char *adv_name, unsigned short adv_port,
+					unsigned short children, struct socket_info** list)
 {
 	char* tmp;
 	int ret = -1;
@@ -423,7 +423,8 @@ int add_interfaces(char* if_name, unsigned short port,
 				goto end;
 			if (it->ifa_flags & IFF_LOOPBACK)
 				flags |= SI_IS_LO;
-			if (new_sock2list(tmp, port, proto, 0, 0, children, flags, list)!=0){
+			if (new_sock2list(tmp, port, proto, adv_name, adv_port,
+			children, flags, list)!=0){
 				LM_ERR("new_sock2list failed\n");
 				goto end;
 			}
@@ -548,6 +549,8 @@ error:
 }
 
 
+#define STR_IMATCH(str, buf) ((str).len==strlen(buf) && strncasecmp(buf, (str).s, (str).len)==0)
+
 /* fixes a socket list => resolve addresses,
  * interface names, fills missing members, remove duplicates */
 int fix_socket_list(struct socket_info **list)
@@ -565,8 +568,16 @@ int fix_socket_list(struct socket_info **list)
 
 	for (si=*list;si;){
 		next=si->next;
-		if (add_interfaces(si->name.s, si->port_no,
-							si->proto, si->children, list)!=-1){
+		// fix the SI_IS_LO flag for sockets specified by IP/hostname as add_interfaces
+		// below will only do it for sockets specified using the network interface name
+		if (STR_IMATCH(si->name, "localhost") ||
+			STR_IMATCH(si->name, "127.0.0.1") ||
+			STR_IMATCH(si->name, "0:0:0:0:0:0:0:1") || STR_IMATCH(si->name, "::1")) {
+			si->flags |= SI_IS_LO;
+		}
+		if (add_interfaces(si->name.s, si->port_no, si->proto,
+		si->adv_name_str.s /*yes, even if str, it is NULL terminated */,
+		si->adv_port, si->children, list)!=-1){
 			/* success => remove current entry (shift the entire array)*/
 			sock_listrm(list, si);
 			free_sock_info(si);

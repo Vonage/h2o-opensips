@@ -290,14 +290,14 @@ static int fix_actions(struct action* a)
 						LM_ALERT("BUG in route() type %d/%d\n",
 								 t->elem[1].type, t->elem[2].type);
 						ret=E_BUG;
-						break;
+						goto error;
 					}
 					if (t->elem[1].u.number >= MAX_ACTION_ELEMS ||
 							t->elem[1].u.number <= 0) {
 						LM_ALERT("BUG in number of route parameters %d\n",
 								 (int)t->elem[1].u.number);
 						ret=E_BUG;
-						break;
+						goto error;
 					}
 				}
 				break;
@@ -978,7 +978,6 @@ inline static int comp_s2s(int op, str *s1, str *s2)
 	} while(0)
 	static str cp1 = {NULL,0};
 	static str cp2 = {NULL,0};
-	int n;
 	int rt;
 	int ret;
 	regex_t* re;
@@ -993,17 +992,16 @@ inline static int comp_s2s(int op, str *s1, str *s2)
 	switch(op) {
 		case EQUAL_OP:
 			if ( s2->s==NULL || s1->len != s2->len) return 0;
-			ret=(strncasecmp(s1->s, s2->s, s2->len)==0);
+			ret=(str_strcasecmp(s1, s2)==0);
 		break;
 		case DIFF_OP:
 			if ( s2->s==NULL ) return 0;
 			if(s1->len != s2->len) return 1;
-			ret=(strncasecmp(s1->s, s2->s, s2->len)!=0);
+			ret=(str_strcasecmp(s1, s2)!=0);
 			break;
 		case GT_OP:
 			if ( s2->s==NULL ) return 0;
-			n = (s1->len>=s2->len)?s1->len:s2->len;
-			rt = strncasecmp(s1->s,s2->s, n);
+			rt = str_strcasecmp(s1, s2);
 			if (rt>0)
 				ret = 1;
 			else if(rt==0 && s1->len>s2->len)
@@ -1012,8 +1010,7 @@ inline static int comp_s2s(int op, str *s1, str *s2)
 			break;
 		case GTE_OP:
 			if ( s2->s==NULL ) return 0;
-			n = (s1->len>=s2->len)?s1->len:s2->len;
-			rt = strncasecmp(s1->s,s2->s, n);
+			rt = str_strcasecmp(s1, s2);
 			if (rt>0)
 				ret = 1;
 			else if(rt==0 && s1->len>=s2->len)
@@ -1022,8 +1019,7 @@ inline static int comp_s2s(int op, str *s1, str *s2)
 			break;
 		case LT_OP:
 			if ( s2->s==NULL ) return 0;
-			n = (s1->len>=s2->len)?s1->len:s2->len;
-			rt = strncasecmp(s1->s,s2->s, n);
+			rt = str_strcasecmp(s1, s2);
 			if (rt<0)
 				ret = 1;
 			else if(rt==0 && s1->len<s2->len)
@@ -1032,8 +1028,7 @@ inline static int comp_s2s(int op, str *s1, str *s2)
 			break;
 		case LTE_OP:
 			if ( s2->s==NULL ) return 0;
-			n = (s1->len>=s2->len)?s1->len:s2->len;
-			rt = strncasecmp(s1->s,s2->s, n);
+			rt = str_strcasecmp(s1, s2);
 			if (rt<0)
 				ret = 1;
 			else if(rt==0 && s1->len<=s2->len)

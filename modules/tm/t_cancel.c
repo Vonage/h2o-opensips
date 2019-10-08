@@ -72,7 +72,11 @@ void cancel_uacs( struct cell *t, branch_bm_t cancel_bm )
 				/* send a cancel out */
 				cancel_branch(t, i);
 			} else {
-				/* set flag to catch the delaied replies */
+				/* if no reply received on this branch, do not send out
+				 * a CANCEL as it is against RFC3261. We will eventually send
+				 * one out IF we receive later a reply on this branch, so let's
+				 * flag it for catching (and cancelling) such delaied replies
+				 */
 				t->uac[i].flags |= T_UAC_TO_CANCEL_FLAG;
 			}
 		}
@@ -94,6 +98,7 @@ void cancel_branch( struct cell *t, int branch )
 		abort();
 	}
 #	endif
+
 
 	cancel=build_cancel(t, branch, &len);
 	if (!cancel) {

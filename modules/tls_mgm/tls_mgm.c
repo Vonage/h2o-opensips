@@ -64,6 +64,7 @@
 #include "../../db/db.h"
 
 #include "../../net/proto_tcp/tcp_common_defs.h"
+#include "tls_conn_server.h"
 #include "tls_config.h"
 #include "tls_domain.h"
 #include "tls_params.h"
@@ -103,6 +104,7 @@
 static char *tls_domain_avp = NULL;
 
 static int  mod_init(void);
+static int  mod_load(void);
 static void mod_destroy(void);
 static int tls_get_handshake_timeout(void);
 static int tls_get_send_timeout(void);
@@ -347,6 +349,7 @@ struct module_exports exports = {
 	MOD_TYPE_DEFAULT,    /* class of this module */
 	MODULE_VERSION,
 	DEFAULT_DLFLAGS, /* dlopen flags */
+	mod_load,   /* load function */
 	NULL,            /* OpenSIPS module dependencies */
 	cmds,       /* exported functions */
 	0,          /* exported async functions */
@@ -356,6 +359,7 @@ struct module_exports exports = {
 	mod_items,          /* exported pseudo-variables */
 	0,			/* exported transformations */
 	0,          /* extra processes */
+	0,          /* module pre-initialization function */
 	mod_init,   /* module initialization function */
 	0,          /* response function */
 	mod_destroy,/* destroy function */
@@ -626,10 +630,6 @@ int verify_callback(int pre_verify_ok, X509_STORE_CTX *ctx) {
 
 	depth = X509_STORE_CTX_get_error_depth(ctx);
 	LM_NOTICE("depth = %d\n",depth);
-	if ( depth > VERIFY_DEPTH_S ) {
-		LM_NOTICE("cert chain too long ( depth > VERIFY_DEPTH_S)\n");
-		pre_verify_ok=0;
-	}
 
 	if( pre_verify_ok ) {
 		LM_NOTICE("preverify is good: verify return: %d\n", pre_verify_ok);
@@ -873,8 +873,6 @@ static int load_certificate(SSL_CTX * ctx, char *filename)
 	return 0;
 }
 
-/* TODO: currently we can't load a chain of certificates from database
-*/
 static int load_certificate_db(SSL_CTX * ctx, str *blob)
 {
 	X509 *cert = NULL;
@@ -887,18 +885,36 @@ static int load_certificate_db(SSL_CTX * ctx, str *blob)
 	}
 
 	cert = PEM_read_bio_X509(cbio, NULL, 0, NULL);
-	BIO_free(cbio);
 	if (!cert) {
-		LM_ERR("unable to load certificate from buffer\n");
+		LM_ERR("Unable to load certificate from buffer\n");
+		BIO_free(cbio);
 		return -1;
 	}
 
 	if (! SSL_CTX_use_certificate(ctx, cert)) {
-		LM_ERR("unable to use certificate\n");
+		LM_ERR("Unable to use certificate\n");
+		X509_free(cert);
+		BIO_free(cbio);
+		return -1;
+	}
+	tls_dump_cert_info("Certificate loaded: ", cert);
+	X509_free(cert);
+
+	while ((cert = PEM_read_bio_X509(cbio, NULL, 0, NULL)) != NULL) {
+		if (!SSL_CTX_add_extra_chain_cert(ctx, cert)){
+			tls_dump_cert_info("Unable to add chain cert: ", cert);
+			X509_free(cert);
+			BIO_free(cbio);
+			return -1;
+		}
+		/* The x509 certificate provided to SSL_CTX_add_extra_chain_cert()
+		*	will be freed by the library when the SSL_CTX is destroyed.
+		*	An application should not free the x509 object.a*/
+		tls_dump_cert_info("Chain certificate loaded: ", cert);
 	}
 
-	X509_free(cert);
-	LM_DBG("successfully loaded\n");
+	BIO_free(cbio);
+	LM_DBG("Successfully loaded\n");
 	return 0;
 }
 
@@ -1010,7 +1026,7 @@ static int load_ca(SSL_CTX * ctx, char *filename)
 static int load_ca_db(SSL_CTX * ctx, str *blob)
 {
 	X509_STORE *store;
-	X509 *cert;
+	X509 *cert = NULL;
 	BIO *cbio;
 
 	cbio = BIO_new_mem_buf((void*)blob->s,blob->len);
@@ -1020,28 +1036,25 @@ static int load_ca_db(SSL_CTX * ctx, str *blob)
 		return -1;
 	}
 
-	cert = PEM_read_bio_X509(cbio, NULL, 0, NULL);
-	BIO_free(cbio);
-
-	if (!cert) {
-		LM_ERR("unable to load certificate from buffer\n");
-		return -1;
-	}
-
 	store =  SSL_CTX_get_cert_store(ctx);
 	if(!store) {
-		X509_free(cert);
+		BIO_free(cbio);
 		LM_ERR("Unable to get X509 store from ssl context\n");
 		return -1;
 	}
 
-	if (!X509_STORE_add_cert(store, cert)){
+	while ((cert = PEM_read_bio_X509_AUX(cbio, NULL, 0, NULL)) != NULL) {
+		tls_dump_cert_info("CA loaded: ", cert);
+		if (!X509_STORE_add_cert(store, cert)){
+			tls_dump_cert_info("Unable to add ca: ", cert);
+			X509_free(cert);
+			BIO_free(cbio);
+			return -1;
+		}
 		X509_free(cert);
-		LM_ERR("Unable to add ca\n");
-		return -1;
 	}
 
-	X509_free(cert);
+	BIO_free(cbio);
 	LM_DBG("CA successfully loaded\n");
 	return 0;
 }
@@ -1616,6 +1629,25 @@ static void openssl_on_exit(int status, void *param)
 }
 #endif
 
+static int mod_load(void)
+{
+	/*
+	 * this has to be called before any function calling CRYPTO_malloc,
+	 * CRYPTO_malloc will set allow_customize in openssl to 0
+	 */
+
+	LM_INFO("openssl version: %s\n", SSLeay_version(SSLEAY_VERSION));
+	if (!CRYPTO_set_mem_functions(os_malloc, os_realloc, os_free)) {
+		LM_ERR("unable to set the memory allocation functions\n");
+		LM_ERR("NOTE: please make sure you are loading tls_mgm module at the"
+			"very beginning of your script, before any other module!\n");
+		return -1;
+	}
+
+	return 0;
+}
+
+
 static int mod_init(void) {
 	str s;
 #if (OPENSSL_VERSION_NUMBER < 0x10100000L)
@@ -1709,20 +1741,6 @@ static int mod_init(void) {
 		}
 	}
 
-	/*
-	 * this has to be called before any function calling CRYPTO_malloc,
-	 * CRYPTO_malloc will set allow_customize in openssl to 0
-	 */
-
-	LM_INFO("openssl version: %s\n", SSLeay_version(SSLEAY_VERSION));
-	if (!CRYPTO_set_mem_functions(os_malloc, os_realloc, os_free)) {
-		LM_ERR("unable to set the memory allocation functions\n");
-		LM_ERR("NOTE: check if you are using openssl 1.0.1e-fips, (or other "
-			"FIPS version of openssl, as this is known to be broken; if so, "
-			"you need to upgrade or downgrade to a different openssl version!\n");
-		return -1;
-	}
-
 #if !defined(OPENSSL_NO_COMP)
 	STACK_OF(SSL_COMP)* comp_methods;
 	/* disabling compression */
@@ -1745,7 +1763,11 @@ static int mod_init(void) {
 	SSL_library_init();
 	SSL_load_error_strings();
 #else
-	OPENSSL_init_ssl(OPENSSL_INIT_SSL_DEFAULT, NULL);
+	OPENSSL_init_ssl(OPENSSL_INIT_SSL_DEFAULT
+#if (OPENSSL_VERSION_NUMBER >= 0x1010102fL)
+			|OPENSSL_INIT_NO_ATEXIT
+#endif
+			, NULL);
 #endif
 	init_ssl_methods();
 

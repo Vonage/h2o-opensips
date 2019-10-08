@@ -79,7 +79,6 @@ extern int       seq_match_mode;
 extern struct rr_binds d_rrb;
 
 /* statistic variables */
-extern stat_var *early_dlgs;
 extern stat_var *processed_dlgs;
 extern stat_var *expired_dlgs;
 extern stat_var *failed_dlgs;
@@ -477,7 +476,7 @@ static void dlg_onreply(struct cell* t, int type, struct tmcb_params *param)
 	if (type==TMCB_TRANS_CANCELLED) {
 		/* only if we did force match the Cancel to the
 		 * dialog before ( from the script ) */
-		if ( ctx_dialog_get()==NULL) {
+		if (current_processing_ctx && ctx_dialog_get()==NULL) {
 			/* reference and attached to script */
 			ref_dlg(dlg,1);
 			ctx_dialog_set(t->dialog_ctx);
@@ -555,8 +554,8 @@ static void dlg_onreply(struct cell* t, int type, struct tmcb_params *param)
 		LM_DBG("dialog %p failed (negative reply)\n", dlg);
 
 		/*destroy profile linkers */
-		destroy_linkers(dlg, 0);
-		remove_dlg_prof_table(dlg, 0);
+		destroy_linkers(dlg);
+		remove_dlg_prof_table(dlg, 0, 0);
 
 		/* dialog setup not completed (3456XX) */
 		run_dlg_callbacks(DLGCB_FAILED, dlg, rpl, DLG_DIR_UPSTREAM, NULL, 0, 1);
@@ -655,9 +654,10 @@ static inline int update_msg_cseq(struct sip_msg *msg,str *new_cseq,
 	return 0;
 }
 
-static void dlg_update_sdp(struct dlg_leg *leg,struct sip_msg *msg)
+static void dlg_update_sdp(struct dlg_cell *dlg, struct dlg_leg *leg, struct sip_msg *msg)
 {
 	str sdp;
+	char *p;
 
 	if (get_body(msg,&sdp) < 0) {
 		LM_ERR("Failed to extract SDP \n");
@@ -665,16 +665,23 @@ static void dlg_update_sdp(struct dlg_leg *leg,struct sip_msg *msg)
 		sdp.len = 0;
 	}
 
+	dlg_lock_dlg(dlg);
+
 	if (leg->adv_sdp.len < sdp.len) {
-		leg->adv_sdp.s = shm_realloc(leg->adv_sdp.s,sdp.len);
-		if (!leg->adv_sdp.s) {
+		p = shm_realloc(leg->adv_sdp.s,sdp.len);
+		if (!p) {
+			dlg_unlock_dlg(dlg);
 			LM_ERR("Failed to reallocate sdp \n");
 			return;
 		}
+
+		leg->adv_sdp.s = p;
 	}
 
 	leg->adv_sdp.len = sdp.len;
 	memcpy(leg->adv_sdp.s,sdp.s,sdp.len);
+
+	dlg_unlock_dlg(dlg);
 }
 
 static void dlg_update_callee_sdp(struct cell* t, int type,
@@ -723,7 +730,7 @@ static void dlg_update_callee_sdp(struct cell* t, int type,
 			return;
 		}
 
-		dlg_update_sdp(&dlg->legs[DLG_CALLER_LEG],msg);
+		dlg_update_sdp(dlg, &dlg->legs[DLG_CALLER_LEG],msg);
 
 		free_sip_msg(msg);
 		pkg_free(msg);
@@ -777,7 +784,7 @@ static void dlg_update_caller_sdp(struct cell* t, int type,
 			return;
 		}
 
-		dlg_update_sdp(&dlg->legs[callee_idx(dlg)],msg);
+		dlg_update_sdp(dlg, &dlg->legs[callee_idx(dlg)],msg);
 
 		free_sip_msg(msg);
 		pkg_free(msg);
@@ -967,7 +974,10 @@ static void dlg_onreply_out(struct cell* t, int type, struct tmcb_params *ps)
 			sdp.len = 0;
 		}
 
+		dlg_lock_dlg(dlg);
+
 		if (shm_str_sync(&dlg->legs[DLG_CALLER_LEG].adv_sdp, &sdp) != 0) {
+			dlg_unlock_dlg(dlg);
 			LM_ERR("No more shm \n");
 			free_sip_msg(msg);
 			pkg_free(msg);
@@ -983,12 +993,15 @@ static void dlg_onreply_out(struct cell* t, int type, struct tmcb_params *ps)
 
 			if (shm_str_sync(&dlg->legs[DLG_CALLER_LEG].adv_contact,
 			                  &contact) != 0) {
+				dlg_unlock_dlg(dlg);
 				LM_ERR("No more shm mem for outgoing contact hdr\n");
 				free_sip_msg(msg);
 				pkg_free(msg);
 				return;
 			}
 		}
+
+		dlg_unlock_dlg(dlg);
 
 		free_sip_msg(msg);
 		pkg_free(msg);
@@ -1021,7 +1034,7 @@ static void dlg_caller_reinv_onreq_out(struct cell* t, int type, struct tmcb_par
 		return;
 	}
 
-	dlg_update_sdp(&dlg->legs[callee_idx(dlg)],msg);
+	dlg_update_sdp(dlg, &dlg->legs[callee_idx(dlg)],msg);
 	free_sip_msg(msg);
 	pkg_free(msg);
 }
@@ -1052,7 +1065,7 @@ static void dlg_callee_reinv_onreq_out(struct cell* t, int type, struct tmcb_par
 		return;
 	}
 
-	dlg_update_sdp(&dlg->legs[DLG_CALLER_LEG],msg);
+	dlg_update_sdp(dlg, &dlg->legs[DLG_CALLER_LEG],msg);
 	free_sip_msg(msg);
 	pkg_free(msg);
 }
@@ -1063,7 +1076,7 @@ void dlg_onreq(struct cell* t, int type, struct tmcb_params *param)
 	struct dlg_cell *dlg;
 
 	/* is the dialog already created? */
-	if ( (dlg=ctx_dialog_get())!=NULL ) {
+	if (current_processing_ctx && (dlg=ctx_dialog_get())!=NULL ) {
 		/* new, un-initialized dialog ? */
 		if ( dlg->flags & DLG_FLAG_ISINIT ) {
 			/* fully init dialog -> check if attached to the transaction */
@@ -1132,8 +1145,10 @@ static void dlg_onreq_out(struct cell* t, int type, struct tmcb_params *ps)
 	/* we get called exactly once for each outgoing branch, so we can safely
 	 * start creating each leg */
 
+	dlg_lock_dlg(dlg);
+
 	if (ensure_leg_array(dlg->legs_no[DLG_LEGS_USED] + 1, dlg) != 0)
-		goto out_free;
+		goto out_free_unlock;
 
 	/* store the caller SDP into each callee leg, useful for Re-INVITE pings */
 	leg = &dlg->legs[dlg->legs_no[DLG_LEGS_USED]];
@@ -1148,7 +1163,7 @@ static void dlg_onreq_out(struct cell* t, int type, struct tmcb_params *ps)
 
 	if (shm_str_dup(&leg->adv_sdp, &sdp) != 0) {
 		LM_ERR("No more shm\n");
-		goto out_free;
+		goto out_free_unlock;
 	}
 
         /* extract the contact address */
@@ -1160,12 +1175,14 @@ static void dlg_onreq_out(struct cell* t, int type, struct tmcb_params *ps)
 
 		if (shm_str_dup(&leg->adv_contact, &contact) != 0) {
 			LM_ERR("No more shm for INVITE outgoing contact \n");
-			goto out_free;
+			goto out_free_unlock;
 		}
 	}
 
 	dlg->legs_no[DLG_LEGS_USED]++;
 
+out_free_unlock:
+	dlg_unlock_dlg(dlg);
 out_free:
 	free_sip_msg(msg);
 	pkg_free(msg);
@@ -1617,8 +1634,8 @@ void dlg_onroute(struct sip_msg* req, str *route_params, void *param)
 	old_state!=DLG_STATE_DELETED) {
 
 		/*destroy profile linkers */
-		destroy_linkers(dlg, 0);
-		remove_dlg_prof_table(dlg,0);
+		destroy_linkers(dlg);
+		remove_dlg_prof_table(dlg,0,0);
 
 		if (!dlg->terminate_reason.s) {
 			if (dst_leg == 0)
@@ -2028,8 +2045,8 @@ void dlg_ontimeout(struct dlg_tl *tl)
 			ZSW(dlg->legs[callee_idx(dlg)].tag.s));
 
 		/*destroy profile linkers */
-		destroy_linkers(dlg, 0);
-		remove_dlg_prof_table(dlg,0);
+		destroy_linkers(dlg);
+		remove_dlg_prof_table(dlg,0,0);
 
 		/* dialog timeout */
 		if (push_new_processing_context(dlg, &old_ctx, &new_ctx, &fake_msg)==0) {

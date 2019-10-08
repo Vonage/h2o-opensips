@@ -724,7 +724,7 @@ static void _tcpconn_rm(struct tcp_connection* c)
 		protos[c->type].net.conn_clean(c);
 
 	sh_log(c->hist, TCP_DESTROY, "type=%d", c->type);
-	sh_unref(c->hist, con_hist);
+	sh_unref(c->hist);
 	c->hist = NULL;
 
 	shm_free(c);
@@ -834,6 +834,8 @@ static struct tcp_connection* tcpconn_new(int sock, union sockaddr_union* su,
 							struct socket_info* si, int state, int flags)
 {
 	struct tcp_connection *c;
+	union sockaddr_union local_su;
+	unsigned int su_size;
 
 	c=(struct tcp_connection*)shm_malloc(sizeof(struct tcp_connection));
 	if (c==0){
@@ -855,7 +857,9 @@ static struct tcp_connection* tcpconn_new(int sock, union sockaddr_union* su,
 	c->rcv.src_port=su_getport(su);
 	c->rcv.bind_address = si;
 	c->rcv.dst_ip = si->address;
-	c->rcv.dst_port = si->port_no;
+	su_size = sockaddru_len(local_su);
+	getsockname(sock, (struct sockaddr *)&local_su, &su_size);
+	c->rcv.dst_port = su_getport(&local_su);
 	print_ip("tcpconn_new: new tcp connection to: ", &c->rcv.src_ip, "\n");
 	LM_DBG("on port %d, proto %d\n", c->rcv.src_port, si->proto);
 	c->id=(*connection_id)++;
@@ -1283,6 +1287,8 @@ inline static int handle_tcp_worker(struct tcp_child* tcp_c, int fd_i)
 			break;
 		case ASYNC_WRITE:
 			tcp_c->busy--;
+			/* fall through*/
+		case ASYNC_WRITE2:
 			if (tcpconn->state==S_CONN_BAD){
 				sh_log(tcpconn->hist, TCP_UNREF, "tcpworker async write bad, (%d)", tcpconn->refcnt);
 				tcpconn_destroy(tcpconn);
@@ -1299,6 +1305,8 @@ inline static int handle_tcp_worker(struct tcp_child* tcp_c, int fd_i)
 		case CONN_EOF:
 			/* WARNING: this will auto-dec. refcnt! */
 			tcp_c->busy--;
+			/* fall through*/
+		case CONN_ERROR2:
 			if ((tcpconn->flags & F_CONN_REMOVED) != F_CONN_REMOVED &&
 				(tcpconn->s!=-1)){
 				reactor_del_all( tcpconn->s, -1, IO_FD_CLOSING);
@@ -1447,6 +1455,7 @@ inline static int handle_worker(struct process_table* p, int fd_i)
 			tcpconn->flags&=~F_CONN_REMOVED_WRITE;
 			break;
 		case ASYNC_WRITE:
+		case ASYNC_WRITE2:
 			if (tcpconn->state==S_CONN_BAD){
 				tcpconn->lifetime=0;
 				break;
@@ -1691,7 +1700,7 @@ int tcp_init(void)
 		return 0;
 
 #ifdef DBG_TCPCON
-	con_hist = shl_init("TCP con", 10000);
+	con_hist = shl_init("TCP con", 10000, 1);
 	if (!con_hist) {
 		LM_ERR("oom con hist\n");
 		goto error;
@@ -1889,7 +1898,7 @@ int tcp_start_processes(int *chd_rank, int *startup_done)
 				*startup_done = 1;
 			}
 
-			report_conditional_status( 1, 0);
+			report_conditional_status( (!no_daemon_mode), 0);
 
 			tcp_worker_proc_loop();
 		}
@@ -1955,7 +1964,7 @@ struct mi_root *mi_tcp_list_conns(struct mi_root *cmd, void *param)
 	time_t _ts;
 	char date_buf[MI_DATE_BUF_LEN];
 	int date_buf_len;
-	unsigned int i,n,part;
+	unsigned int i,j,n,part;
 	char proto[PROTO_NAME_MAX_SIZE];
 	char *p;
 	int len;
@@ -1996,14 +2005,14 @@ struct mi_root *mi_tcp_list_conns(struct mi_root *cmd, void *param)
 				if (attr==0)
 					goto error;
 
-				/* add Source */
-				attr = addf_mi_attr( node, MI_DUP_VALUE, MI_SSTR("Source"),
+				/* add Remote IP:Port */
+				attr = addf_mi_attr( node, MI_DUP_VALUE, MI_SSTR("Remote"),
 					"%s:%d",ip_addr2a(&conn->rcv.src_ip), conn->rcv.src_port);
 				if (attr==0)
 					goto error;
 
-				/* add Destination */
-				attr = addf_mi_attr( node, MI_DUP_VALUE,MI_SSTR("Destination"),
+				/* add Local IP:Port */
+				attr = addf_mi_attr( node, MI_DUP_VALUE,MI_SSTR("Local"),
 					"%s:%d",ip_addr2a(&conn->rcv.dst_ip), conn->rcv.dst_port);
 				if (attr==0)
 					goto error;
@@ -2023,6 +2032,10 @@ struct mi_root *mi_tcp_list_conns(struct mi_root *cmd, void *param)
 				if (attr==0)
 					goto error;
 
+				for( j=0 ; j<conn->aliases ; j++ )
+					/* add one node for each conn */
+					addf_mi_node_child( node, 0,
+						MI_SSTR("Alias port"), "%d",conn->con_aliases[j].port );
 				n++;
 				/* at each 50 conns, flush the tree */
 				if ( (n % 50) == 0 )

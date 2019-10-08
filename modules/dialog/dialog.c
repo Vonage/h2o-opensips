@@ -57,7 +57,9 @@
 #include "../../bin_interface.h"
 #include "../clusterer/api.h"
 #include "../../lib/container.h"
+#include "../../ipc.h"
 
+#include "dlg_ctx.h"
 #include "dlg_hash.h"
 #include "dlg_timer.h"
 #include "dlg_handlers.h"
@@ -91,8 +93,6 @@ str dlg_extra_hdrs = {NULL,0};
 
 /* statistic variables */
 int dlg_enable_stats = 1;
-int active_dlgs_cnt = 0;
-int early_dlgs_cnt = 0;
 int db_flush_vp = 0;
 stat_var *active_dlgs = 0;
 stat_var *processed_dlgs = 0;
@@ -380,6 +380,7 @@ struct module_exports exports= {
 	MOD_TYPE_DEFAULT,/* class of this module */
 	MODULE_VERSION,
 	DEFAULT_DLFLAGS, /* dlopen flags */
+	0,				 /* load function */
 	&deps,           /* OpenSIPS module dependencies */
 	cmds,            /* exported functions */
 	0,               /* exported async functions */
@@ -389,6 +390,7 @@ struct module_exports exports= {
 	mod_items,       /* exported pseudo-variables */
 	0,			 	 /* exported transformations */
 	0,               /* extra processes */
+	0,               /* module pre-initialization function */
 	mod_init,        /* module initialization function */
 	0,               /* reply processing function */
 	mod_destroy,
@@ -680,10 +682,23 @@ int load_dlg( struct dlg_binds *dlgb )
 	dlgb->set_mod_flag = set_mod_flag_wrapper;
 	dlgb->is_mod_flag_set = is_mod_flag_set_wrapper;
 
-	dlgb->ref_dlg = ref_dlg;
-	dlgb->unref_dlg = unref_dlg_destroy_safe;
+	dlgb->dlg_ref = _ref_dlg;
+	dlgb->dlg_unref = unref_dlg_destroy_safe;
 
 	dlgb->get_rr_param = get_rr_param;
+
+	/* dlg context functions */
+	dlgb->dlg_ctx_register_int = dlg_ctx_register_int;
+	dlgb->dlg_ctx_register_str = dlg_ctx_register_str;
+	dlgb->dlg_ctx_register_ptr = dlg_ctx_register_ptr;
+
+	dlgb->dlg_ctx_put_int = dlg_ctx_put_int;
+	dlgb->dlg_ctx_put_str = dlg_ctx_put_str;
+	dlgb->dlg_ctx_put_ptr = dlg_ctx_put_ptr;
+
+	dlgb->dlg_ctx_get_int = dlg_ctx_get_int;
+	dlgb->dlg_ctx_get_str = dlg_ctx_get_str;
+	dlgb->dlg_ctx_get_ptr = dlg_ctx_get_ptr;
 
 	return 1;
 }
@@ -1000,14 +1015,13 @@ static int mod_init(void)
 
 
 
+static void rpc_load_dlg_db(int sender, void *param)
+{
+	load_dlg_db(dlg_hash_size);
+}
 
 static int child_init(int rank)
 {
-	if (rank==1) {
-		if_update_stat(dlg_enable_stats, active_dlgs, active_dlgs_cnt);
-		if_update_stat(dlg_enable_stats, early_dlgs, early_dlgs_cnt);
-	}
-
 	if (
 	(dlg_db_mode==DB_MODE_REALTIME && (rank>=PROC_MAIN||rank==PROC_MODULE)) ||
 	(dlg_db_mode==DB_MODE_SHUTDOWN && (rank==PROC_MAIN||rank==PROC_MODULE)) ||
@@ -1015,6 +1029,10 @@ static int child_init(int rank)
 	){
 		if ( dlg_connect_db(&db_url) ) {
 			LM_ERR("failed to connect to database (rank=%d)\n",rank);
+			return -1;
+		}
+		if (rank == 1 && ipc_dispatch_rpc(rpc_load_dlg_db, NULL) < 0) {
+			LM_CRIT("failed to RPC the dialogs loading\n");
 			return -1;
 		}
 	}

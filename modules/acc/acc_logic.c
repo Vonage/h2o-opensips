@@ -51,7 +51,6 @@ extern struct tm_binds tmb;
 extern struct rr_binds rrb;
 extern str flags_str;
 extern str table_str;
-extern str acc_ctx_str;
 extern str extra_str;
 extern str leg_str;
 extern str created_str;
@@ -61,6 +60,7 @@ extern int acc_created_avp_id;
 
 extern int acc_flags_ctx_idx;
 extern int acc_tm_flags_ctx_idx;
+extern int acc_dlg_ctx_idx;
 
 extern tag_t* extra_tags;
 extern int extra_tgs_len;
@@ -73,7 +73,7 @@ struct acc_enviroment acc_env;
 static query_list_t *acc_ins_list = NULL;
 static query_list_t *mc_ins_list = NULL;
 
-static int is_cdr_enabled=0;
+int is_cdr_enabled=0;
 
 #define is_acc_flag_set(_mask, _type, _flag) ( _mask & ((_type * _flag)))
 
@@ -172,7 +172,7 @@ static void acc_dlg_onwrite(struct dlg_cell *dlg, int type,
 		struct dlg_cb_params *_params);
 static void acc_cdr_cb( struct cell* t, int type, struct tmcb_params *ps );
 
-static inline void free_extra_array(extra_value_t* array, int array_len)
+void free_extra_array(extra_value_t* array, int array_len)
 {
 	int i;
 
@@ -186,7 +186,6 @@ static inline void free_extra_array(extra_value_t* array, int array_len)
 static inline void free_acc_ctx(acc_ctx_t* ctx)
 {
 	int i;
-	str ctxstr;
 	struct dlg_cell *dlg;
 
 	if (ctx->extra_values)
@@ -200,15 +199,12 @@ static inline void free_acc_ctx(acc_ctx_t* ctx)
 	}
 	if (ctx->acc_table.s)
 		shm_free(ctx->acc_table.s);
-	shm_free(ctx);
 
 	/* also cleanup dialog */
-	ctx = 0;
-	ctxstr.len = sizeof(ctx);
-	ctxstr.s = (char *)&ctx;
 	dlg = dlg_api.get_dlg ? dlg_api.get_dlg() : NULL;
-	if (dlg && dlg_api.store_dlg_value(dlg, &acc_ctx_str, &ctxstr) < 0)
-		LM_ERR("cannot reset context in dialog %p!\n", dlg);
+	if (dlg && ctx == dlg_api.dlg_ctx_get_ptr(dlg, acc_dlg_ctx_idx))
+		dlg_api.dlg_ctx_put_ptr(dlg, acc_dlg_ctx_idx, NULL);
+	shm_free(ctx);
 }
 
 static inline struct hdr_field* get_rpl_to( struct cell *t,
@@ -223,7 +219,6 @@ static inline struct hdr_field* get_rpl_to( struct cell *t,
 acc_ctx_t* try_fetch_ctx(void)
 {
 	acc_ctx_t* ret=NULL;
-	str ctx_s;
 
 	struct cell* t;
 	struct dlg_cell* dlg;
@@ -237,49 +232,34 @@ acc_ctx_t* try_fetch_ctx(void)
 		t = (t==T_UNDEFINED) ? NULL : t;
 		dlg = dlg_api.get_dlg ? dlg_api.get_dlg() : NULL;
 
-		/* search the flags in transaction context */
+		/* search for the context in transaction context */
 		if (t && (ret=ACC_GET_TM_CTX(t))==NULL) {
-			/* try fetching the context from dialog  only if dialog exists */
-			if (!dlg ||
-					dlg_api.fetch_dlg_value(dlg, &acc_ctx_str, &ctx_s, 0) < 0) {
-				/* can't find the flags anywhere */
+			/* try fetching the context from dialog only if dialog exists */
+			if (!dlg)
 				return NULL;
-			} else { /* found them in dialog; set in the processing context
-					  * and in the transaction */
-				/* set the flags in transaction and processing context */
-				memcpy(&ret, ctx_s.s, sizeof(acc_ctx_t *));
-				if (!ret)
-					return NULL;
+			ret = dlg_api.dlg_ctx_get_ptr(dlg, acc_dlg_ctx_idx);
+			if (!ret)
+				/* can't find the context anywhere */
+				return NULL;
 
-				acc_ref_ex(ret, 2);
-				ACC_PUT_TM_CTX(t, ret);
-				ACC_PUT_CTX(ret);
-			}
-		} else if (ret) { /* we have the flags in transaction */
+			acc_ref_ex(ret, 2);
+			ACC_PUT_TM_CTX(t, ret);
+			ACC_PUT_CTX(ret);
+		} else if (ret) { /* we have the context in transaction */
 			/* in transaction; put them in dialog(if possible) and in processing context */
 			acc_ref(ret);
 			ACC_PUT_CTX(ret);
-			if (dlg) {
-				ctx_s.s = (char *)&ret;
-				ctx_s.len = sizeof(acc_ctx_t *);
-			}
-		} else if (dlg) { /* no (flags in) transaction; search only in dialog*/
-			if (dlg_api.fetch_dlg_value(dlg, &acc_ctx_str, &ctx_s, 0) < 0) {
-				/* can't find the flags anywhere */
+		} else if (dlg) { /* no (context in) transaction; search only in dialog*/
+			ret = dlg_api.dlg_ctx_get_ptr(dlg, acc_dlg_ctx_idx);
+			if (!ret)
+				/* can't find the context anywhere */
 				return NULL;
-			} else {
-				/* found them in dialog; set in processing context */
-				memcpy(&ret, ctx_s.s, sizeof(acc_ctx_t *));
-				if (!ret)
-					return NULL;
-
-				if (t) {
-					acc_ref_ex(ret, 2); /* ref twice - for local and tm ctx */
-					ACC_PUT_TM_CTX(t, ret);
-				} else
-					acc_ref(ret); /* ref only once, for local ctx */
-				ACC_PUT_CTX(ret);
-			}
+			if (t) {
+				acc_ref_ex(ret, 2); /* ref twice - for local and tm ctx */
+				ACC_PUT_TM_CTX(t, ret);
+			} else
+				acc_ref(ret); /* ref only once, for local ctx */
+			ACC_PUT_CTX(ret);
 		}
 	}
 
@@ -326,9 +306,12 @@ static inline void env_set_comment(struct acc_param *accp)
 	acc_env.reason = accp->reason;
 }
 
-static inline void env_set_event(event_id_t ev)
+static inline void env_set_event(event_id_t ev, evi_params_p params_list,
+	evi_param_p *params)
 {
 	acc_env.event = ev;
+	acc_env.ev_params_list = params_list;
+	acc_env.ev_params = params;
 }
 
 
@@ -439,12 +422,13 @@ int w_acc_evi_request(struct sip_msg *rq, pv_elem_t* comment, char *foo)
 	}
 #endif
 	if (acc_env.code < 300) {
-		env_set_event(acc_event);
+		env_set_event(acc_event, acc_event_params, evi_params);
+		return acc_evi_request( rq, NULL, 0, 0);
 	} else {
-		env_set_event(acc_missed_event);
+		env_set_event(acc_missed_event, acc_missed_event_params,
+			evi_missed_params);
+		return acc_evi_request( rq, NULL, 0, 1);
 	}
-
-	return acc_evi_request( rq, NULL, 0);
 }
 
 int acc_pvel_to_acc_param(struct sip_msg* rq, pv_elem_t* pv_el, struct acc_param* accp)
@@ -564,8 +548,9 @@ static inline void on_missed(struct cell *t, struct sip_msg *req,
 	 */
 
 	if (is_evi_mc_on(*flags)) {
-		env_set_event(acc_missed_event);
-		acc_evi_request( req, reply, is_evi_cdr_on(*flags) );
+		env_set_event(acc_missed_event, acc_missed_event_params,
+			evi_missed_params);
+		acc_evi_request( req, reply, is_evi_cdr_on(*flags) ? 1 : 0, 1 );
 		flags_to_reset |= DO_ACC_EVI * DO_ACC_MISSED;
 	}
 
@@ -625,9 +610,41 @@ static void acc_merge_contexts(struct dlg_cell *dlg, int type,
 
 
 /* restore callbacks */
+void acc_update_ctx_callback(struct dlg_cell *dlg, int type,
+			struct dlg_cb_params *_params)
+{
+	str flags_s;
+	acc_ctx_t* ctx = (acc_ctx_t *)(*_params->param);
+	unsigned long long flags;
+
+	if (!dlg) {
+		LM_ERR("null dialog - cannot fetch message flags\n");
+		return;
+	}
+
+	/* check if the ctx exists in the dialog */
+	if (!ctx) {
+		LM_DBG("there's no dialog ctx created before - can't do anything\n");
+		return;
+	}
+
+	flags_s.s = (char *)&flags;
+	flags_s.len = sizeof(flags);
+	if (dlg_api.fetch_dlg_value(dlg, &flags_str, &flags_s, 1) < 0) {
+		LM_DBG("flags were not saved in dialog\n");
+		return;
+	}
+	ctx->flags = flags;
+
+	if (restore_dlg_extra_ctx(dlg, ctx)) {
+		LM_ERR("failed to rebuild acc context!\n");
+		return;
+	}
+}
+
 void acc_loaded_callback(struct dlg_cell *dlg, int type,
 			struct dlg_cb_params *_params) {
-		str flags_s, ctx_s, table_s, created_s;
+		str flags_s, table_s, created_s;
 		acc_ctx_t* ctx;
 		time_t created;
 		unsigned long long flags;
@@ -684,25 +701,28 @@ void acc_loaded_callback(struct dlg_cell *dlg, int type,
 
 
 		/* replace the context value with a good pointer */
-		ctx_s.s = (char *)&ctx;
-		ctx_s.len = sizeof(acc_ctx_t *);
-		if (dlg_api.store_dlg_value(dlg, &acc_ctx_str, &ctx_s) < 0) {
-			LM_ERR("failed to set new context value!\n");
-			return;
-		}
+		acc_ref_ex(ctx, 3);
+		dlg_api.dlg_ctx_put_ptr(dlg, acc_dlg_ctx_idx, ctx);
 
 		/* register database callbacks */
-		acc_ref_ex(ctx, 2);
 		if (dlg_api.register_dlgcb(dlg, DLGCB_TERMINATED |
 				DLGCB_EXPIRED, acc_dlg_ended, ctx, unref_acc_ctx)){
 			LM_ERR("cannot register callback for database accounting\n");
-			acc_unref_ex(ctx, 2);
+			acc_unref_ex(ctx, 2); /* storing the pointer was successful */
 			return;
 		}
 
 		/* register dlg callbacks for ctx management */
 		if (dlg_api.register_dlgcb(dlg, DLGCB_REQ_WITHIN,
 				acc_merge_contexts, ctx, unref_acc_ctx) != 0) {
+			acc_unref(ctx); /* only one, the other one was successful */
+			LM_ERR("cannot register callback ctx management\n");
+			return;
+		}
+
+		/* register dlg callbacks for updating extra vars */
+		if (dlg_api.register_dlgcb(dlg, DLGCB_PROCESS_VARS,
+				acc_update_ctx_callback, ctx, NULL) != 0) {
 			acc_unref(ctx); /* only one, the other one was successful */
 			LM_ERR("cannot register callback ctx management\n");
 			return;
@@ -717,7 +737,6 @@ static inline void acc_onreply( struct cell* t, struct sip_msg *req,
 	str new_uri_bk;
 	str dst_uri_bk;
 	struct dlg_cell *dlg = NULL;
-	str ctx_s;
 	str table;
 
 	unsigned long long* flags = &ctx->flags;
@@ -763,15 +782,6 @@ static inline void acc_onreply( struct cell* t, struct sip_msg *req,
 			goto restore;
 		}
 
-		ctx_s.s = (char*)&ctx;
-		ctx_s.len = sizeof(acc_ctx_t *);
-
-		/* store context pointer into dialog */
-		if (dlg_api.store_dlg_value(dlg, &acc_ctx_str, &ctx_s) < 0) {
-			LM_ERR("cannot store context pointer into dlg val!\n");
-			goto restore;
-		}
-
 		/* register callback for program shutdown or dialog replication
 		 * won't register free function since TERMINATED|EXPIRED callback
 		 * free function will be called to free */
@@ -801,8 +811,8 @@ static inline void acc_onreply( struct cell* t, struct sip_msg *req,
 	} else {
 		/* do old accounting */
 		if ( is_evi_acc_on(*flags) ) {
-			env_set_event(acc_event);
-			acc_evi_request( req, reply, 0 );
+			env_set_event(acc_event, acc_event_params, evi_params);
+			acc_evi_request( req, reply, 0, 0 );
 		}
 
 		if ( is_log_acc_on(*flags) ) {
@@ -896,7 +906,7 @@ static void acc_dlg_ended(struct dlg_cell *dlg, int type,
 		}
 
 		if (is_evi_acc_on(ctx->flags)) {
-			env_set_event(acc_cdr_event);
+			env_set_event(acc_cdr_event, acc_cdr_event_params, evi_cdr_params);
 			if (acc_evi_cdrs(dlg, _params->msg, ctx) < 0) {
 				LM_ERR("cannot send accounting events\n");
 				return;
@@ -993,7 +1003,7 @@ static void acc_cdr_cb( struct cell* t, int type, struct tmcb_params *ps )
 	}
 
 	if (is_evi_acc_on(ctx->flags)) {
-		env_set_event(acc_cdr_event);
+		env_set_event(acc_cdr_event, acc_cdr_event_params, evi_cdr_params);
 		if (acc_evi_cdrs(dlg, ps->req, ctx) < 0) {
 			LM_ERR("cannot send accounting events\n");
 			return;
@@ -1086,20 +1096,8 @@ unsigned long long do_acc_flags_parser(str* token)
 			!strncasecmp(token->s, do_acc_cdr_s.s, token->len)) {
 
 		if (!is_cdr_enabled) {
-			if (load_dlg_api(&dlg_api)!=0)
-						LM_DBG("failed to find dialog API - is dialog module loaded?\n");
-
-			if (!dlg_api.get_dlg) {
-				LM_WARN("error loading dialog module - cdrs cannot be generated\n");
-				return DO_ACC_NONE;
-			}
-
-			if (dlg_api.get_dlg && dlg_api.register_dlgcb(NULL,
-						DLGCB_LOADED,acc_loaded_callback, NULL, NULL) < 0)
-					LM_ERR("cannot register callback for dialog loaded - accounting "
-							"for ongoing calls will be lost after restart\n");
-
-			is_cdr_enabled=1;
+			LM_ERR("dialog module not loaded - cdrs cannot be generated\n");
+			return DO_ACC_NONE;
 		}
 
 		return DO_ACC_CDR;
@@ -1272,8 +1270,6 @@ int init_acc_ctx(acc_ctx_t** ctx_p)
 		LM_ERR("failed to build extra values array!\n");
 		return -1;
 	}
-
-
 	if (leg_tags != NULL && push_leg(ctx) < 0) {
 		LM_ERR("failed to build extra values array!\n");
 		return -1;
@@ -1306,6 +1302,7 @@ int w_do_acc_3(struct sip_msg* msg, char* type_p, char* flags_p, char* table_p)
 {
 	unsigned long long type=0, flags=0;
 	unsigned long long flag_mask;
+	struct dlg_cell *dlg;
 
 	acc_ctx_t* acc_ctx;
 
@@ -1396,9 +1393,13 @@ int w_do_acc_3(struct sip_msg* msg, char* type_p, char* flags_p, char* table_p)
 			if (!has_totag(msg)) {
 				acc_ctx->created = time(NULL);
 
-				if (msg->REQ_METHOD == METHOD_INVITE && create_acc_dlg(msg) < 0) {
-					LM_ERR("cannot use dialog accounting module\n");
-					return -1;
+				if (msg->REQ_METHOD == METHOD_INVITE) {
+					if ((dlg = create_acc_dlg(msg)) == 0) {
+						LM_ERR("cannot use dialog accounting module\n");
+						return -1;
+					}
+					acc_ref(acc_ctx);
+					dlg_api.dlg_ctx_put_ptr(dlg, acc_dlg_ctx_idx, acc_ctx);
 				}
 			}
 		}
@@ -1451,9 +1452,13 @@ int w_do_acc_3(struct sip_msg* msg, char* type_p, char* flags_p, char* table_p)
 		if (is_cdr_acc_on(acc_ctx->flags) && !has_totag(msg)) {
 			acc_ctx->created = time(NULL);
 
-			if (is_invite && create_acc_dlg(msg) < 0) {
-				LM_ERR("cannot use dialog accounting module\n");
-				return -1;
+			if (is_invite) {
+				if ((dlg = create_acc_dlg(msg)) == 0) {
+					LM_ERR("cannot use dialog accounting module\n");
+					return -1;
+				}
+				acc_ref(acc_ctx);
+				dlg_api.dlg_ctx_put_ptr(dlg, acc_dlg_ctx_idx, acc_ctx);
 			}
 		}
 

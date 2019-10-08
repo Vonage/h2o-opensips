@@ -247,6 +247,7 @@ struct module_exports exports = {
 	MOD_TYPE_DEFAULT,/* class of this module */
 	MODULE_VERSION,
 	DEFAULT_DLFLAGS, /* dlopen flags */
+	0,				 /* load function */
 	&deps,           /* OpenSIPS module dependencies */
 	cmds,       /* Exported functions */
 	0,          /* Exported async functions */
@@ -260,6 +261,7 @@ struct module_exports exports = {
 	0,          /* exported pseudo-variables */
 	0,			/* exported transformations */
 	0,          /* extra processes */
+	0,          /* module pre-initialization function */
 	mod_init,   /* module initialization function */
 	0,          /* response function */
 	destroy,    /* destroy function */
@@ -1907,7 +1909,8 @@ static void trace_msg_out(struct sip_msg* msg, str  *sbuf,
 			db_vals[4].val.str_val.s = fromip_buff;
 			db_vals[4].val.str_val.len = nbuff - fromip_buff;
 			db_vals[5].val.str_val = send_sock->address_str;
-			db_vals[6].val.int_val = send_sock->port_no;
+			db_vals[6].val.int_val = send_sock->last_local_real_port?
+				send_sock->last_local_real_port:send_sock->port_no;
 		}
 	}
 
@@ -1917,7 +1920,10 @@ static void trace_msg_out(struct sip_msg* msg, str  *sbuf,
 	} else {
 		su2ip_addr(&to_ip, to);
 		set_sock_columns( db_vals[7], db_vals[8], db_vals[9], toip_buff,
-			&to_ip, (unsigned short)su_getport(to), proto);
+			&to_ip,
+			(unsigned long)(send_sock->last_remote_real_port?
+				send_sock->last_remote_real_port:su_getport(to)),
+			proto);
 	}
 
 	db_vals[10].val.time_val = time(NULL);
@@ -2174,7 +2180,8 @@ static void trace_onreply_out(struct cell* t, int type, struct tmcb_params *ps)
 			db_vals[4].val.str_val.s = fromip_buff;
 			db_vals[4].val.str_val.len = nbuff - fromip_buff;
 			db_vals[5].val.str_val = dst->send_sock->address_str;
-			db_vals[6].val.int_val = dst->send_sock->port_no;
+			db_vals[6].val.int_val = dst->send_sock->last_local_real_port?
+				dst->send_sock->last_local_real_port:dst->send_sock->port_no;
 		}
 	}
 
@@ -2185,7 +2192,10 @@ static void trace_onreply_out(struct cell* t, int type, struct tmcb_params *ps)
 		memset(&to_ip, 0, sizeof(struct ip_addr));
 		su2ip_addr(&to_ip, &dst->to);
 		set_sock_columns( db_vals[7], db_vals[8], db_vals[9], toip_buff,
-			&to_ip, (unsigned long)su_getport(&dst->to), dst->proto);
+			&to_ip,
+			(unsigned long)(dst->send_sock->last_remote_real_port?
+				dst->send_sock->last_remote_real_port:su_getport(&dst->to)),
+			dst->proto);
 	}
 
 	db_vals[10].val.time_val = time(NULL);

@@ -369,6 +369,7 @@ struct module_exports exports= {
 	MOD_TYPE_DEFAULT,/* class of this module */
 	MODULE_VERSION,
 	DEFAULT_DLFLAGS, /* dlopen flags */
+	0,				 /* load function */
 	&deps,           /* OpenSIPS module dependencies */
 	cmds,      /* exported functions */
 	NULL,      /* exported async functions */
@@ -378,6 +379,7 @@ struct module_exports exports= {
 	mod_items, /* exported pseudo-variables */
 	0,		   /* exported transformations */
 	0,         /* extra processes */
+	0,         /* module pre-initialization function */
 	mod_init,  /* module initialization function */
 	(response_function) reply_received,
 	(destroy_function) tm_shutdown,
@@ -1599,8 +1601,8 @@ static int w_t_new_request(struct sip_msg* msg, char *p_method,
 		}
 		LM_DBG("setting CTX AVP to <%.*s>\n", ctx.s.len, ctx.s.s);
 		avp_list = set_avp_list( &dlg.avps );
-		if (!add_avp( AVP_VAL_STR, uac_ctx_avp_id, ctx))
-			LM_ERR("failed to add ctx AVP, ignorring...\n");
+		if (add_avp( AVP_VAL_STR, uac_ctx_avp_id, ctx) < 0)
+			LM_ERR("failed to add ctx AVP, ignoring...\n");
 		set_avp_list( avp_list );
 	}
 
@@ -1672,6 +1674,7 @@ static int w_t_inject_branches(struct sip_msg* msg, char *s_flags)
 	if (!is_local) {
 		UNLOCK_REPLIES(t);
 		UNREF(t);
+		set_t(NULL);
 	}
 
 	return rc;

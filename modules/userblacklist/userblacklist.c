@@ -116,6 +116,7 @@ struct module_exports exports= {
 	MOD_TYPE_DEFAULT,/* class of this module */
 	MODULE_VERSION,
 	DEFAULT_DLFLAGS,
+	0,               /* load function */
 	&deps,           /* OpenSIPS module dependencies */
 	cmds,
 	NULL,
@@ -124,6 +125,7 @@ struct module_exports exports= {
 	mi_cmds,
 	0,
 	0,				 /* exported transformations */
+	0,
 	0,
 	mod_init,
 	0,
@@ -571,7 +573,7 @@ static void rpc_reload_sources(int sender_id, void *unused)
 
 static int child_init(int rank)
 {
-	if (rank==PROC_TCP_MAIN || rank==PROC_BIN)
+	if (rank==PROC_TCP_MAIN)
 		return 0;
 
 	if (db_init(&db_url, &db_table) != 0) return -1;

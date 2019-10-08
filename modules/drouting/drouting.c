@@ -474,6 +474,7 @@ struct module_exports exports = {
 	MOD_TYPE_DEFAULT,/* class of this module */
 	MODULE_VERSION,
 	DEFAULT_DLFLAGS, /* dlopen flags */
+	0,				 /* load function */
 	&deps,           /* OpenSIPS module dependencies */
 	cmds,            /* Exported functions */
 	0,               /* Exported async functions */
@@ -483,6 +484,7 @@ struct module_exports exports = {
 	0,               /* exported pseudo-variables */
 	0,			 	 /* exported transformations */
 	0,               /* additional processes */
+	0,               /* Module pre-initialization function */
 	dr_init,         /* Module initialization function */
 	(response_function) 0,
 	(destroy_function) dr_exit,
@@ -1781,11 +1783,11 @@ static int dr_child_init(int rank)
 	struct head_db *head_db_it = head_db_start;
 
 	/* We need DB connection from:
-	 *   - attendant - for shutdown, flushingmstate
+	 *   - attendant - for shutdown, flushing state
 	 *   - timer - may trigger routes with dr group
 	 *   - workers - execute routes with dr group
 	 *   - module's proc - ??? */
-	if (rank==PROC_TCP_MAIN || rank==PROC_BIN)
+	if (rank==PROC_TCP_MAIN)
 		return 0;
 
 	LM_DBG("Child initialization on rank %d \n",rank);

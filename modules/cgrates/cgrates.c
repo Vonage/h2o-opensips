@@ -157,6 +157,7 @@ struct module_exports exports = {
 	MOD_TYPE_DEFAULT,/* class of this module */
 	MODULE_VERSION,
 	DEFAULT_DLFLAGS, /* dlopen flags */
+	0,				 /* load function */
 	&deps,           /* OpenSIPS module dependencies */
 	cmds,
 	acmds,
@@ -166,6 +167,7 @@ struct module_exports exports = {
 	pvars,       /* exported pseudo-variables */
 	0,			 /* exported transformations */
 	0,           /* extra processes */
+	0,
 	mod_init,
 	0,           /* reply processing */
 	mod_destroy, /* destroy function */
@@ -438,7 +440,7 @@ static int pv_set_cgr(struct sip_msg *msg, pv_param_t *param,
 	if (kv) {
 		/* replace the old value */
 		cgr_free_kv_val(kv);
-		if ((!val || val->flags & PV_VAL_NULL) && op == COLONEQ_T) {
+		if (!val || val->flags & PV_VAL_NULL) {
 			/* destroy the value */
 			cgr_free_kv(kv);
 			return 0;

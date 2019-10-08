@@ -236,6 +236,7 @@ struct module_exports exports = {
 	MOD_TYPE_DEFAULT,/* class of this module */
 	MODULE_VERSION,  /* module version */
 	DEFAULT_DLFLAGS, /* dlopen flags */
+	0,				 /* load function */
 	NULL,            /* OpenSIPS module dependencies */
 	cmds,        /* exported functions */
 	acmds,       /* exported async functions */
@@ -245,6 +246,7 @@ struct module_exports exports = {
 	mod_items,   /* exported pseudo-variables */
 	0,			 /* exported transformations */
 	0,           /* extra processes */
+	0,           /* module pre-initialization function */
 	mod_init,    /* module initialization function */
 	0,           /* response function*/
 	mod_destroy, /* destroy function */
@@ -918,7 +920,7 @@ int check_time_rec(struct sip_msg *msg, char *time_str)
 
 	p = ret.s;
 
-	LM_INFO("Parsing : %.*s\n", ret.len, ret.s);
+	LM_DBG("Parsing : %.*s\n", ret.len, ret.s);
 
 	time_rec = tmrec_new(SHM_ALLOC);
 	if (time_rec==0) {

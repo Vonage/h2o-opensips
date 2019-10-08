@@ -141,6 +141,8 @@
 
 #include "test/unit_tests.h"
 
+#include "ssl_tweaks.h"
+
 /*
  * when enabled ("-T" cmdline param), OpenSIPS startup will unfold as follows:
  *   - enable debug mode
@@ -226,7 +228,7 @@ int tcpthreshold = 0;
 int sip_warning = 0;
 /* should localy-generated messages include server's signature? */
 int server_signature=1;
-/* Server header to be used when proxy generates request as UAS.
+/* Server header to be used when proxy generates a reply as UAS.
    Default is to use SERVER_HDR CRLF (assigned later).
 */
 str server_header = {SERVER_HDR,sizeof(SERVER_HDR)-1};
@@ -672,9 +674,9 @@ static void sig_usr(int signo)
 					/* ignored*/
 					break;
 			case SIGCHLD:
-					pid = waitpid(-1, &status, WNOHANG);
-					LM_DBG("SIGCHLD received from %ld (status=%d), ignoring\n",
-						(long)pid,status);
+					while ( (pid = waitpid(-1, &status, WNOHANG))>0 )
+						LM_DBG("SIGCHLD received from %ld (status=%d),"
+							" ignoring\n", (long)pid,status);
 					break;
 			case SIGSEGV:
 					/* looks like we ate some spicy SIP */
@@ -1359,6 +1361,7 @@ try_again:
 		LM_ERR("failed to initialize SIP forking logic!\n");
 		goto error;
 	}
+
 
 	/* init modules */
 	if (init_modules() != 0) {
