@@ -834,17 +834,9 @@ static struct tcp_connection* tcpconn_new(int sock, union sockaddr_union* su,
 	c->lifetime = get_ticks()+tcp_con_lifetime;
 	c->flags|=F_CONN_REMOVED|flags;
 
-	if (protos[si->proto].net.conn_init &&
-	protos[si->proto].net.conn_init(c)<0) {
-		LM_ERR("failed to do proto %d specific init for conn %p\n",
-			si->proto,c);
-		goto error1;
-	}
-
 	tcp_connections_no++;
 	return c;
 
-error1:
 	lock_destroy(&c->write_lock);
 error0:
 	shm_free(c);
@@ -866,6 +858,15 @@ struct tcp_connection* tcp_conn_create(int sock, union sockaddr_union* su,
 	c = tcp_conn_new(sock, su, si, state);
 	if (c==NULL)
 		return NULL;
+
+	if (protos[c->type].net.conn_init &&
+			protos[c->type].net.conn_init(c) < 0) {
+		LM_ERR("failed to do proto %d specific init for conn %p\n",
+				c->type, c);
+		tcp_conn_destroy(c);
+		return NULL;
+	}
+	c->flags |= F_CONN_INIT;
 
 	return (tcp_conn_send(c) == 0 ? c : NULL);
 }
