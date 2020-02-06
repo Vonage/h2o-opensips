@@ -884,6 +884,15 @@ struct tcp_connection* tcp_conn_new(int sock, union sockaddr_union* su,
 	c->refcnt++; /* safe to do it w/o locking, it's not yet
 					available to the rest of the world */
 
+	if (protos[c->type].net.conn_init &&
+			protos[c->type].net.conn_init(c) < 0) {
+		LM_ERR("failed to do proto %d specific init for conn %p\n",
+				c->type, c);
+		tcp_conn_destroy(c);
+		return NULL;
+	}
+	c->flags |= F_CONN_INIT;
+
 	return c;
 }
 
