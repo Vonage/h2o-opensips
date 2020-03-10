@@ -373,7 +373,7 @@ int daemonize(char* name, int * own_pgid)
 	}
 
 	if (!log_stderr)
-		openlog(name, LOG_PID|LOG_CONS, log_facility);
+		openlog(name, LOG_PID, log_facility);
 		/* LOG_CONS, LOG_PERRROR ? */
 
 	return  0;
