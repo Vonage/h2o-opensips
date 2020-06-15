@@ -112,10 +112,12 @@ struct socket_info* new_sock_info(	char* name,
 	if (si==0) goto error;
 	memset(si, 0, sizeof(struct socket_info));
 	si->socket=-1;
-	si->name.len=strlen(name);
-	si->name.s=(char*)pkg_malloc(si->name.len+1); /* include \0 */
-	if (si->name.s==0) goto error;
-	memcpy(si->name.s, name, si->name.len+1);
+	if (name) {
+		si->name.len=strlen(name);
+		si->name.s=(char*)pkg_malloc(si->name.len+1); /* include \0 */
+		if (si->name.s==0) goto error;
+		memcpy(si->name.s, name, si->name.len+1);
+	}
 	/* set port & proto */
 	si->port_no=port;
 	si->proto=proto;
@@ -159,10 +161,12 @@ static void free_sock_info(struct socket_info* si)
 {
 	if(si){
 		if(si->name.s) pkg_free(si->name.s);
+		if(si->sock_str.s) pkg_free(si->sock_str.s);
 		if(si->address_str.s) pkg_free(si->address_str.s);
 		if(si->port_no_str.s) pkg_free(si->port_no_str.s);
 		if(si->adv_name_str.s) pkg_free(si->adv_name_str.s);
 		if(si->adv_port_str.s) pkg_free(si->adv_port_str.s);
+		if(si->adv_sock_str.s) pkg_free(si->adv_sock_str.s);
 	}
 }
 
@@ -346,7 +350,6 @@ int add_listen_iface(char* name, unsigned short port, unsigned short proto,
 	unsigned short c_proto;
 
 	c_proto=(proto)?proto:PROTO_UDP;
-	LM_INFO("XXX - c_proto = %d\n",c_proto);
 	do{
 		list=get_sock_info_list(c_proto);
 		if (list==0){
@@ -1164,7 +1167,7 @@ int probe_max_sock_buff(int sock,int buff_choice,int buff_max,int buff_increment
 			if (phase==1) break;
 			else { phase=1; optval >>=1; continue; }
 		}
-		LM_DBG("trying : %d\n", optval );
+		/* LM_DBG("trying : %d\n", optval ); */
 		if (setsockopt( sock, SOL_SOCKET, buff_opt,
 			(void*)&optval, sizeof(optval)) ==-1){
 			/* Solaris returns -1 if asked size too big; Linux ignores */
@@ -1185,10 +1188,10 @@ int probe_max_sock_buff(int sock,int buff_choice,int buff_max,int buff_increment
 			LM_ERR("getsockopt: %s\n", strerror(errno));
 			return -1;
 		} else {
-			LM_DBG("setting %s: set=%d,verify=%d\n",info,
-				optval, voptval);
+			/*LM_DBG("setting %s: set=%d,verify=%d\n",info,
+				optval, voptval);*/
 			if (voptval<optval) {
-				LM_DBG("setting buf has no effect\n");
+				LM_DBG("setting %s buf to %d had no effect\n",info,optval);
 				/* if setting buffer size failed and still in the aggressive
 				phase, try less aggressively; otherwise give up */
 				if (phase==0) { phase=1; optval >>=1 ; continue; }

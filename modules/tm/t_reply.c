@@ -326,7 +326,7 @@ static int _reply_light( struct cell *trans, char* buf, unsigned int len,
 {
 	struct retr_buf *rb;
 	unsigned int buf_len;
-	branch_bm_t cancel_bitmap;
+	branch_bm_t cancel_bitmap = 0;
 	str cb_s;
 
 	if (!buf)
@@ -342,14 +342,14 @@ static int _reply_light( struct cell *trans, char* buf, unsigned int len,
 		goto error;
 	}
 
-	cancel_bitmap=0;
 	if (lock) LOCK_REPLIES( trans );
-	if ( is_invite(trans) ) which_cancel(trans, &cancel_bitmap );
 	if (trans->uas.status>=200) {
 		LM_ERR("failed to generate %d reply when a final %d was sent out\n",
 				code, trans->uas.status);
 		goto error2;
 	}
+	if ( is_invite(trans) && code>=200 )
+		which_cancel(trans, &cancel_bitmap );
 
 
 	rb = & trans->uas.response;
@@ -657,13 +657,13 @@ static inline int do_dns_failover(struct cell *t)
 		if (t->uas.request==NULL) {
 			LM_ERR("cloning failed\n");
 			free_sip_msg(req);
+			pkg_free(req);
 			return -1;
 		}
 		t->uas.end_request = ((char*)t->uas.request) + sip_msg_len;
 		/* free the actual SIP message, keep the clone only */
 		free_sip_msg(req);
-		/* the sip_msg structure is static in buf_to_sip_msg,
-		   so no need to free it */
+		pkg_free(req);
 	}
 	shmem_msg = t->uas.request;
 
@@ -1610,6 +1610,8 @@ int w_t_reply_body(struct sip_msg* msg, str* code, str *text,
 			return -1;
 		}
 		t=get_t();
+	} else {
+		update_cloned_msg_from_msg( t->uas.request, msg);
 	}
 	return t_reply_with_body(t, code_i, &code_s, &body_s, 0, 0);
 }

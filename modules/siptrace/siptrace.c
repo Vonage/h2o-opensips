@@ -1373,7 +1373,7 @@ static int sip_trace_w(struct sip_msg *msg, char *param1,
 			return -1;
 		}
 
-		if ( !(value.flags && PV_VAL_STR) ) {
+		if ( !(value.flags & PV_VAL_STR) ) {
 			LM_ERR("Trace id variable does not contain a valid string!\n");
 			return -1;
 		}
@@ -1555,6 +1555,11 @@ static int sip_trace(struct sip_msg *msg, trace_info_p info)
 		goto error;
 	}
 
+	if(msg->callid==NULL || msg->callid->body.s==NULL)
+	{
+		LM_ERR("cannot find Call-ID header!\n");
+		goto error;
+	}
 
 	LM_DBG("sip_trace called \n");
 	db_vals[0].val.str_val.s = msg->buf;
@@ -1881,7 +1886,7 @@ static void trace_onreply_in(struct cell* t, int type, struct tmcb_params *ps)
 
 	if(parse_headers(msg, HDR_CALLID_F, 0)!=0)
 	{
-		LM_ERR("cannot parse call-id\n");
+		LM_ERR("cannot parse Call-ID/CSeq\n");
 		return;
 	}
 
@@ -1897,6 +1902,12 @@ static void trace_onreply_in(struct cell* t, int type, struct tmcb_params *ps)
 	if(msg->callid==NULL || msg->callid->body.s==NULL)
 	{
 		LM_ERR("cannot find Call-ID header!\n");
+		goto error;
+	}
+
+	if(msg->cseq==NULL)
+	{
+		LM_ERR("cannot find CSeq header!\n");
 		goto error;
 	}
 
@@ -1983,6 +1994,12 @@ static void trace_onreply_out(struct cell* t, int type, struct tmcb_params *ps)
 		return;
 	}
 
+	if(msg->callid==NULL || msg->callid->body.s==NULL)
+	{
+		LM_ERR("cannot find Call-ID header!\n");
+		goto error;
+	}
+
 	sbuf = (str*)ps->extra1;
 	if(faked==0)
 	{
@@ -2010,13 +2027,6 @@ static void trace_onreply_out(struct cell* t, int type, struct tmcb_params *ps)
 			db_vals[0].val.str_val.s = t->uas.response.buffer.s;
 			db_vals[0].val.str_val.len = t->uas.response.buffer.len;
 		}
-	}
-
-	/* check Call-ID header */
-	if(msg->callid==NULL || msg->callid->body.s==NULL)
-	{
-		LM_ERR("cannot find Call-ID header!\n");
-		goto error;
 	}
 
 	db_vals[1].val.str_val.s = msg->callid->body.s;
@@ -2192,6 +2202,10 @@ static struct mi_root* sip_trace_mi(struct mi_root* cmd_tree, void* param )
 			}
 
 			it=get_list_start(&node->value);
+                        if (!it) {
+                               return init_mi_tree( 400, MI_SSTR(MI_BAD_PARM));
+                        }
+
 			hash=it->hash;
 
 			for (;it&&it->hash==hash;it=it->next)
@@ -2377,17 +2391,8 @@ static int pipport2su (str *sproto, str *ip, unsigned short port,
 		return -1;
 	}
 
-	if (port == 0) {
+	if (port == 0)
 		port = SIP_PORT;
-	}
-	else{
-	/*the address contains a port number*/
-		if (port<1024 || port>65535)
-		{
-			LM_ERR("invalid port number; must be in [1024,65536]\n");
-			return -1;
-		}
-	}
 	LM_DBG("proto %d, host %.*s , port %d \n",*proto, ip->len, ip->s, port);
 
 	/* now IPv6 address has no brakets. It should be fixed! */

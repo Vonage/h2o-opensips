@@ -98,7 +98,7 @@
 	</section>
 
 	<section>
-	<title>Parameters</title>
+	<title>Exported Parameters</title>
 	<section id="rtpengine.p.rtpengine_sock">
 		<title><varname>rtpengine_sock</varname> (string)</title>
 		<para>
@@ -232,7 +232,7 @@ modparam("rtpengine", "setid_avp", "$avp(setid)")
 	</section>
 
 	<section>
-	<title>Functions</title>
+	<title>Exported Functions</title>
 	<section id="rtpengine.f.rtpengine_use_set">
 		<title>
 		<function moreinfo="none">rtpengine_use_set(setid)</function>
@@ -378,6 +378,10 @@ rtpengine_offer();
 				message is received, support symmetric RTP must be forced.
 				</para></listitem>
 				<listitem><para>
+				<emphasis>loop-protect</emphasis> - flag that instructs &rtp; to
+				avoid rewriting the SDP when looping the same message.
+				</para></listitem>
+				<listitem><para>
 				<emphasis>repacketize=NN</emphasis> - requests the &rtp; proxy to perform
 				re-packetization of RTP traffic coming from the UA which
 				has sent the current message to increase or decrease payload
@@ -445,6 +449,11 @@ rtpengine_offer();
 				<emphasis>rtcp-mux-offer</emphasis> - make the &rtp; proxy offer rtcp-mux
 				to the recipient of this message, regardless of whether it was offered
 				originally or not.
+				</para></listitem>
+				<listitem><para>
+				<emphasis>rtcp-mux-require</emphasis> - Similar to offer but pretends that
+				the client has accepted rtcp-mux. This breaks RFC 5761 and will not advertise
+				seperate RTCP ports. This option is necessary for WebRTC clients.
 				</para></listitem>
 				<listitem><para>
 				<emphasis>rtcp-mux-accept</emphasis> - if rtcp-mux was offered, make the

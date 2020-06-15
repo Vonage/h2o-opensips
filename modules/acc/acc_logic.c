@@ -135,14 +135,10 @@ static int is_cdr_enabled=0;
 #define set_dlg_cb_used(_mask) \
 	(_mask) |= ACC_DLG_CB_USED;
 
-#define set_failure_cb_registered(_mask) \
-	(_mask) |= ACC_TMCB_MISSED_REGISTERED;
-
 #define was_dlg_cb_used(_mask) (_mask&ACC_DLG_CB_USED)
 
 #define cdr_values_registered(_mask) ((_mask)&ACC_CDR_REGISTERED)
 
-#define failure_cb_registered(_mask) ((_mask)&ACC_TMCB_MISSED_REGISTERED)
 
 
 
@@ -1010,9 +1006,10 @@ int do_acc_fixup(void** param, int param_no)
 		memset(acc_param, 0, sizeof(acc_type_param_t));
 
 		if (el->next == 0 && el->spec.getf == 0) {
+			str text = el->text;
 			pv_elem_free_all(el);
-			if ( (ival=do_acc_parse(&el->text, parser)) == DO_ACC_ERR) {
-				LM_ERR("Invalid value <%.*s>!\n", el->text.len, el->text.s);
+			if ((ival = do_acc_parse(&text, parser)) == DO_ACC_ERR) {
+				LM_ERR("Invalid value <%.*s>!\n", text.len, text.s);
 				return -1;
 			}
 
@@ -1086,6 +1083,17 @@ int w_do_acc_3(struct sip_msg* msg, char* type_p, char* flags_p, char* table_p)
 		return -1;
 	}
 
+	if (!msg) {
+		LM_ERR("no SIP message\n");
+		return -1;
+	}
+
+	if (skip_cancel(msg)) {
+		LM_WARN("do_accounting() called on CANCEL but 'report_cancels' modparam"
+				" not set - no accounting will be done for this transaction!\n");
+		return 1;
+	}
+
 	acc_param = (acc_type_param_t *)type_p;
 	if (acc_param->t == DO_ACC_PARAM_TYPE_VALUE) {
 		type = acc_param->u.ival;
@@ -1136,17 +1144,6 @@ int w_do_acc_3(struct sip_msg* msg, char* type_p, char* flags_p, char* table_p)
 			}
 		}
 
-		/* if it's the first time the missed calls flag was used register the callback */
-		if (is_mc_acc_on(flag_mask) && !failure_cb_registered(*flag_mask_p)) {
-			if (tmb.register_tmcb( msg, 0, TMCB_ON_FAILURE, tmcb_func, flag_mask_p, 0)<=0) {
-				LM_ERR("cannot register missed calls callback\n");
-				return -1;
-			}
-
-			/* don't allow the callback to be registered agian in the future */
-			set_failure_cb_registered(*flag_mask_p);
-		}
-
 		*flag_mask_p |= flag_mask;
 		return 1;
 	}
@@ -1177,8 +1174,7 @@ int w_do_acc_3(struct sip_msg* msg, char* type_p, char* flags_p, char* table_p)
 	}
 
 
-	if ( msg && !skip_cancel(msg) &&
-	(is_acc_on(*flag_mask_p) || is_mc_acc_on(*flag_mask_p)) ) {
+	if (is_acc_on(*flag_mask_p) || is_mc_acc_on(*flag_mask_p)) {
 		/* do some parsing in advance */
 		if (acc_preparse_req(msg)<0)
 			return -1;
@@ -1186,18 +1182,9 @@ int w_do_acc_3(struct sip_msg* msg, char* type_p, char* flags_p, char* table_p)
 		/* install additional handlers */
 		tmcb_types =
 			/* report on completed transactions */
-			TMCB_RESPONSE_IN;
-
-		if (is_invite && is_mc_acc_on(*flag_mask_p)) {
-			/* register it manually; see explanation below
-			 * get incoming replies ready for processing */
-			/* TMCB_RESPONSE_OUT | */
+			TMCB_RESPONSE_IN
 			/* report on missed calls */
-			tmcb_types |= TMCB_ON_FAILURE;
-			/* the flag will help on further do_accounting calls to know
-			 * not to register the callback twice */
-			set_failure_cb_registered(*flag_mask_p);
-		}
+			| TMCB_ON_FAILURE;
 
 		/* if cdr accounting is enabled */
 		if (is_cdr_acc_on(*flag_mask_p) && !has_totag(msg)) {

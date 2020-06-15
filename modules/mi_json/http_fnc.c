@@ -61,6 +61,11 @@ static inline void MI_JSON_COPY(struct page_buf* pb, const str s) {
 }
 
 static const str MI_JSON_ESC =  str_init("\\");
+static const str MI_JSON_TAB =  str_init("\\t");
+static const str MI_JSON_BACKSPACE =  str_init("\\b");
+static const str MI_JSON_FORMFEED =  str_init("\\f");
+static const str MI_JSON_NEWLINE =  str_init("\\n");
+static const str MI_JSON_CRETURN =  str_init("\\r");
 
 static inline void MI_JSON_ESC_COPY(struct page_buf* pb, const str s) {
   str temp_holder;
@@ -75,8 +80,44 @@ static inline void MI_JSON_ESC_COPY(struct page_buf* pb, const str s) {
   temp_holder.len = 0;
   for(temp_counter=0;temp_counter<s.len;temp_counter++) {
     switch(s.s[temp_counter]) {
-    case '"':
+    case '\b':
+      temp_holder.len = temp_counter - temp_holder.len;
+      MI_JSON_COPY(pb, temp_holder);
+      MI_JSON_COPY(pb, MI_JSON_BACKSPACE);
+      temp_holder.s = s.s + temp_counter+1;
+      temp_holder.len = temp_counter+1;
+      break;
+    case '\f':
+      temp_holder.len = temp_counter - temp_holder.len;
+      MI_JSON_COPY(pb, temp_holder);
+      MI_JSON_COPY(pb, MI_JSON_FORMFEED);
+      temp_holder.s = s.s + temp_counter+1;
+      temp_holder.len = temp_counter+1;
+      break;
+    case '\n':
+      temp_holder.len = temp_counter - temp_holder.len;
+      MI_JSON_COPY(pb, temp_holder);
+      MI_JSON_COPY(pb, MI_JSON_NEWLINE);
+      temp_holder.s = s.s + temp_counter+1;
+      temp_holder.len = temp_counter+1;
+      break;
+    case '\r':
+      temp_holder.len = temp_counter - temp_holder.len;
+      MI_JSON_COPY(pb, temp_holder);
+      MI_JSON_COPY(pb, MI_JSON_CRETURN);
+      temp_holder.s = s.s + temp_counter+1;
+      temp_holder.len = temp_counter+1;
+      break;
+    case '\t':
+      temp_holder.len = temp_counter - temp_holder.len;
+      MI_JSON_COPY(pb, temp_holder);
+      MI_JSON_COPY(pb, MI_JSON_TAB);
+      temp_holder.s = s.s + temp_counter+1;
+      temp_holder.len = temp_counter+1;
+      break;
     case '\\':
+    case '"':
+    case '/':
       temp_holder.len = temp_counter - temp_holder.len;
       MI_JSON_COPY(pb, temp_holder);
       MI_JSON_COPY(pb, MI_JSON_ESC);
@@ -280,7 +321,6 @@ struct mi_root* mi_json_run_mi_cmd(struct mi_cmd *f, const str* miCmd,
           node = &mi_cmd->node;
           if(!add_mi_node_child(node,0,NULL,0,val.s,val.len)){
             LM_ERR("cannot add the child node to the tree\n");
-            free_mi_tree(mi_cmd);
             goto error;
           }
           j = i+1;
@@ -293,7 +333,6 @@ struct mi_root* mi_json_run_mi_cmd(struct mi_cmd *f, const str* miCmd,
         node = &mi_cmd->node;
         if(!add_mi_node_child(node,0,NULL,0,val.s,val.len)){
           LM_ERR("cannot add the child node to the tree\n");
-          free_mi_tree(mi_cmd);
           goto error;
         }
       }

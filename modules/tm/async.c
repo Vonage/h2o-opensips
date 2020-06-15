@@ -59,18 +59,20 @@ extern int return_code; /* from action.c, return code */
 
 
 
-static inline void run_resume_route( int resume_route, struct sip_msg *msg)
+static inline void run_resume_route( int resume_route, struct sip_msg *msg,
+															int run_post_cb)
 {
 	/* run the resume route and if it ends the msg handling (no other aysnc
 	 * started), run the post script callbacks. */
 	if ( (run_top_route(rlist[resume_route].a, msg) & ACT_FL_TBCONT) == 0 )
-		exec_post_req_cb(msg);
+		if (run_post_cb)
+			exec_post_req_cb(msg);
 }
 
 
 /* function triggered from reactor in order to continue the processing
  */
-int t_resume_async(int *fd, void *param)
+int t_resume_async(int fd, void *param)
 {
 	static struct sip_msg faked_req;
 	static struct ua_client uac;
@@ -83,7 +85,7 @@ int t_resume_async(int *fd, void *param)
 	struct cell *t= ctx->t;
 	int route;
 
-	LM_DBG("resuming on fd %d, transaction %p \n",*fd, t);
+	LM_DBG("resuming on fd %d, transaction %p \n",fd, t);
 
 	if (current_processing_ctx) {
 		LM_CRIT("BUG - a context already set!\n");
@@ -122,7 +124,7 @@ int t_resume_async(int *fd, void *param)
 
 	async_status = ASYNC_DONE; /* assume default status as done */
 	/* call the resume function in order to read and handle data */
-	return_code = ctx->resume_f( *fd, &faked_req, ctx->resume_param );
+	return_code = ctx->resume_f( fd, &faked_req, ctx->resume_param );
 	if (async_status==ASYNC_CONTINUE) {
 		/* do not run the resume route */
 		goto restore;
@@ -130,7 +132,7 @@ int t_resume_async(int *fd, void *param)
 		if (return_code<0) {
 			LM_ERR("ASYNC_CHANGE_FD: given file descriptor shall be positive!\n");
 			goto restore;
-		} else if (return_code > 0 && return_code == *fd) {
+		} else if (return_code > 0 && return_code == fd) {
 			/*trying to add the same fd; shall continue*/
 			LM_CRIT("You are trying to replace the old fd with the same fd!"
 					"Will act as in ASYNC_CONTINUE!\n");
@@ -138,17 +140,17 @@ int t_resume_async(int *fd, void *param)
 		}
 
 		/* remove the old fd from the reactor */
-		reactor_del_reader( *fd, -1, IO_FD_CLOSING);
-		*fd=return_code;
+		reactor_del_reader( fd, -1, IO_FD_CLOSING);
+		fd=return_code;
 
 		/* insert the new fd inside the reactor */
-		if (reactor_add_reader( *fd, F_SCRIPT_ASYNC, RCT_PRIO_ASYNC, (void*)ctx)<0 ) {
+		if (reactor_add_reader( fd, F_SCRIPT_ASYNC, RCT_PRIO_ASYNC, (void*)ctx)<0 ) {
 			LM_ERR("failed to add async FD to reactor -> act in sync mode\n");
 			do {
 				async_status = ASYNC_DONE;
-				return_code = ctx->resume_f( *fd, &faked_req, ctx->resume_param );
+				return_code = ctx->resume_f( fd, &faked_req, ctx->resume_param );
 				if (async_status == ASYNC_CHANGE_FD)
-					*fd=return_code;
+					fd=return_code;
 			} while(async_status==ASYNC_CONTINUE||async_status==ASYNC_CHANGE_FD);
 			goto route;
 		}
@@ -158,15 +160,15 @@ int t_resume_async(int *fd, void *param)
 	}
 
 	/* remove from reactor, we are done */
-	reactor_del_reader( *fd, -1, IO_FD_CLOSING);
+	reactor_del_reader( fd, -1, IO_FD_CLOSING);
 
 	if (async_status == ASYNC_DONE_CLOSE_FD)
-		close(*fd);
+		close(fd);
 
 route:
 	/* run the resume_route (some type as the original one) */
 	swap_route_type(route, ctx->route_type);
-	run_resume_route( ctx->resume_route, &faked_req);
+	run_resume_route( ctx->resume_route, &faked_req, 1);
 	set_route_type(route);
 
 	/* no need for the context anymore */
@@ -335,7 +337,7 @@ sync:
 			fd = return_code;
 	} while(async_status==ASYNC_CONTINUE||async_status==ASYNC_CHANGE_FD);
 	/* run the resume route in sync mode */
-	run_resume_route( resume_route, msg);
+	run_resume_route( resume_route, msg, (route_type!=REQUEST_ROUTE)?0:1);
 
 	/* break original script */
 	return 0;
@@ -345,7 +347,7 @@ failure:
 	return_code = -1;
 resume:
 	/* run the resume route */
-	run_resume_route( resume_route, msg);
+	run_resume_route( resume_route, msg, (route_type!=REQUEST_ROUTE)?0:1);
 	/* the triggering route is terminated and whole script ended */
 	return 0;
 }

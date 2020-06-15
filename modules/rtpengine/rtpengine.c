@@ -1068,6 +1068,8 @@ static int parse_flags(struct ng_flags_parse *ng_flags, struct sip_msg *msg, enu
 					bencode_list_add_string(ng_flags->direction, "external");
 				else if (str_eq(&key, "RTP/AVPF"))
 					ng_flags->transport = 0x102;
+				else if (str_eq(&key, "SDES-off"))
+					bencode_dictionary_add_str(ng_flags->dict, "SDES-off", &val);
 				else if (str_eq(&key, "RTP/SAVP"))
 					ng_flags->transport = 0x101;
 				else
@@ -1133,6 +1135,8 @@ static int parse_flags(struct ng_flags_parse *ng_flags, struct sip_msg *msg, enu
 						goto error;
 					*op = OP_ANSWER;
 				}
+				else if (str_eq(&key, "loop-protect"))
+					bencode_list_add_string(ng_flags->flags, "loop-protect");
 				else
 					goto error;
 				break;
@@ -1149,9 +1153,12 @@ static int parse_flags(struct ng_flags_parse *ng_flags, struct sip_msg *msg, enu
 				break;
 
 			case 14:
-				if (str_eq(&key, "replace-origin"))
-					bencode_list_add_string(ng_flags->replace, "origin");
-				else if (str_eq(&key, "address-family")) {
+				if (str_eq(&key, "replace-origin")) {
+					if (!ng_flags->replace)
+						LM_DBG("%.*s not supported for %d op\n", key.len, key.s, *op);
+					else
+						bencode_list_add_string(ng_flags->replace, "origin");
+				} else if (str_eq(&key, "address-family")) {
 					err = "missing value";
 					if (!val.s)
 						goto error;
@@ -1181,6 +1188,8 @@ static int parse_flags(struct ng_flags_parse *ng_flags, struct sip_msg *msg, enu
 			case 16:
 				if (str_eq(&key, "UDP/TLS/RTP/SAVP"))
 					ng_flags->transport = 0x104;
+				else if (str_eq(&key, "rtcp-mux-require"))
+					bencode_list_add_string(ng_flags->rtcp_mux, "require");
 				else
 					goto error;
 				break;
@@ -1193,9 +1202,12 @@ static int parse_flags(struct ng_flags_parse *ng_flags, struct sip_msg *msg, enu
 				break;
 
 			case 26:
-				if (str_eq(&key, "replace-session-connection"))
-					bencode_list_add_string(ng_flags->replace, "session-connection");
-				else
+				if (str_eq(&key, "replace-session-connection")) {
+					if (!ng_flags->replace)
+						LM_DBG("%.*s not supported for %d op\n", key.len, key.s, *op);
+					else
+						bencode_list_add_string(ng_flags->replace, "session-connection");
+				} else
 					goto error;
 				break;
 
@@ -1309,6 +1321,7 @@ static bencode_item_t *rtpe_function_call(bencode_buffer_t *bencbuf, struct sip_
 	bencode_list_add_string(item, ip_addr2a(&msg->rcv.src_ip));
 
 	if ((msg->first_line.type == SIP_REQUEST && op != OP_ANSWER)
+		|| (msg->first_line.type == SIP_REPLY && op == OP_DELETE)
 		|| (msg->first_line.type == SIP_REPLY && op == OP_ANSWER))
 	{
 		bencode_dictionary_add_str(ng_flags.dict, "from-tag", &from_tag);
@@ -1499,7 +1512,8 @@ send_rtpe_command(struct rtpe_node *node, bencode_item_t *dict, int *outlen)
 		} while (len == -1 && errno == EINTR);
 		if (len <= 0) {
 			close(fd);
-			LM_ERR("can't send command to a RTP proxy (%s)\n",strerror(errno));
+			LM_ERR("can't send command to a RTP proxy (%d:%s)\n",
+					errno, strerror(errno));
 			goto badproxy;
 		}
 		do {
@@ -1517,8 +1531,16 @@ send_rtpe_command(struct rtpe_node *node, bencode_item_t *dict, int *outlen)
 		/* Drain input buffer */
 		while ((poll(fds, 1, 0) == 1) &&
 		    ((fds[0].revents & POLLIN) != 0)) {
-			recv(rtpe_socks[node->idx], buf, sizeof(buf) - 1, 0);
+			if (fds[0].revents & (POLLERR|POLLNVAL|POLLHUP)) {
+				LM_WARN("error on rtpengine socket %d!\n", rtpe_socks[node->idx]);
+				break;
+			}
 			fds[0].revents = 0;
+			if (recv(rtpe_socks[node->idx], buf, sizeof(buf) - 1, 0) < 0 &&
+					errno != EINTR) {
+				LM_WARN("error while draining rtpengine %d!\n", errno);
+				break;
+			}
 		}
 		v[0].iov_base = gencookie();
 		v[0].iov_len = strlen(v[0].iov_base);
@@ -1527,7 +1549,8 @@ send_rtpe_command(struct rtpe_node *node, bencode_item_t *dict, int *outlen)
 				len = writev(rtpe_socks[node->idx], v, vcnt + 1);
 			} while (len == -1 && (errno == EINTR || errno == ENOBUFS || errno == EMSGSIZE));
 			if (len <= 0) {
-				LM_ERR("can't send command to a RTP proxy\n");
+				LM_ERR("can't send command to a RTP proxy (%d:%s)\n",
+						errno, strerror(errno));
 				goto badproxy;
 			}
 			while ((poll(fds, 1, rtpengine_tout * 1000) == 1) &&
@@ -1601,20 +1624,24 @@ static struct rtpe_set * select_rtpe_set(int id_set ){
 static struct rtpe_node *
 select_rtpe_node(str callid, int do_test, struct rtpe_set *set)
 {
-	unsigned sum, sumcut, weight_sum;
+	unsigned sum, weight_sum;
 	struct rtpe_node* node;
-	int was_forced;
+	int was_forced, sumcut, found, constant_weight_sum;
 
 	if(!set){
 		LM_ERR("script error -no valid set selected\n");
 		return NULL;
 	}
+
 	/* Most popular case: 1 proxy, nothing to calculate */
 	if (set->rtpe_node_count == 1) {
 		node = set->rn_first;
 		if (node->rn_disabled && node->rn_recheck_ticks <= get_ticks())
 			node->rn_disabled = rtpe_test(node, 1, 0);
-		return node->rn_disabled ? NULL : node;
+		if (node->rn_disabled)
+			return NULL;
+
+		return node;
 	}
 
 	/* XXX Use quick-and-dirty hashing algo */
@@ -1625,17 +1652,22 @@ select_rtpe_node(str callid, int do_test, struct rtpe_set *set)
 	was_forced = 0;
 retry:
 	weight_sum = 0;
+	constant_weight_sum = 0;
+	found = 0;
 	for (node=set->rn_first; node!=NULL; node=node->rn_next) {
 
 		if (node->rn_disabled && node->rn_recheck_ticks <= get_ticks()){
 			/* Try to enable if it's time to try. */
 			node->rn_disabled = rtpe_test(node, 1, 0);
 		}
-		if (!node->rn_disabled)
+		constant_weight_sum += node->rn_weight;
+		if (!node->rn_disabled) {
 			weight_sum += node->rn_weight;
+			found = 1;
+		}
 	}
-	if (weight_sum == 0) {
-		/* No proxies? Force all to be redetected, if not yet */
+	if (found == 0) {
+		/* No proxies? Force all to be re-detected, if not yet */
 		if (was_forced)
 			return NULL;
 		was_forced = 1;
@@ -1644,17 +1676,26 @@ retry:
 		}
 		goto retry;
 	}
-	sumcut = sum % weight_sum;
+	sumcut = weight_sum ? sum % constant_weight_sum : -1;
 	/*
-	 * sumcut here lays from 0 to weight_sum-1.
+	 * sumcut here lays from 0 to constant_weight_sum-1.
 	 * Scan proxy list and decrease until appropriate proxy is found.
 	 */
-	for (node=set->rn_first; node!=NULL; node=node->rn_next) {
-		if (node->rn_disabled)
-			continue;
-		if (sumcut < node->rn_weight)
-			goto found;
+	was_forced = 0;
+	for (node=set->rn_first; node!=NULL;) {
+		if (sumcut < (int)node->rn_weight) {
+			if (!node->rn_disabled)
+				goto found;
+			if (was_forced == 0) {
+				/* appropriate proxy is disabled : redistribute on enabled ones */
+				sumcut = weight_sum ? sum %  weight_sum : -1;
+				node = set->rn_first;
+				was_forced = 1;
+				continue;
+			}
+		}
 		sumcut -= node->rn_weight;
+		node = node->rn_next;
 	}
 	/* No node list */
 	return NULL;
@@ -1664,8 +1705,10 @@ found:
 		if (node->rn_disabled)
 			goto retry;
 	}
+
 	return node;
 }
+
 
 static int
 get_extra_id(struct sip_msg* msg, str *id_str) {

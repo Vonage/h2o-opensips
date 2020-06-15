@@ -91,6 +91,10 @@ struct sip_msg;
 #define  translate_pointer( _new_buf , _org_buf , _p) \
 	( (_p)?(_new_buf + (_p-_org_buf)):(0) )
 
+#define TIMEVAL_MS_DIFF(_tva, _tvb) \
+	((((_tvb).tv_sec * 1000000UL + (_tvb).tv_usec) - \
+	 ((_tva).tv_sec * 1000000UL + (_tva).tv_usec)) / 1000UL)
+
 #define via_len(_via) \
 	((_via)->bsize-((_via)->name.s-\
 		((_via)->hdr.s+(_via)->hdr.len)))
@@ -184,10 +188,14 @@ static inline char* int2bstr(unsigned long l, char *s, int* len)
 
 /* INTeger-TO-STRing : convers an unsigned long to a string
  * returns a pointer to a static buffer containing l in asciiz & sets len */
-extern char int2str_buf[INT2STR_MAX_LEN];
+#define INT2STR_BUF_NO    7
+extern char int2str_buf[INT2STR_BUF_NO][INT2STR_MAX_LEN];
 static inline char* int2str(unsigned long l, int* len)
 {
-	return int2bstr( l, int2str_buf, len);
+	static unsigned int it = 0;
+
+	if ((++it)==INT2STR_BUF_NO) it = 0;
+	return int2bstr( l, int2str_buf[it], len);
 }
 
 
@@ -238,22 +246,21 @@ static inline char* q_memrchr(char* p, int c, unsigned int size)
 }
 
 
-inline static int reverse_hex2int( char *c, int len )
+inline static int reverse_hex2int( char *c, int len, unsigned int *r)
 {
 	char *pc;
-	int r;
 	char mychar;
 
-	r=0;
+	*r=0;
 	for (pc=c+len-1; len>0; pc--, len--) {
-		r <<= 4 ;
+		(*r) <<= 4 ;
 		mychar=*pc;
-		if ( mychar >='0' && mychar <='9') r+=mychar -'0';
-		else if (mychar >='a' && mychar <='f') r+=mychar -'a'+10;
-		else if (mychar  >='A' && mychar <='F') r+=mychar -'A'+10;
+		if ( mychar >='0' && mychar <='9') (*r)+=mychar -'0';
+		else if (mychar >='a' && mychar <='f') (*r)+=mychar -'a'+10;
+		else if (mychar  >='A' && mychar <='F') (*r)+=mychar -'A'+10;
 		else return -1;
 	}
-	return r;
+	return 0;
 }
 
 inline static int int2reverse_hex( char **c, int *size, unsigned int nr )
@@ -281,24 +288,23 @@ inline static int int2reverse_hex( char **c, int *size, unsigned int nr )
 /* if unsafe requested when first non numerical character shall be
  * met the number shall be returned; avoid giving the
  * exact len of the number */
-inline static int64_t reverse_hex2int64( char *c, int len, int unsafe)
+inline static int reverse_hex2int64( char *c, int len, int unsafe, uint64_t *r)
 {
 	char *pc;
-	int64_t r;
 	char mychar;
 
-	r=0;
+	*r=0;
 	for (pc=c+len-1; len>0; pc--, len--) {
-		r <<= 4 ;
+		(*r) <<= 4 ;
 		mychar=*pc;
-		if ( mychar >='0' && mychar <='9') r+=mychar -'0';
-		else if (mychar >='a' && mychar <='f') r+=mychar -'a'+10;
-		else if (mychar  >='A' && mychar <='F') r+=mychar -'A'+10;
+		if ( mychar >='0' && mychar <='9') (*r)+=mychar -'0';
+		else if (mychar >='a' && mychar <='f') (*r)+=mychar -'a'+10;
+		else if (mychar  >='A' && mychar <='F') (*r)+=mychar -'A'+10;
 		else if (unsafe)
-			return r;
+			return 0;
 		else return -1;
 	}
-	return r;
+	return 0;
 }
 
 inline static int64_t int64_2reverse_hex( char **c, int *size, uint64_t nr )
@@ -702,12 +708,8 @@ static inline char* str_strstr(const str *stra, const str *strb)
 		return NULL;
 	}
 
-	if (strb->len > stra->len) {
-		LM_ERR("string to find should be smaller than the string"
-				"to search into\n");
+	if (strb->len > stra->len)
 		return NULL;
-	}
-
 
 	len=0;
 	while (stra->len-len >= strb->len){
@@ -992,15 +994,26 @@ int parse_reply_codes( str *options_reply_codes_str,
 void base64encode(unsigned char *out, unsigned char *in, int inlen);
 int base64decode(unsigned char *out,unsigned char *in,int len);
 
+/*
+ * "word64" is a combination between:
+ *   - RFC 3261-compatible "word" token characters
+ *   - modulo-64 encoding of base64
+ */
+void word64encode(unsigned char *out, unsigned char *in, int inlen);
+int word64decode(unsigned char *out, unsigned char *in, int len);
+
 static inline int calc_base64_encode_len(int len)
 {
 	return (len/3 + (len%3?1:0))*4;
 }
+#define calc_word64_encode_len calc_base64_encode_len
 
 static inline int calc_max_base64_decode_len(int len)
 {
 	return len*3/4;
 }
+
+#define calc_max_word64_decode_len calc_max_base64_decode_len
 
 
 #endif

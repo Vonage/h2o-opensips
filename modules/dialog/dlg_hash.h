@@ -75,6 +75,8 @@
 #define DLG_FLAG_CSEQ_ENFORCE		(1<<10)
 #define DLG_FLAG_REINVITE_PING_CALLER	(1<<11)
 #define DLG_FLAG_REINVITE_PING_CALLEE	(1<<12)
+#define DLG_FLAG_REINVITE_PING_ENGAGED_REQ	(1<<13)
+#define DLG_FLAG_REINVITE_PING_ENGAGED_REPL	(1<<14)
 
 #define DLG_CALLER_LEG         0
 #define DLG_FIRST_CALLEE_LEG   1
@@ -257,7 +259,7 @@ void destroy_dlg(struct dlg_cell *dlg);
 		}\
 		if ((_dlg)->ref<=0) { \
 			unlink_unsafe_dlg( _d_entry, _dlg);\
-			LM_DBG("ref <=0 for dialog %p\n",_dlg);\
+			LM_DBG("ref <=0 for dialog %p, destroying it\n",_dlg);\
 			destroy_dlg(_dlg);\
 		}\
 	}while(0)

@@ -148,12 +148,17 @@ int unescape_user(str *sin, str *sout)
 {
 	char *at, *p, c;
 
-	if(sin==NULL || sout==NULL || sin->s==NULL || sout->s==NULL
-			|| sin->len<0 || sout->len < sin->len+1)
+	if(sin==NULL || sout==NULL || sout->s==NULL
+			|| sin->len<0 || sout->len < sin->len+1) {
 		return -1;
+	}
 
 	at = sout->s;
+	if (sin->s==NULL || sin->len==0)
+		goto done;
+
 	p  = sin->s;
+
 	while(p < sin->s+sin->len)
 	{
 		if (*p == '%')
@@ -240,6 +245,7 @@ int unescape_user(str *sin, str *sout)
 		p++;
 	}
 
+done:
 	*at = 0;
 	sout->len = at - sout->s;
 
@@ -274,8 +280,7 @@ int escape_user(str *sin, str *sout)
 			LM_ERR("invalid escaped character <%u>\n", (unsigned int)*p);
 			return -1;
 		}
-		if (isdigit((int)*p) || ((*p >= 'A') && (*p <= 'Z')) ||
-				((*p >= 'a') && (*p <= 'z')))
+		if (isalnum((int)*p))
 		{
 			*at = *p;
 		} else {
@@ -358,42 +363,46 @@ int escape_param(str *sin, str *sout)
 			LM_ERR("invalid escaped character <%u>\n", (unsigned int)*p);
 			return -1;
 		}
-		switch (*p) {
-			/* unreserved chars */
-			case '-':
-			case '_':
-			case '.':
-			case '!':
-			case '~':
-			case '*':
-			case '\'':
-			case '(':
-			case ')':
-			/* param unreserved chars */
-			case '[':
-			case ']':
-			case '/':
-			case ':':
-			case '&':
-			case '+':
-			case '$':
-				*at = *p;
-				break;
-			default:
-				*at++ = '%';
-				x = (*p) >> 4;
-				if (x < 10)
-				{
-					*at++ = x + '0';
-				} else {
-					*at++ = x - 10 + 'a';
-				}
-				x = (*p) & 0x0f;
-				if (x < 10) {
-					*at = x + '0';
-				} else {
-					*at = x - 10 + 'a';
-				}
+		if (isalnum((int)*p)) {
+			*at = *p;
+		} else {
+			switch (*p) {
+				/* unreserved chars */
+				case '-':
+				case '_':
+				case '.':
+				case '!':
+				case '~':
+				case '*':
+				case '\'':
+				case '(':
+				case ')':
+				/* param unreserved chars */
+				case '[':
+				case ']':
+				case '/':
+				case ':':
+				case '&':
+				case '+':
+				case '$':
+					*at = *p;
+					break;
+				default:
+					*at++ = '%';
+					x = (*p) >> 4;
+					if (x < 10)
+					{
+						*at++ = x + '0';
+					} else {
+						*at++ = x - 10 + 'a';
+					}
+					x = (*p) & 0x0f;
+					if (x < 10) {
+						*at = x + '0';
+					} else {
+						*at = x - 10 + 'a';
+					}
+			}
 		}
 		at++;
 		p++;

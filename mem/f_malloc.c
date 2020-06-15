@@ -484,6 +484,10 @@ void fm_free(struct fm_block* qm, void* p)
 	}
 	f=(struct fm_frag*) ((char*)p-sizeof(struct fm_frag));
 
+#ifndef F_MALLOC_OPTIMIZATIONS
+	check_double_free(p, f, qm);
+#endif
+
 	#ifdef DBG_MALLOC
 	LM_GEN1(memlog, "freeing block alloc'ed from %s: %s(%ld)\n", f->file, f->func,
 			f->line);
@@ -512,6 +516,12 @@ join:
 	}
 
 no_join:
+
+#ifdef DBG_MALLOC
+	f->file = file;
+	f->func = func;
+	f->line = line;
+#endif
 
 	fm_insert_free(qm, f);
 #if defined(DBG_MALLOC) || defined(STATISTICS)

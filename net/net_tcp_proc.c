@@ -79,11 +79,11 @@ void tcp_conn_release(struct tcp_connection* c, int pending_data)
 	if (c->state==S_CONN_BAD) {
 		c->lifetime=0;
 		/* CONN_ERROR will auto-dec refcnt => we must not call tcpconn_put !!*/
-		tcpconn_release(c, CONN_ERROR,1);
+		tcpconn_release(c, CONN_ERROR2,1);
 		return;
 	}
 	if (pending_data) {
-		tcpconn_release(c, ASYNC_WRITE,1);
+		tcpconn_release(c, ASYNC_WRITE2,1);
 		return;
 	}
 	tcpconn_put(c);
@@ -119,7 +119,7 @@ inline static int handle_io(struct fd_map* fm, int idx,int event_type)
 			handle_timer_job();
 			break;
 		case F_SCRIPT_ASYNC:
-			async_resume_f( &fm->fd, fm->data);
+			async_resume_f( fm->fd, fm->data);
 			return 0;
 		case F_TCPMAIN:
 again:

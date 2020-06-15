@@ -611,7 +611,8 @@ void destroy_linkers(struct dlg_profile_link *linker, char is_replicated)
 					{
 						/* warn everybody we are deleting */
 						/* XXX: we should queue these */
-						repl_prof_remove(&l->profile->name, &l->value);
+						if (l->profile->repl_type==REPL_PROTOBIN)
+							repl_prof_remove(&l->profile->name, &l->value);
 						map_remove(entry,l->value );
 					}
 				}
@@ -867,10 +868,10 @@ int is_dlg_in_profile(struct dlg_cell *dlg, struct dlg_profile_table *profile,
 	dlg_lock( d_table, d_entry);
 	for( linker=dlg->profile_links ; linker ; linker=linker->next) {
 		if (linker->profile==profile) {
-			if (profile->has_value==0) {
+			if (profile->has_value==0 || (profile->has_value==1 && !value)) {
 				dlg_unlock( d_table, d_entry);
 				return 1;
-			} else if (value && value->len==linker->value.len &&
+			} else if (value->len==linker->value.len &&
 			memcmp(value->s,linker->value.s,value->len)==0){
 				dlg_unlock( d_table, d_entry);
 				return 1;
@@ -1432,5 +1433,5 @@ struct mi_root * mi_profile_terminate(struct mi_root *cmd_tree, void *param ) {
 		deleted = NULL;
 	}
 
-	return init_mi_tree(400, MI_SSTR(MI_OK));
+	return init_mi_tree(200, MI_SSTR(MI_OK));
 }
