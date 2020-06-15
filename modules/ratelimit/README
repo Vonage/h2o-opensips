@@ -1,30 +1,4 @@
 ratelimit Module
-
-Ovidiu Sas
-
-Bogdan Vasile Harjoc
-
-Hendrik Scholz
-
-Razvan Crainea
-
-Edited by
-
-Ovidiu Sas
-
-Bogdan Vasile Harjoc
-
-Hendrik Scholz
-
-Razvan Crainea
-
-   Copyright � 2006 Freenet Cityline GmbH
-
-   Copyright � 2008 VoIP Embedded Inc.
-
-   Copyright � 2011 OpenSIPS Foundation
-   Revision History
-   Revision $Revision: 5901 $ $Date$
      __________________________________________________________
 
    Table of Contents
@@ -84,6 +58,22 @@ Razvan Crainea
         1.9. Exported pseudo-variables
 
               1.9.1. $rl_count(name)
+
+   2. Contributors
+
+        2.1. By Commit Statistics
+        2.2. By Commit Activity
+
+   3. Documentation
+
+        3.1. Contributors
+
+   List of Tables
+
+   2.1. Top contributors by DevScore^(1), authored commits^(2) and
+          lines added/removed^(3)
+
+   2.2. Most recently active contributors^(1) to this module
 
    List of Examples
 
@@ -202,9 +192,9 @@ Chapter 1. Admin Guide
    should be. The number of slots will be window_size/slot_period.
    If, for example, you have window_size= slot_period=1 second,
    then after each second you shall lose the call count, but if
-   you set the slot_period to 100 microseconds, then when your
+   you set the slot_period to 100 milliseconds, then when your
    call will be outside the window, the calls in the first 100
-   microseconds shall be dropped, and the rest in the next 900
+   milliseconds shall be dropped, and the rest in the next 900
    shall be kept.
 
 1.3.4. Network Algorithm (NETWORK)
@@ -283,7 +273,8 @@ modparam("ratelimit", "timer_interval", 5)
 1.6.2. expire_time (integer)
 
    This parameter specifies how long a pipe should be kept in
-   memory until deleted.
+   memory after it becomes idle (no more operations are performed
+   on the pipe) until deleted.
 
    Default value is 3600.
 
@@ -421,7 +412,7 @@ modparam("ratelimit", "accept_pipes_timeout", 1)
 
    Authentication check for incoming packets.
 
-   Default value is "0" (disabled).
+   Default value is “0” (disabled).
 
    Example 1.13. Set repl_pipes_auth_check parameter
 ...
@@ -432,7 +423,7 @@ modparam("ratelimit", "repl_pipes_auth_check", 1)
 
    How long the history in SBT should be in seconds.
 
-   Default value is "10".
+   Default value is “10”.
 
    Example 1.14. Set window_size parameter
 ...
@@ -441,16 +432,16 @@ modparam("ratelimit", "window_size", 5)
 
 1.6.15. slot_period (int)
 
-   Value of one slot in microseconds. This parameter determines
+   Value of one slot in milliseconds. This parameter determines
    how granular the algorithm should be. The number of slots will
    be determined by window_size/slot_period.
 
-   Default value is "200".
+   Default value is “200”.
 
    Example 1.15. Set slot_period parameter
 ...
 modparam("ratelimit", "window_size", 5)
-#we will have 50 slots of 100 microseconds
+#we will have 50 slots of 100 milliseconds
 modparam("ratelimit", "slot_period", 100)
 ...
 
@@ -466,6 +457,12 @@ modparam("ratelimit", "slot_period", 100)
 
    NOTE: A pipe's algorithm cannot be dynamically changed. Only
    the one specified when the pipe was created will be considered.
+
+   NOTE: This function increments the pipe's counter every time it
+   is called, even if the call should be declined. Therefore If
+   you are using ratelimit to limit only successful traffic, you
+   need to explicitely decrease the counter for the declined calls
+   using the rl_dec_count() function.
 
    The method will return an error code if the limit for the
    matched pipe is reached.
@@ -483,7 +480,9 @@ modparam("ratelimit", "slot_period", 100)
        default value is used. It accepts a string or a
        pseudovariable.
 
-   This function can be used from REQUEST_ROUTE.
+   This function can be used from REQUEST_ROUTE, FAILURE_ROUTE,
+   ONREPLY_ROUTE, BRANCH_ROUTE, ERROR_ROUTE, LOCAL_ROUTE,
+   TIMER_ROUTE and EVENT_ROUTE.
 
    Example 1.16. rl_check usage
 ...
@@ -503,6 +502,13 @@ m
                 exit;
         };
 ...
+        # count only successful calls
+        if (!rl_check("gw_$ru", "100")) {
+                rl_dec_count("gw_$ru");
+                sl_send_reply("503", "Server Unavailable");
+                exit;
+        };
+...
 
 1.7.2.  rl_dec_count(name)
 
@@ -512,7 +518,9 @@ m
    Meaning of the parameters is as follows:
      * name - identifies the name of the pipe.
 
-   This function can be used from REQUEST_ROUTE.
+   This function can be used from REQUEST_ROUTE, FAILURE_ROUTE,
+   ONREPLY_ROUTE, BRANCH_ROUTE, ERROR_ROUTE, LOCAL_ROUTE,
+   TIMER_ROUTE and EVENT_ROUTE.
 
    Example 1.17. rl_dec_count usage
 ...
@@ -531,7 +539,9 @@ m
    Meaning of the parameters is as follows:
      * name - identifies the name of the pipe.
 
-   This function can be used from REQUEST_ROUTE.
+   This function can be used from REQUEST_ROUTE, FAILURE_ROUTE,
+   ONREPLY_ROUTE, BRANCH_ROUTE, ERROR_ROUTE, LOCAL_ROUTE,
+   TIMER_ROUTE and EVENT_ROUTE.
 
    Example 1.18. rl_reset_count usage
 ...
@@ -570,7 +580,7 @@ m
    Name: rl_reset_pipe
 
    Parameters:
-     * pipe - indicates the name of the pipe whose couter should
+     * pipe - indicates the name of the pipe whose counter should
        be reset.
 
    MI FIFO Command Format:
@@ -628,3 +638,85 @@ m
    Returns the counter of a pipe. The variable is read-only.
 
    NULL will be returned if the pipe does not exist.
+
+Chapter 2. Contributors
+
+2.1. By Commit Statistics
+
+   Table 2.1. Top contributors by DevScore^(1), authored
+   commits^(2) and lines added/removed^(3)
+     Name DevScore Commits Lines ++ Lines --
+   1. Razvan Crainea (@razvancrainea) 112 41 2971 2614
+   2. Ovidiu Sas (@ovidiusas) 38 17 2481 44
+   3. Bogdan-Andrei Iancu (@bogdan-iancu) 28 24 107 118
+   4. Eseanu Marius Cristian (@eseanucristian) 13 6 329 195
+   5. Daniel-Constantin Mierla (@miconda) 9 7 24 18
+   6. Liviu Chircu (@liviuchircu) 9 6 12 81
+   7. Henning Westerholt (@henningw) 4 2 4 2
+   8. Walter Doekes (@wdoekes) 4 2 2 2
+   9. Ionut Ionita (@ionutrazvanionita) 4 1 244 3
+   10. Arnaud Boussus 3 1 45 14
+
+   All remaining contributors: Ionel Cerghit (@ionel-cerghit),
+   Sergio Gutierrez, Stanislaw Pitucha, Bill Hau, Konstantin
+   Bokarius, Vlad Paiu (@vladpaiu), Julián Moreno Patiño, Edson
+   Gellert Schubert.
+
+   (1) DevScore = author_commits + author_lines_added /
+   (project_lines_added / project_commits) + author_lines_deleted
+   / (project_lines_deleted / project_commits)
+
+   (2) including any documentation-related commits, excluding
+   merge commits. Regarding imported patches/code, we do our best
+   to count the work on behalf of the proper owner, as per the
+   "fix_authors" and "mod_renames" arrays in
+   opensips/doc/build-contrib.sh. If you identify any
+   patches/commits which do not get properly attributed to you,
+   please submit a pull request which extends "fix_authors" and/or
+   "mod_renames".
+
+   (3) ignoring whitespace edits, renamed files and auto-generated
+   files
+
+2.2. By Commit Activity
+
+   Table 2.2. Most recently active contributors^(1) to this module
+                         Name                     Commit Activity
+   1.  Liviu Chircu (@liviuchircu)              Mar 2014 - May 2019
+   2.  Bogdan-Andrei Iancu (@bogdan-iancu)      Feb 2008 - Mar 2019
+   3.  Razvan Crainea (@razvancrainea)          Sep 2011 - Apr 2018
+   4.  Julián Moreno Patiño                     Feb 2016 - Feb 2016
+   5.  Ionut Ionita (@ionutrazvanionita)        Dec 2015 - Dec 2015
+   6.  Eseanu Marius Cristian (@eseanucristian) Aug 2015 - Sep 2015
+   7.  Ionel Cerghit (@ionel-cerghit)           Jul 2015 - Jul 2015
+   8.  Bill Hau                                 Jul 2014 - Jul 2014
+   9.  Walter Doekes (@wdoekes)                 Apr 2010 - Jun 2014
+   10. Vlad Paiu (@vladpaiu)                    Aug 2012 - Aug 2012
+
+   All remaining contributors: Ovidiu Sas (@ovidiusas), Stanislaw
+   Pitucha, Arnaud Boussus, Sergio Gutierrez, Henning Westerholt
+   (@henningw), Daniel-Constantin Mierla (@miconda), Konstantin
+   Bokarius, Edson Gellert Schubert.
+
+   (1) including any documentation-related commits, excluding
+   merge commits
+
+Chapter 3. Documentation
+
+3.1. Contributors
+
+   Last edited by: Liviu Chircu (@liviuchircu), Bogdan-Andrei
+   Iancu (@bogdan-iancu), Razvan Crainea (@razvancrainea), Ionut
+   Ionita (@ionutrazvanionita), Eseanu Marius Cristian
+   (@eseanucristian), Walter Doekes (@wdoekes), Arnaud Boussus,
+   Daniel-Constantin Mierla (@miconda), Konstantin Bokarius,
+   Henning Westerholt (@henningw), Ovidiu Sas (@ovidiusas), Edson
+   Gellert Schubert.
+
+   doc copyrights:
+
+   Copyright © 2011 OpenSIPS Foundation
+
+   Copyright © 2008 VoIP Embedded Inc.
+
+   Copyright © 2006 Freenet Cityline GmbH

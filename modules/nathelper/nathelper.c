@@ -984,6 +984,10 @@ alter_mediaip(struct sip_msg *msg, str *body, str *oldip, int oldpf,
 	str omip, nip, oip;
 
 	/* check that updating mediaip is really necessary */
+	/* Conditions:
+	- same IP protocol format for received IP and new IP
+	- null IP received
+	*/
 	if (oldpf == newpf && isnulladdr(oldip, oldpf))
 		return 0;
 	if (newip->len == oldip->len &&

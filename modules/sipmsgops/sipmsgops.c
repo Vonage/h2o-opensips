@@ -520,7 +520,11 @@ static int remove_hf_match_f(struct sip_msg* msg, char* pattern, char* regex_or_
 		tmp = *(hf->name.s+hf->name.len);
 		*(hf->name.s+hf->name.len) = 0;
 		if( matchtype == 'g' ) { /* GLOB */
+			#ifdef FNM_CASEFOLD
+			if(fnmatch(pat->s, hf->name.s, FNM_CASEFOLD) !=0 ){
+			#else
 			if(fnmatch(pat->s, hf->name.s, 0) !=0 ){
+			#endif
 				*(hf->name.s+hf->name.len) = tmp;
 				continue;
 			}
@@ -1506,6 +1510,7 @@ static int sip_validate_hdrs(struct sip_msg *msg)
 	char *s_aux, *e_aux;
 	unsigned u_aux;
 	int i_aux;
+	struct sip_uri uri;
 
 #define CHECK_HDR_EMPTY() \
 	do { \
@@ -1612,13 +1617,10 @@ static int sip_validate_hdrs(struct sip_msg *msg)
 				free_disposition(&disp);
 				break;
 
-				/* to-style headers */
+			/* To style headers */
 			case HDR_FROM_T:
-			case HDR_PPI_T:
-			case HDR_PAI_T:
 			case HDR_RPID_T:
 			case HDR_REFER_TO_T:
-			case HDR_DIVERSION_T:
 				/* these are similar */
 				if (!(to = pkg_malloc(sizeof(struct to_body)))) {
 					LM_ERR("out of pkg_memory\n");
@@ -1632,6 +1634,63 @@ static int sip_validate_hdrs(struct sip_msg *msg)
 					goto failed;
 				}
 				hf->parsed = to;
+				break;
+
+			/* multi-To style headers */
+			case HDR_PPI_T:
+			case HDR_PAI_T:
+			case HDR_DIVERSION_T:
+				/* these are similar */
+				if (!(to = pkg_malloc(sizeof(struct to_body)))) {
+					LM_ERR("out of pkg_memory\n");
+					goto failed;
+				}
+				parse_multi_to(hf->body.s,  hf->body.s + hf->body.len + 1, to);
+				if (to->error == PARSE_ERROR) {
+					LM_DBG("bad '%.*s' header\n",
+							hf->name.len, hf->name.s);
+					pkg_free(to);
+					goto failed;
+				}
+				hf->parsed = to;
+				if(hf->type==HDR_PPI_T || hf->type==HDR_PAI_T) {
+					/* check enforcements as per RFC3325 */
+					if (parse_uri( to->uri.s, to->uri.len, &uri)<0) {
+						LM_ERR("invalid uri [%.*s] in first [%.*s] value\n",
+							to->uri.len, to->uri.s,
+							hf->name.len, hf->name.s);
+						goto failed;
+					}
+					if (uri.type!=SIP_URI_T && uri.type!=SIPS_URI_T) {
+						LM_ERR("invalid uri type [[%.*s] in first [%.*s] "
+							"value (SIP or SIPS expected) \n",
+							to->uri.len, to->uri.s,
+							hf->name.len, hf->name.s);
+						goto failed;
+					}
+					/* a second value ? */
+					if (to->next) {
+						to = to->next;
+						if (parse_uri( to->uri.s, to->uri.len, &uri)<0) {
+							LM_ERR("invalid uri [%.*s] in second [%.*s] "
+								"value\n", to->uri.len, to->uri.s,
+								hf->name.len, hf->name.s);
+							goto failed;
+						}
+						if (uri.type!=TEL_URI_T && uri.type!=TELS_URI_T) {
+							LM_ERR("invalid uri type [%.*s] in second [%.*s] "
+								"value (expected TEL or TELS)\n",
+								to->uri.len,to->uri.s,
+								hf->name.len, hf->name.s);
+							goto failed;
+						}
+					}
+					if (to->next) {
+						LM_ERR("too many values (max=2) in hdr [%.*s]\n",
+							hf->name.len, hf->name.s);
+						goto failed;
+					}
+				}
 				break;
 
 			case HDR_MAXFORWARDS_T:
@@ -1755,7 +1814,7 @@ static int check_hostname(str *domain)
 	}
 
 	/* always starts with a ALPHANUM */
-	if (!IS_ALPHANUM(domain->s[0])) {
+	if (!IS_ALPHANUM(domain->s[0]) && (domain->s[0] != '[')) {
 		LM_DBG("invalid starting character in domain: %c[%d]\n", domain->s[0], domain->s[0]);
 		return -1;
 	}
@@ -1764,7 +1823,7 @@ static int check_hostname(str *domain)
 	end = domain->s + domain->len - 1;
 
 	for (p = domain->s + 1; p < end; p++) {
-		if (!IS_ALPHANUM(*p) && (*p != '-')) {
+		if (!IS_ALPHANUM(*p) && (*p != '-') && (*p != ':')) {
 			if (*p != '.') {
 				LM_DBG("invalid character in hostname: %c[%d]\n", *p, *p);
 				return -1;
@@ -1776,7 +1835,7 @@ static int check_hostname(str *domain)
 	}
 
 	/* check if the last character is a '-' */
-	if (!IS_ALPHANUM(*end) && (*end != '.')) {
+	if (!IS_ALPHANUM(*end) && (*end != '.') && (*end != ']')) {
 		LM_DBG("invalid character at the end of the domain: %c[%d]\n", *end, *end);
 		return -1;
 	}

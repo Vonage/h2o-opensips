@@ -55,7 +55,7 @@ static int dupl_string(char** dst, const char* begin, const char* end)
 
 /**
  * Parse a database URL of form
- * scheme://[username[:password]@]hostname[:port]/database
+ * scheme[:group]://[username[:password]@]hostname[:port]/database
  *
  * \param id filled id struct
  * \param url parsed URL
@@ -74,12 +74,13 @@ static int parse_cachedb_url(struct cachedb_id* id, const str* url)
 		ST_USER_HOST,  /* Username or hostname */
 		ST_PASS_PORT,  /* Password or port part */
 		ST_HOST,       /* Hostname part */
+		ST_HOST6,      /* Hostname part IPv6 */
 		ST_PORT,       /* Port part */
 		ST_DB          /* Database part */
 	};
 
 	enum state st;
-	unsigned int len, i;
+	unsigned int len, i, ipv6_flag=0;
 	char* begin;
 	char* prev_token,*start_host=NULL,*start_prev=NULL,*ptr;
 
@@ -122,6 +123,9 @@ static int parse_cachedb_url(struct cachedb_id* id, const str* url)
 					if (dupl_string(&id->group_name,begin,url->s+i) < 0) goto err;
 					break;
 				case '/':
+					/* a '/' not right after ':' ?? */
+					if (begin!=(url->s+i))
+						goto err;
 					st = ST_SLASH2;
 					break;
 			}
@@ -165,6 +169,11 @@ static int parse_cachedb_url(struct cachedb_id* id, const str* url)
 				begin = url->s + i + 1;
 				break;
 
+			case '[':
+				st = ST_HOST6;
+				begin = url->s + i + 1;
+				break;
+
 			case '/':
 				if (dupl_string(&id->host, begin, url->s + i) < 0) goto err;
 				if (url->s+i+1 == url->s + len) {
@@ -204,6 +213,11 @@ static int parse_cachedb_url(struct cachedb_id* id, const str* url)
 
 		case ST_HOST:
 			switch(url->s[i]) {
+			case '[':
+				st = ST_HOST6;
+				begin = url->s + i + 1;
+				break;
+
 			case ':':
 				LM_DBG("in host - :\n");
 				if (id->flags & CACHEDB_ID_MULTIPLE_HOSTS) {
@@ -212,7 +226,7 @@ static int parse_cachedb_url(struct cachedb_id* id, const str* url)
 				}
 
 				st = ST_PORT;
-				if (dupl_string(&id->host, begin, url->s + i) < 0) goto err;
+				if (dupl_string(&id->host, begin, url->s + i - ipv6_flag) < 0) goto err;
 				start_host = begin;
 				begin = url->s + i + 1;
 				break;
@@ -223,13 +237,22 @@ static int parse_cachedb_url(struct cachedb_id* id, const str* url)
 				else
 					ptr = begin;
 
-				if (dupl_string(&id->host, ptr, url->s + i) < 0) goto err;
+				if (dupl_string(&id->host, ptr, url->s + i - ipv6_flag) < 0) goto err;
 				if (url->s+i+1 == url->s + len) {
 					st = ST_DB;
 					break;
 				}
 				if (dupl_string(&id->database, url->s + i + 1, url->s + len) < 0) goto err;
 				return 0;
+			}
+			break;
+
+		case ST_HOST6:
+			switch(url->s[i]) {
+			case ']':
+				ipv6_flag = 1;
+				st = ST_HOST;
+				break;
 			}
 			break;
 

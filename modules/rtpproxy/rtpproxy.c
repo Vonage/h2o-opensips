@@ -1906,6 +1906,10 @@ alter_mediaip(struct sip_msg *msg, str *body, str *oldip, int oldpf,
 	str omip, nip, oip;
 
 	/* check that updating media-ip is really necessary */
+	/* Conditions:
+	- same IP protocol format for received IP and new IP
+	- null IP received
+	*/
 	if (oldpf == newpf && isnulladdr(oldip, oldpf))
 		return 0;
 	if (newip->len == oldip->len &&
@@ -2259,7 +2263,8 @@ send_rtpp_command(struct rtpp_node *node, struct iovec *v, int vcnt)
 		} while (len == -1 && errno == EINTR);
 		if (len <= 0) {
 			close(fd);
-			LM_ERR("can't send command to a RTP proxy\n");
+			LM_ERR("can't send command to a RTP proxy (%d:%s)\n",
+					errno, strerror(errno));
 			goto badproxy;
 		}
 		do {
@@ -2305,8 +2310,8 @@ send_rtpp_command(struct rtpp_node *node, struct iovec *v, int vcnt)
 				}
 			} while (len == -1 && (errno == EINTR || errno == ENOBUFS));
 			if (len <= 0) {
-				LM_ERR("can't send command to a RTP proxy %s\n",
-						strerror(errno));
+				LM_ERR("can't send command to a RTP proxy (%d:%s)\n",
+						errno, strerror(errno));
 				goto badproxy;
 			}
 			while ((poll(fds, 1, rtpproxy_tout) == 1) &&

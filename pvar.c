@@ -50,6 +50,7 @@
 #include "transformations.h"
 #include "script_var.h"
 #include "pvar.h"
+#include "flags.h"
 #include "xlog.h"
 
 #include "parser/parse_from.h"
@@ -1868,9 +1869,8 @@ static inline int get_branch_field( int idx, pv_name_t *pvn, pv_value_t *res)
 			res->flags = PV_VAL_STR;
 			break;
 		case BR_FLAGS_ID: /* return FLAGS */
-			res->rs.s = int2str( flags, &res->rs.len);
-			res->ri = flags;
-			res->flags = PV_VAL_STR|PV_VAL_INT;
+			res->rs = bitmask_to_flag_list(FLAG_TYPE_BRANCH, flags);
+			res->flags = PV_VAL_STR;
 			break;
 		case BR_SOCKET_ID: /* return SOCKET */
 			if ( !si )
@@ -2116,6 +2116,38 @@ static int pv_get_avp(struct sip_msg *msg,  pv_param_t *param, pv_value_t *res)
 }
 
 
+static int pv_resolve_hdr_name(str *in, pv_value_t *tv)
+{
+	struct hdr_field hdr;
+	str s;
+	if(in->len>=PV_LOCAL_BUF_SIZE-1)
+	{
+		LM_ERR("name too long\n");
+		return -1;
+	}
+	memcpy(pv_local_buf, in->s, in->len);
+	pv_local_buf[in->len] = ':';
+	s.s = pv_local_buf;
+	s.len = in->len+1;
+
+	if (parse_hname2(s.s, s.s + ((s.len<4)?4:s.len), &hdr)==0)
+	{
+		LM_ERR("error parsing header name [%.*s]\n", s.len, s.s);
+		return -1;
+	}
+	if (hdr.type!=HDR_OTHER_T && hdr.type!=HDR_ERROR_T)
+	{
+		LM_DBG("using hdr type (%d) instead of <%.*s>\n",
+			hdr.type, in->len, in->s);
+		tv->flags = 0;
+		tv->ri = hdr.type;
+	} else {
+		tv->flags = PV_VAL_STR;
+		tv->rs = *in;
+	}
+	return 0;
+}
+
 static int pv_get_hdr_prolog(struct sip_msg *msg,  pv_param_t *param, pv_value_t *res, pv_value_t* tv)
 {
 	if(msg==NULL || res==NULL || param==NULL)
@@ -2129,6 +2161,8 @@ static int pv_get_hdr_prolog(struct sip_msg *msg,  pv_param_t *param, pv_value_t
 			LM_ERR("invalid name\n");
 			return -1;
 		}
+		if (pv_resolve_hdr_name(&tv->rs, tv) < 0)
+			return -1;
 	} else {
 		if(param->pvn.u.isname.type == AVP_NAME_STR)
 		{
@@ -2591,8 +2625,8 @@ int pv_set_ruri_user(struct sip_msg* msg, pv_param_t *param,
 	{
 		memset(&act, 0, sizeof(act));
 		act.type = SET_USER_T;
-		act.elem[0].type = STRING_ST;
-		act.elem[0].u.string = "";
+		act.elem[0].type = STR_ST;
+		act.elem[0].u.s = str_empty;
 		if (do_action(&act, msg)<0)
 		{
 			LM_ERR("do action failed)\n");
@@ -2885,11 +2919,12 @@ int pv_set_branch_fields(struct sip_msg* msg, pv_param_t *param,
 			return update_branch( idx, NULL, NULL,
 				&s, NULL, NULL, NULL);
 		case BR_FLAGS_ID: /* set FLAGS */
-			if ( val && !(val->flags&PV_VAL_INT) ) {
-				LM_ERR("INT value required to set the branch FLAGS\n");
+			if ( val && !(val->flags&PV_VAL_STR) ) {
+				LM_ERR("string value required to set the branch FLAGS\n");
 				return -1;
 			}
-			flags = (!val||val->flags&PV_VAL_NULL)? 0 : val->ri;
+			flags = (!val||val->flags&PV_VAL_NULL)?
+				0 : flag_list_to_bitmask(&val->rs, FLAG_TYPE_BRANCH, FLAG_DELIM);
 			return update_branch( idx, NULL, NULL,
 				NULL, NULL, &flags, NULL);
 		case BR_SOCKET_ID: /* set SOCKET */
@@ -2985,10 +3020,9 @@ int pv_parse_scriptvar_name(pv_spec_p sp, str *in)
 
 int pv_parse_hdr_name(pv_spec_p sp, str *in)
 {
-	str s;
 	char *p;
 	pv_spec_p nsp = 0;
-	struct hdr_field hdr;
+	pv_value_t tv;
 
 	if(in==NULL || in->s==NULL || sp==NULL)
 		return -1;
@@ -3016,35 +3050,21 @@ int pv_parse_hdr_name(pv_spec_p sp, str *in)
 		return 0;
 	}
 
-	if(in->len>=PV_LOCAL_BUF_SIZE-1)
-	{
-		LM_ERR("name too long\n");
+	if (pv_resolve_hdr_name(in, &tv) < 0)
 		return -1;
-	}
-	memcpy(pv_local_buf, in->s, in->len);
-	pv_local_buf[in->len] = ':';
-	s.s = pv_local_buf;
-	s.len = in->len+1;
 
-	if (parse_hname2(s.s, s.s + ((s.len<4)?4:s.len), &hdr)==0)
-	{
-		LM_ERR("error parsing header name [%.*s]\n", s.len, s.s);
-		goto error;
-	}
 	sp->pvp.pvn.type = PV_NAME_INTSTR;
-	if (hdr.type!=HDR_OTHER_T && hdr.type!=HDR_ERROR_T)
+	if (!tv.flags)
 	{
 		LM_DBG("using hdr type (%d) instead of <%.*s>\n",
-			hdr.type, in->len, in->s);
+			tv.ri, in->len, in->s);
 		sp->pvp.pvn.u.isname.type = 0;
-		sp->pvp.pvn.u.isname.name.n = hdr.type;
+		sp->pvp.pvn.u.isname.name.n = tv.ri;
 	} else {
 		sp->pvp.pvn.u.isname.type = AVP_NAME_STR;
 		sp->pvp.pvn.u.isname.name.s = *in;
 	}
 	return 0;
-error:
-	return -1;
 }
 
 int pv_parse_avp_name(pv_spec_p sp, str *in)
@@ -3237,7 +3257,7 @@ int pv_get_log_level(struct sip_msg *msg,  pv_param_t *param, pv_value_t *res)
 	}
 
 	res->ri = *log_level;
-	res->rs.s = int2str( (unsigned long)res->ri, &l);
+	res->rs.s = sint2str( (long)res->ri, &l);
 	res->rs.len = l;
 
 	res->flags = PV_VAL_STR|PV_VAL_INT|PV_TYPE_INT;
@@ -4947,6 +4967,7 @@ static int pv_get_param(struct sip_msg *msg,  pv_param_t *ip, pv_value_t *res)
 		if(pv_get_spec_value(msg, (pv_spec_p)(ip->pvn.u.dname), &tv)!=0)
 		{
 			LM_ERR("cannot get spec value\n");
+			route_rec_level++;
 			return -1;
 		}
 		route_rec_level++;
@@ -4973,7 +4994,6 @@ static int pv_get_param(struct sip_msg *msg,  pv_param_t *ip, pv_value_t *res)
 	index--;
 	switch (route_params[route_rec_level][index].type)
 	{
-
 	case NULLV_ST:
 		res->rs.s = NULL;
 		res->rs.len = res->ri = 0;
@@ -4997,15 +5017,16 @@ static int pv_get_param(struct sip_msg *msg,  pv_param_t *ip, pv_value_t *res)
 		if(pv_get_spec_value(msg, (pv_spec_p)route_params[route_rec_level + 1][index].u.data, res)!=0)
 		{
 			LM_ERR("cannot get spec value\n");
+			route_rec_level++;
 			return -1;
 		}
 		route_rec_level++;
 		break;
 
-		default:
-			LM_ALERT("BUG: invalid parameter type %d\n",
-					 route_params[route_rec_level][index].type);
-			return -1;
+	default:
+		LM_ALERT("BUG: invalid parameter type %d\n",
+				 route_params[route_rec_level][index].type);
+		return -1;
 	}
 
 	return 0;

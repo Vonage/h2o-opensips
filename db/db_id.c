@@ -40,6 +40,8 @@
  */
 static int dupl_string(char** dst, const char* begin, const char* end)
 {
+	str old, new;
+
 	if (*dst) pkg_free(*dst);
 
 	*dst = pkg_malloc(end - begin + 1);
@@ -47,8 +49,12 @@ static int dupl_string(char** dst, const char* begin, const char* end)
 		return -1;
 	}
 
-	memcpy(*dst, begin, end - begin);
-	(*dst)[end - begin] = '\0';
+	old.s = (char*)begin;
+	old.len = end - begin;
+	new.s = *dst;
+	un_escape(&old, &new );
+
+	new.s[new.len] = '\0';
 	return 0;
 }
 
@@ -73,12 +79,13 @@ static int parse_db_url(struct db_id* id, const str* url)
 		ST_USER_HOST,  /* Username or hostname */
 		ST_PASS_PORT,  /* Password or port part */
 		ST_HOST,       /* Hostname part */
+		ST_HOST6,      /* Hostname part IPv6 */
 		ST_PORT,       /* Port part */
 		ST_DB          /* Database part */
 	};
 
 	enum state st;
-	unsigned int len, i;
+	unsigned int len, i, ipv6_flag=0;
 	const char* begin;
 	char* prev_token;
 
@@ -145,6 +152,11 @@ static int parse_db_url(struct db_id* id, const str* url)
 				begin = url->s + i + 1;
 				break;
 
+			case '[':
+				st = ST_HOST6;
+				begin = url->s + i + 1;
+				break;
+
 			case '/':
 				if (dupl_string(&id->host, begin, url->s + i) < 0) goto err;
 				if (dupl_string(&id->database, url->s + i + 1, url->s + len) < 0) goto err;
@@ -171,16 +183,31 @@ static int parse_db_url(struct db_id* id, const str* url)
 
 		case ST_HOST:
 			switch(url->s[i]) {
+			case '[':
+				st = ST_HOST6;
+				begin = url->s + i + 1;
+				break;
+
 			case ':':
 				st = ST_PORT;
-				if (dupl_string(&id->host, begin, url->s + i) < 0) goto err;
+				if (dupl_string(&id->host, begin, url->s + i - ipv6_flag) < 0) goto err;
 				begin = url->s + i + 1;
 				break;
 
 			case '/':
-				if (dupl_string(&id->host, begin, url->s + i) < 0) goto err;
+				if (dupl_string(&id->host, begin, url->s + i - ipv6_flag) < 0) goto err;
 				if (dupl_string(&id->database, url->s + i + 1, url->s + len) < 0) goto err;
 				return 0;
+			}
+			break;
+
+		case ST_HOST6:
+			switch(url->s[i]) {
+			case ']':
+				ipv6_flag = 1;
+				st = ST_HOST;
+				break;
+
 			}
 			break;
 

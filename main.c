@@ -90,6 +90,7 @@
 #include <grp.h>
 #include <signal.h>
 #include <time.h>
+#include <locale.h>
 
 #include <sys/ioctl.h>
 #include <net/if.h>
@@ -210,7 +211,7 @@ int tcpthreshold = 0;
 int sip_warning = 0;
 /* should localy-generated messages include server's signature? */
 int server_signature=1;
-/* Server header to be used when proxy generates request as UAS.
+/* Server header to be used when proxy generates a reply as UAS.
    Default is to use SERVER_HDR CRLF (assigned later).
 */
 str server_header = {SERVER_HDR,sizeof(SERVER_HDR)-1};
@@ -782,6 +783,11 @@ int main(int argc, char** argv)
 
 	init_route_lists();
 
+	/* we want to be sure that from now on, all the floating numbers are 
+	 * using the dot as separator. This is a real issue when printing the
+	 * floats for SQL ops, where the dot must be used */
+	setlocale( LC_NUMERIC, "POSIX");
+
 	/* process command line (get port no, cfg. file path etc) */
 	/* first reset getopt */
 	optind = 1;
@@ -1143,9 +1149,14 @@ try_again:
 	LM_NOTICE("version: %s\n", version);
 
 	/* print some data about the configuration */
-	LM_INFO("using %ld Mb shared memory\n", ((shm_mem_size/1024)/1024));
-	LM_INFO("using %ld Mb private memory per process\n",
-		((pkg_mem_size/1024)/1024));
+	LM_INFO("using %ld Mb of shared memory\n", shm_mem_size/1024/1024);
+#if defined(PKG_MALLOC)
+	LM_INFO("using %ld Mb of private process memory\n", pkg_mem_size/1024/1024);
+#elif defined(USE_SHM_MEM)
+	LM_INFO("using shared memory for private process memory\n");
+#else
+	LM_INFO("using system memory for private process memory\n");
+#endif
 
 	/* init async reactor */
 	if (init_reactor_size()<0) {

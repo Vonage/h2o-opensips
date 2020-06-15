@@ -1,28 +1,4 @@
 tm Module
-
-Bogdan-Andrei Iancu
-
-Jiri Kuthan
-
-   FhG FOKUS
-
-Edited by
-
-Jiri Kuthan
-
-Edited by
-
-Bogdan-Andrei Iancu
-
-Edited by
-
-Ovidiu Sas
-
-   Copyright � 2003 FhG FOKUS
-
-   Copyright � 2005-2008 Voice Sistem SRL
-   Revision History
-   Revision $Revision: 8740 $ $Date$
      __________________________________________________________
 
    Table of Contents
@@ -126,6 +102,21 @@ Ovidiu Sas
               2.1.1. load_tm(*import_structure)
 
    3. Frequently Asked Questions
+   4. Contributors
+
+        4.1. By Commit Statistics
+        4.2. By Commit Activity
+
+   5. Documentation
+
+        5.1. Contributors
+
+   List of Tables
+
+   4.1. Top contributors by DevScore^(1), authored commits^(2) and
+          lines added/removed^(3)
+
+   4.2. Most recently active contributors^(1) to this module
 
    List of Examples
 
@@ -248,7 +239,7 @@ Chapter 1. Admin Guide
    executing replies from the other branch).
 
    For how to define branch flags and use via script, see
-   Section 1.4.14, " t_on_branch(branch_route) " and the
+   Section 1.4.14, “ t_on_branch(branch_route) ” and the
    setbflag(), resetbflag() and isbflagset() script functions.
 
    Also, modules may set branch flags before transaction creation
@@ -492,8 +483,8 @@ modparam("tm", "restart_fr_on_each_reply", 0)
    availabe at:
    http://opensips.org/docs/pseudo-variables-1.1.x.html
 
-   Each element will be appended per line in "name: value" format.
-   Element "$rb (message body)" is the only one which does not
+   Each element will be appended per line in “name: value” format.
+   Element “$rb (message body)” is the only one which does not
    accept name; the body it will be printed all the time at the
    end, disregarding its position in the definition string.
 
@@ -540,8 +531,8 @@ modparam("tm", "syn_branch", 0)
        changes)
 
    In mode 1, you can see the AVPs you set in request route,
-   branch route or failure route. The side efect is performance as
-   more locking is required in order to keep the AVP's list
+   branch route or failure route. The side effect is performance
+   as more locking is required in order to keep the AVP's list
    integrity.
 
    Default value is 0.
@@ -656,14 +647,18 @@ modparam("tm", "auto_100trying", 0)
    controlling the internal behaviour. The flags may be given in
    decimal or hexa format; supported flags are:
      * 0x01 - deprecated, not used any more
-     * 0x02 - do not internally send a negative reply in case of
-       forward failure (due internal error, bad RURI, bad message,
-       etc). When a forward failure occurs, no SIP request is
-       relayed and therefore no negative reply or timeout will
-       show up on the failure_route (if one is set). It applies
-       only when the transaction is created. By default one
-       negative reply is sent. Useful if you want to implement a
-       serial forking in case of failure.
+     * 0x02 - do not internally generate and send a "477 Send
+       failed (477/TM)" SIP reply in case of a global forwarding
+       failure (i.e. forwarding for each branch has failed due to
+       internal errors, bad R-URI, bad message, lack of network
+       reachability, etc.).
+       This flag only applies if the transaction was not
+       previously created by t_newtran(). When a global forwarding
+       failure occurs, no SIP request is relayed and therefore no
+       negative SIP reply or timeout will show up on the
+       failure_route, if one is set.
+       Useful if you want to implement a failover logic for when
+       none of the currently created branches can be forwarded to.
      * 0x04 - disable the DNS failover for the transaction. Only
        first IP will be used. It disable the failover both at
        transaport and transaction level.
@@ -693,14 +688,14 @@ if (!t_relay()) {
 1.4.2.  t_relay(proto:host:port,[flags])
 
    Relay a message statefully to a fixed destination. The
-   destination is specified as "[proto:]host[:port]". If a
-   destination URI "$du" for this message was set before the
+   destination is specified as “[proto:]host[:port]”. If a
+   destination URI “$du” for this message was set before the
    function is called then this value will be used as the
    destination instead of the function parameter.
 
    The function may take as parameter an optional set of flags for
    controlling the internal behaviour - for details see the above
-   "t_relay([flags])" function.
+   “t_relay([flags])” function.
 
    This functions can be used from REQUEST_ROUTE, FAILURE_ROUTE.
 
@@ -761,16 +756,19 @@ t_reply("404", "Use $rU not found");
 1.4.5.  t_newtran()
 
    Creates the SIP transaction for the currently processed SIP
-   requests. Basically you switch to a stateful processing from
-   this point furhter, with automatic detection of retransmission
-   and auto sending of 100 Trying reply on INVITEs.
+   request, thus switching to stateful processing. For INVITE
+   requests, a 100 Trying reply will be immediately sent, unless
+   auto_100trying is disabled. Once a SIP transaction is created,
+   calling t_newtran() for retransmitted requests will end the
+   OpenSIPS script execution, with the lastly sent reply being
+   retransmitted upstream.
 
    This function can be used from REQUEST_ROUTE.
 
    Example 1.24. t_newtran usage
 ...
 t_newtran();  # 100 Trying is fired here
-xlog("doing my complicated routing logic");
+xlog("doing my complicated routing logic\n");
 ....
 t_relay(); # send the call further
 ...
@@ -813,7 +811,7 @@ if ( is_method("CANCEL") ) {
 
 1.4.7.  t_check_status(re)
 
-   Returns true if the regualr expression "re" match the reply
+   Returns true if the regualr expression “re” match the reply
    code of the response message as follows:
      * in routing block - the code of the last sent reply.
      * in on_reply block - the code of the current received reply.
@@ -835,7 +833,7 @@ if (t_check_status("(487)|(408)")) {
    Returns true if all or last (depending of the parameter)
    reply(es) were local generated (and not received).
 
-   Parameter may be "all" or "last".
+   Parameter may be “all” or “last”.
 
    This function can be used from REQUEST_ROUTE, BRANCH_ROUTE,
    FAILURE_ROUTE and ONREPLY_ROUTE.
@@ -921,7 +919,7 @@ ydomain.net","ALICE sip:userA@mydomain.net","text/plain Hello Alice!"))
    new branch (good for services such as forward_on_no_reply) or
    send a final reply on your own (good for example for message
    silo, which received a negative reply from upstream and wants
-   to tell upstream "202 I will take care of it").
+   to tell upstream “202 I will take care of it”).
 
    As not all functions are available from failure route, please
    check the documentation for each function to see the
@@ -1087,7 +1085,7 @@ t_add_hdrs("X-origin: 1.1.1.1\r\n");
 
    The function may take as parameter an optional set of flags for
    controlling the internal behaviour - for description see the
-   above "t_relay([flags])" function. Note that only 0x4 is
+   above “t_relay([flags])” function. Note that only 0x4 is
    applicable here.
 
    This functions can be used from REQUEST_ROUTE.
@@ -1103,7 +1101,7 @@ t_replicate("sip:1.2.3.4","0x4");
 
    Write via FIFO file or UNIX socket a lot of information
    regarding the request. Which information should be written may
-   be control via the "tw_append" parameter.
+   be control via the “tw_append” parameter.
 
    This functions can be used from REQUEST_ROUTE, FAILURE_ROUTE
    and BRANCH_ROUTE.
@@ -1194,13 +1192,13 @@ t_flush_flags();
    Parameters:
      * method - request method
      * RURI - request SIP URI
-     * NEXT HOP - next hop SIP URI (OBP); use "." if no value.
+     * NEXT HOP - next hop SIP URI (OBP); use “.” if no value.
      * socket - local socket to be used for sending the request;
-       use "." if no value.
+       use “.” if no value.
      * headers - set of additional headers to be added to the
-       request; at least "From" and "To" headers must be specify)
+       request; at least “From” and “To” headers must be specify)
      * body - (optional, may not be present) request body (if
-       present, requires the "Content-Type" and "Content-length"
+       present, requires the “Content-Type” and “Content-length”
        headers)
 
 1.6.2.  t_uac_cancel
@@ -1230,15 +1228,15 @@ t_flush_flags();
        format)
      * to_tag - To tag to be added to TO header
      * new_headers - extra headers to be appended to the reply;
-       use a dot (".") char only if there are no headers;
+       use a dot (“.”) char only if there are no headers;
      * body - (optional, may not be present) reply body (if
-       present, requires the "Content-Type" and "Content-length"
+       present, requires the “Content-Type” and “Content-length”
        headers)
 
 1.7. Exported statistics
 
    Exported statistics are listed in the next sections. All
-   statistics except "inuse_transactions" can be reset.
+   statistics except “inuse_transactions” can be reset.
 
 1.7.1. received_replies
 
@@ -1296,20 +1294,115 @@ Chapter 2. Developer Guide
 
    Meaning of the parameters is as follows:
      * import_structure - Pointer to the import structure - see
-       "struct tm_binds" in modules/tm/tm_load.h
+       “struct tm_binds” in modules/tm/tm_load.h
 
 Chapter 3. Frequently Asked Questions
 
    3.1.
 
-   What happened with old cancel_call() function
+       What happened with old cancel_call() function
 
-   The function was replace (as functionality) by
-   cancel_branch("a") - cancel all braches.
+       The function was replace (as functionality) by
+       cancel_branch("a") - cancel all braches.
 
    3.2.
 
-   How can I report a bug?
+       How can I report a bug?
 
-   Please follow the guidelines provided at:
-   https://github.com/OpenSIPS/opensips/issues.
+       Please follow the guidelines provided at:
+       https://github.com/OpenSIPS/opensips/issues.
+
+Chapter 4. Contributors
+
+4.1. By Commit Statistics
+
+   Table 4.1. Top contributors by DevScore^(1), authored
+   commits^(2) and lines added/removed^(3)
+     Name DevScore Commits Lines ++ Lines --
+   1. Bogdan-Andrei Iancu (@bogdan-iancu) 974 545 19364 15484
+   2. Jiri Kuthan (@jiriatipteldotorg) 545 198 18723 11167
+   3. Jan Janak (@janakj) 160 76 6462 1840
+   4. Andrei Pelinescu-Onciul 147 105 2447 1210
+   5. Liviu Chircu (@liviuchircu) 57 40 882 543
+   6. Daniel-Constantin Mierla (@miconda) 43 37 322 166
+   7. Razvan Crainea (@razvancrainea) 42 33 540 179
+   8. Anca Vamanu 38 19 778 651
+   9. Vlad Paiu (@vladpaiu) 25 22 169 55
+   10. Henning Westerholt (@henningw) 24 19 122 184
+
+   All remaining contributors: Dan Pascu (@danpascu), Ovidiu Sas
+   (@ovidiusas), Juha Heinanen (@juha-h), Ionut Ionita
+   (@ionutrazvanionita), Maksym Sobolyev (@sobomax), Raphael
+   Coeffic, Nils Ohlmeier, Klaus Darilion, Andreas Granig, Elias
+   Baixas, Marcus Hunger, Christophe Sollet (@csollet), Jeffrey
+   Magder, Ezequiel Lovelle, Saúl Ibarra Corretgé (@saghul),
+   Elena-Ramona Modroiu, John Riordan, Julián Moreno Patiño,
+   Andrei Dragus, Jesus Rodrigues, Konstantin Bokarius, Aron
+   Podrigal, Anonymous, Dusan Klinec, Mark Dalby, Walter Doekes
+   (@wdoekes), Nick Altmann (@nikbyte), Edson Gellert Schubert,
+   Ingo Wolfsberger, Daniel Hsueh.
+
+   (1) DevScore = author_commits + author_lines_added /
+   (project_lines_added / project_commits) + author_lines_deleted
+   / (project_lines_deleted / project_commits)
+
+   (2) including any documentation-related commits, excluding
+   merge commits. Regarding imported patches/code, we do our best
+   to count the work on behalf of the proper owner, as per the
+   "fix_authors" and "mod_renames" arrays in
+   opensips/doc/build-contrib.sh. If you identify any
+   patches/commits which do not get properly attributed to you,
+   please submit a pull request which extends "fix_authors" and/or
+   "mod_renames".
+
+   (3) ignoring whitespace edits, renamed files and auto-generated
+   files
+
+4.2. By Commit Activity
+
+   Table 4.2. Most recently active contributors^(1) to this module
+                      Name                   Commit Activity
+   1.  Liviu Chircu (@liviuchircu)         Jan 2013 - May 2019
+   2.  Bogdan-Andrei Iancu (@bogdan-iancu) Nov 2001 - Apr 2019
+   3.  Aron Podrigal                       Nov 2018 - Nov 2018
+   4.  Razvan Crainea (@razvancrainea)     Jul 2010 - Oct 2018
+   5.  Vlad Paiu (@vladpaiu)               Jun 2011 - May 2016
+   6.  Ionut Ionita (@ionutrazvanionita)   Nov 2014 - Apr 2016
+   7.  Julián Moreno Patiño                Feb 2016 - Feb 2016
+   8.  Nick Altmann (@nikbyte)             Jan 2016 - Jan 2016
+   9.  Ovidiu Sas (@ovidiusas)             Apr 2008 - Jan 2016
+   10. Dusan Klinec                        Dec 2015 - Dec 2015
+
+   All remaining contributors: Ezequiel Lovelle, Walter Doekes
+   (@wdoekes), Christophe Sollet (@csollet), Maksym Sobolyev
+   (@sobomax), Saúl Ibarra Corretgé (@saghul), Anonymous, Mark
+   Dalby, Anca Vamanu, Andrei Dragus, John Riordan, Dan Pascu
+   (@danpascu), Henning Westerholt (@henningw), Klaus Darilion,
+   Daniel-Constantin Mierla (@miconda), Konstantin Bokarius, Edson
+   Gellert Schubert, Jesus Rodrigues, Marcus Hunger, Juha Heinanen
+   (@juha-h), Jeffrey Magder, Elias Baixas, Daniel Hsueh, Andreas
+   Granig, Elena-Ramona Modroiu, Ingo Wolfsberger, Andrei
+   Pelinescu-Onciul, Jan Janak (@janakj), Jiri Kuthan
+   (@jiriatipteldotorg), Raphael Coeffic, Nils Ohlmeier.
+
+   (1) including any documentation-related commits, excluding
+   merge commits
+
+Chapter 5. Documentation
+
+5.1. Contributors
+
+   Last edited by: Liviu Chircu (@liviuchircu), Bogdan-Andrei
+   Iancu (@bogdan-iancu), Razvan Crainea (@razvancrainea), Nick
+   Altmann (@nikbyte), Ovidiu Sas (@ovidiusas), Vlad Paiu
+   (@vladpaiu), Anca Vamanu, Henning Westerholt (@henningw), Klaus
+   Darilion, Daniel-Constantin Mierla (@miconda), Konstantin
+   Bokarius, Edson Gellert Schubert, Dan Pascu (@danpascu), Juha
+   Heinanen (@juha-h), Elena-Ramona Modroiu, Jan Janak (@janakj),
+   Jiri Kuthan (@jiriatipteldotorg).
+
+   doc copyrights:
+
+   Copyright © 2005-2008 Voice Sistem SRL
+
+   Copyright © 2003 FhG FOKUS

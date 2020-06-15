@@ -248,6 +248,12 @@ static int mod_init(void)
 		connect_poll_interval = 20;
 	}
 
+	if (connection_timeout > curl_timeout) {
+		LM_WARN("'connection_timeout' must be less than or equal "
+		        "to 'curl_timeout'! setting it to %ld...\n", curl_timeout);
+		connection_timeout = curl_timeout;
+	}
+
 	lock_init(&thread_lock);
 
 	curl_global_init_mem(CURL_GLOBAL_ALL,
@@ -342,7 +348,7 @@ static int w_rest_post(struct sip_msg *msg, char *gp_url, char *gp_body,
 		return -1;
 	}
 
-	return rest_post_method(msg, url.s, body.s, ctype.s, (pv_spec_p)body_pv,
+	return rest_post_method(msg, url.s, &body, &ctype, (pv_spec_p)body_pv,
 	                        (pv_spec_p)ctype_pv, (pv_spec_p)code_pv);
 }
 
@@ -409,6 +415,7 @@ static int w_async_rest_get(struct sip_msg *msg, async_resume_module **resume_f,
 		*resume_param = NULL;
 		*resume_f = NULL;
 		/* keep default async status of NO_IO */
+		pkg_free(param);
 		return -1;
 
 	/* no need for async - transfer already completed! */
@@ -472,7 +479,7 @@ static int w_async_rest_post(struct sip_msg *msg, async_resume_module **resume_f
 	}
 	memset(param, '\0', sizeof *param);
 
-	read_fd = start_async_http_req(msg, REST_CLIENT_POST, url.s, body.s, ctype.s,
+	read_fd = start_async_http_req(msg, REST_CLIENT_POST, url.s, &body, &ctype,
 				param, &param->body, ctype_pv ? &param->ctype : NULL);
 
 	/* error occurred; no transfer done */

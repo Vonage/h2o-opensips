@@ -89,7 +89,6 @@ int lookup(struct sip_msg* _m, char* _t, char* _f, char* _s)
 	regex_t ua_re;
 	int regexp_flags = 0;
 	regmatch_t ua_match;
-	pv_value_t val;
 	int_str istr;
 	str sip_instance = {0,0},call_id = {0,0};
 
@@ -164,18 +163,12 @@ int lookup(struct sip_msg* _m, char* _t, char* _f, char* _s)
 
 
 	if (_s) {
-		if (pv_get_spec_value( _m, (pv_spec_p)_s, &val)!=0) {
-			LM_ERR("failed to get PV value\n");
+		if (fixup_get_svalue(_m, (gparam_p)_s, &uri) != 0) {
+			LM_ERR("failed to get a string value for the 'AoR' parameter\n");
 			return -1;
 		}
-		if ( (val.flags&PV_VAL_STR)==0 ) {
-			LM_ERR("PV vals is not string\n");
-			return -1;
-		}
-		uri = val.rs;
 	} else {
-		if (_m->new_uri.s) uri = _m->new_uri;
-		else uri = _m->first_line.u.request.uri;
+		uri = *GET_RURI(_m);
 	}
 
 	if (extract_aor(&uri, &aor,&sip_instance,&call_id) < 0) {
@@ -672,22 +665,17 @@ out_found_unlock:
 int is_ip_registered(struct sip_msg* _m, char* _d, char* _a, char *_out_pv)
 {
 	str aor;
-	str host, pv_host={NULL, 0};
+	str pv_host={NULL, 0};
 	struct sip_uri tmp_uri;
 	str uri;
-
 	char is_avp=1;
-
 	udomain_t* ud = (udomain_t*)_d;
-
 	urecord_t* r;
-
 	ucontact_t *c;
-
 	struct usr_avp *avp;
 	pv_spec_p spec = (pv_spec_p)_out_pv;
 	pv_value_t val;
-
+	struct ip_addr *ipp, ip;
 
 	if (msg_aor_parse(_m, _a, &aor)) {
 		LM_ERR("failed to parse!\n");
@@ -724,32 +712,54 @@ int is_ip_registered(struct sip_msg* _m, char* _d, char* _a, char *_out_pv)
 			uri = c->received;
 		else
 			uri = c->c;
+
+		/* extract the IP from contact */
 		if (parse_uri(uri.s, uri.len, &tmp_uri) < 0) {
 			LM_ERR("contact [%.*s] is not valid! Will not store it!\n",
 				  uri.len, uri.s);
 		}
-		host = tmp_uri.host;
-
-		if (!is_avp) {
-			if (pv_host.len == host.len
-				&& !memcmp(host.s, pv_host.s, pv_host.len))
-				goto out_unlock_found;
-
-			/* skip the part with avp */
+		if ( (ipp=str2ip(&tmp_uri.host))==NULL &&
+		(ipp=str2ip6(&tmp_uri.host))==NULL ) {
+			LM_ERR("failed to get IP from contact/received <%.*s>, skipping\n",
+				tmp_uri.host.len, tmp_uri.host.s);
 			continue;
 		}
+		ip = *ipp;
 
-		avp = NULL;
-		while ((avp=search_first_avp(spec->pvp.pvn.u.isname.type,
-					spec->pvp.pvn.u.isname.name.n, (int_str*)&pv_host,avp))) {
-			if (!(avp->flags&AVP_VAL_STR)) {
-				LM_NOTICE("avp value should be string\n");
+		if (!is_avp) {
+
+			/* convert the param IP to ip_addr too*/
+			if ( (ipp=str2ip(&pv_host))==NULL &&
+			(ipp=str2ip6(&pv_host))==NULL ) {
+				LM_ERR("param IP  <%.*s> is not valid, skipping\n",
+					pv_host.len, pv_host.s);
 				continue;
 			}
 
-			if (pv_host.len == host.len
-					&& !memcmp(host.s, pv_host.s, pv_host.len))
+			if (ip_addr_cmp(&ip, ipp))
 				goto out_unlock_found;
+
+		} else {
+
+			avp = NULL;
+			while ((avp=search_first_avp(spec->pvp.pvn.u.isname.type,
+					spec->pvp.pvn.u.isname.name.n, (int_str*)&pv_host,avp))) {
+				if (!(avp->flags&AVP_VAL_STR)) {
+					LM_NOTICE("avp value should be string\n");
+					continue;
+				}
+
+				/* convert the param IP to ip_addr too*/
+				if ( (ipp=str2ip(&pv_host))==NULL &&
+				(ipp=str2ip6(&pv_host))==NULL ) {
+					LM_ERR("param IP  <%.*s> is not valid, skipping\n",
+						pv_host.len, pv_host.s);
+					continue;
+				}
+
+				if (ip_addr_cmp(&ip, ipp))
+					goto out_unlock_found;
+			}
 		}
 	}
 

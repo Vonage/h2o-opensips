@@ -628,7 +628,14 @@ inline static int _hep_write_on_socket(struct tcp_connection *c, int fd,
 
 	lock_get(&c->write_lock);
 	if (hep_async) {
-		n=async_tsend_stream(c,fd,buf,len, hep_async_local_write_timeout);
+		/*
+		 * if there is any data pending to write, we have to wait for those chunks
+		 * to be sent, otherwise we will completely break the messages' order
+		 */
+		if (((struct hep_data*)c->proto_data)->async_chunks_no)
+			n = add_write_chunk(c, buf, len, 0);
+		else
+			n = async_tsend_stream(c,fd,buf,len, hep_async_local_write_timeout);
 	} else {
 		n = tsend_stream(fd, buf, len, hep_send_timeout);
 	}
@@ -966,6 +973,8 @@ static inline int hep_handle_req(struct tcp_req *req,
 			 * we can free it now */
 			pkg_free(req);
 		}
+
+		con->msg_attempts = 0;
 
 		if (size) {
 			memmove(req->buf, req->parsed, size);
