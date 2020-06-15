@@ -53,7 +53,6 @@
 #include "../../script_var.h"
 #include "../../mem/mem.h"
 #include "../../mi/mi.h"
-#include "../tm/tm_load.h"
 #include "../rr/api.h"
 #include "../../bin_interface.h"
 #include "../clusterer/api.h"
@@ -235,7 +234,7 @@ static param_export_t mod_params[]={
 	{ "dlg_match_mode",        INT_PARAM, &seq_match_mode           },
 	{ "db_url",                STR_PARAM, &db_url.s                 },
 	{ "db_mode",               INT_PARAM, &dlg_db_mode              },
-	{ "table_name",            STR_PARAM, &dialog_table_name        },
+	{ "table_name",            STR_PARAM, &dialog_table_name.s      },
 	{ "dlg_id_column",         STR_PARAM, &dlg_id_column.s          },
 	{ "call_id_column",        STR_PARAM, &call_id_column.s         },
 	{ "from_uri_column",       STR_PARAM, &from_uri_column.s        },
@@ -487,8 +486,9 @@ static int fixup_get_profile3(void** param, int param_no)
 		ret = fixup_pvar(param);
 		if (ret<0) return ret;
 		sp = (pv_spec_t*)(*param);
-		if (sp->type!=PVT_AVP && sp->type!=PVT_SCRIPTVAR) {
-			LM_ERR("return must be an AVP or SCRIPT VAR!\n");
+		if (!pv_is_w(sp)) {
+			LM_ERR("'size' must be a writable pvar! (given: %d)\n",
+			       pv_type(sp->type));
 			return E_SCRIPT;
 		}
 
@@ -560,8 +560,9 @@ static int fixup_dlg_fval(void** param, int param_no)
 		ret = fixup_pvar(param);
 		if (ret<0) return ret;
 		sp = (pv_spec_t*)(*param);
-		if (sp->type!=PVT_AVP && sp->type!=PVT_SCRIPTVAR) {
-			LM_ERR("return must be an AVP or SCRIPT VAR!\n");
+		if (!pv_is_w(sp)) {
+			LM_ERR("output pvar must be writable! (given: %d)\n",
+			       pv_type(sp->type));
 			return E_SCRIPT;
 		}
 	}
@@ -782,15 +783,15 @@ static int mod_init(void)
 
 	/* we are only interested in these parameters if the cachedb url was defined */
 	if (cdb_url.s) {
+		cdb_val_prefix.len = strlen(cdb_val_prefix.s);
+		cdb_noval_prefix.len = strlen(cdb_noval_prefix.s);
+		cdb_size_prefix.len = strlen(cdb_size_prefix.s);
 		cdb_url.len = strlen(cdb_url.s);
+
 		if (init_cachedb_utils() <0) {
 			LM_ERR("cannot init cachedb utils\n");
 			return -1;
 		}
-
-		cdb_val_prefix.len = strlen(cdb_val_prefix.s);
-		cdb_noval_prefix.len = strlen(cdb_noval_prefix.s);
-		cdb_size_prefix.len = strlen(cdb_size_prefix.s);
 	}
 
 	/* allocate a slot in the processing context */
@@ -961,10 +962,8 @@ static int mod_init(void)
 			LM_ERR("failed to initialize the DB support\n");
 			return -1;
 		}
-		run_load_callbacks();
 	}
 
-	mark_dlg_loaded_callbacks_run();
 	destroy_cachedb(0);
 	
 	return 0;
@@ -1024,9 +1023,6 @@ static void mod_destroy(void)
 static int w_create_dialog(struct sip_msg *req)
 {
 	struct cell *t;
-	/* is the dialog already created? */
-	if (get_current_dialog()!=NULL)
-		return 1;
 
 	t = d_tmb.t_gett();
 	if (dlg_create_dialog( (t==T_UNDEFINED)?NULL:t, req,0)!=0)
@@ -1037,7 +1033,6 @@ static int w_create_dialog(struct sip_msg *req)
 
 static int w_create_dialog2(struct sip_msg *req,char *param)
 {
-	struct dlg_cell *dlg;
 	struct cell *t;
 	str res = {0,0};
 	int flags;
@@ -1050,18 +1045,8 @@ static int w_create_dialog2(struct sip_msg *req,char *param)
 
 	flags = parse_create_dlg_flags(res);
 
-	/* is the dialog already created? */
-	if ( (dlg=get_current_dialog())!=NULL  )
-	{
-		/*Clear current flags before setting new ones*/
-		dlg->flags &= ~(DLG_FLAG_PING_CALLER | DLG_FLAG_PING_CALLEE | 
-		DLG_FLAG_BYEONTIMEOUT | DLG_FLAG_REINVITE_PING_CALLER | DLG_FLAG_REINVITE_PING_CALLEE);
-		dlg->flags |= flags;
-		return 1;
-	}
-
 	t = d_tmb.t_gett();
-	if (dlg_create_dialog( (t==T_UNDEFINED)?NULL:t, req,flags)!=0)
+	if (dlg_create_dialog( (t==T_UNDEFINED)?NULL:t, req, flags)!=0)
 		return -1;
 
 	return 1;
@@ -1254,11 +1239,7 @@ static int w_get_profile_size(struct sip_msg *msg, char *profile,
 	pv_elem_t *pve;
 	str val_s;
 	pv_spec_t *sp_dest;
-	unsigned int size;
-	int_str res;
-	int avp_name;
-	unsigned short avp_type;
-	script_var_t * sc_var;
+	pv_value_t size;
 
 	pve = (pv_elem_t *)value;
 	sp_dest = (pv_spec_t *)result;
@@ -1269,41 +1250,15 @@ static int w_get_profile_size(struct sip_msg *msg, char *profile,
 			LM_WARN("cannot get string for value\n");
 			return -1;
 		}
-		size = get_profile_size( (struct dlg_profile_table*)profile ,&val_s );
+		size.ri = get_profile_size( (struct dlg_profile_table*)profile ,&val_s );
 	} else {
-		size = get_profile_size( (struct dlg_profile_table*)profile, NULL );
+		size.ri = get_profile_size( (struct dlg_profile_table*)profile, NULL );
 	}
 
-	switch (sp_dest->type) {
-		case PVT_AVP:
-			if (pv_get_avp_name( msg, &(sp_dest->pvp), &avp_name,
-			&avp_type)!=0){
-				LM_CRIT("BUG in getting AVP name\n");
-				return -1;
-			}
-			res.n = size;
-			if (add_avp(avp_type, avp_name, res)<0){
-				LM_ERR("cannot add AVP\n");
-				return -1;
-			}
-			break;
-
-		case PVT_SCRIPTVAR:
-			if(sp_dest->pvp.pvn.u.dname == 0){
-				LM_ERR("cannot find svar name\n");
-				return -1;
-			}
-			res.n = size;
-			sc_var = (script_var_t *)sp_dest->pvp.pvn.u.dname;
-			if(!set_var_value(sc_var, &res, 0)){
-				LM_ERR("cannot set svar\n");
-				return -1;
-			}
-			break;
-
-		default:
-			LM_CRIT("BUG: invalid pvar type\n");
-			return -1;
+	size.flags = PV_TYPE_INT|PV_VAL_INT;
+	if (pv_set_value(msg, sp_dest, 0, &size) != 0) {
+		LM_ERR("failed to set the output profile size!\n");
+		return -1;
 	}
 
 	return 1;
@@ -1379,55 +1334,25 @@ int w_store_dlg_value(struct sip_msg *msg, char *name, char *val)
 int w_fetch_dlg_value(struct sip_msg *msg, char *name, char *result)
 {
 	struct dlg_cell *dlg;
-	str val;
 
 	pv_spec_t *sp_dest;
-	int_str res;
-	int avp_name;
-	unsigned short avp_type;
-	script_var_t * sc_var;
+	pv_value_t value;
 
 	sp_dest = (pv_spec_t *)result;
 
 	if ( (dlg=get_current_dialog())==NULL )
 		return -1;
 
-	if (fetch_dlg_value( dlg, (str*)name, &val, 0) ) {
+	if (fetch_dlg_value( dlg, (str*)name, &value.rs, 0) ) {
 		LM_DBG("failed to fetch dialog value <%.*s>\n",
 			((str*)name)->len, ((str*)name)->s);
 		return -1;
 	}
 
-	switch (sp_dest->type) {
-		case PVT_AVP:
-			if (pv_get_avp_name( msg, &(sp_dest->pvp), &avp_name,
-			&avp_type)!=0){
-				LM_CRIT("BUG in getting AVP name\n");
-				return -1;
-			}
-			res.s = val;
-			if (add_avp(avp_type|AVP_VAL_STR, avp_name, res)<0){
-				LM_ERR("cannot add AVP\n");
-				return -1;
-			}
-			break;
-
-		case PVT_SCRIPTVAR:
-			if(sp_dest->pvp.pvn.u.dname == 0){
-				LM_ERR("cannot find svar name\n");
-				return -1;
-			}
-			res.s = val;
-			sc_var = (script_var_t *)sp_dest->pvp.pvn.u.dname;
-			if(!set_var_value(sc_var, &res, VAR_VAL_STR)){
-				LM_ERR("cannot set svar\n");
-				return -1;
-			}
-			break;
-
-		default:
-			LM_CRIT("BUG: invalid pvar type\n");
-			return -1;
+	value.flags = PV_VAL_STR;
+	if (pv_set_value(msg, sp_dest, 0, &value) != 0) {
+		LM_ERR("failed to set the fetched dlg value!\n");
+		return -1;
 	}
 
 	return 1;
@@ -1735,12 +1660,6 @@ int pv_set_dlg_timeout(struct sip_msg *msg, pv_param_t *param,
 
 		dlg_unlock_dlg(dlg);
 
-		if (db_update)
-			update_dialog_timeout_info(dlg);
-
-		if (dialog_replicate_cluster)
-			replicate_dialog_updated(dlg);
-
 		if (timer_update) {
 			switch ( update_dlg_timer(&dlg->tl, timeout) ) {
 			case -1:
@@ -1755,11 +1674,17 @@ int pv_set_dlg_timeout(struct sip_msg *msg, pv_param_t *param,
 			}
 		}
 
+		if (db_update)
+			update_dialog_timeout_info(dlg);
+
+		if (dialog_replicate_cluster)
+			replicate_dialog_updated(dlg);
+
 	} else if (current_processing_ctx) {
 		/* store it until we match the dialog */
 		ctx_timeout_set( timeout );
 	} else {
-		LM_CRIT("BUG - no proicessing context found !\n");
+		LM_CRIT("BUG - no processing context found!\n");
 		return -1;
 	}
 

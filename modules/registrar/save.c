@@ -728,7 +728,6 @@ int save_aux(struct sip_msg* _m, str* forced_binding, char* _d, char* _f, char* 
 	int st;
 	str uri;
 	str flags_s;
-	pv_value_t val;
 
 	rerrno = R_FINE;
 	memset( &sctx, 0 , sizeof(sctx));
@@ -818,15 +817,10 @@ int save_aux(struct sip_msg* _m, str* forced_binding, char* _d, char* _f, char* 
 	get_act_time();
 
 	if (_s) {
-		if (pv_get_spec_value( _m, (pv_spec_p)_s, &val)!=0) {
+		if (fixup_get_svalue( _m, (gparam_p)_s, &uri)!=0) {
 			LM_ERR("failed to get PV value\n");
 			goto return_minus_one;
 		}
-		if ( (val.flags&PV_VAL_STR)==0 ) {
-			LM_ERR("PV vals is not string\n");
-			goto return_minus_one;
-		}
-		uri = val.rs;
 	} else {
 		uri = get_to(_m)->uri;
 	}
@@ -888,6 +882,7 @@ int save(struct sip_msg* _m, char* _d, char* _f, char* _s)
 	char forced_binding_buf[MAX_FORCED_BINDING_LEN];
 	str forced_binding = {NULL, 0};
 	str *binding_uri;
+	str path_bk;
 
 	if(_m->first_line.type != SIP_REPLY)
 		return save_aux(_m, NULL, _d, _f, _s);
@@ -913,6 +908,14 @@ int save(struct sip_msg* _m, char* _d, char* _f, char* _s)
 	if (parse_message(msg) < 0) return -1;
 	if (check_contacts(msg, &st) > 0) return -1;
 
+	/* detach the path vec from the msg as it is allocated in shm, and all
+	 * the parse/set ops (done below by save_aux) assume it is in pkg */
+	path_bk = msg->path_vec;
+	msg->path_vec.s = NULL;
+	msg->path_vec.len = 0;
+
+	ret = -1;
+
 	/* msg - request
 	   _m  - reply
 	*/
@@ -924,13 +927,13 @@ int save(struct sip_msg* _m, char* _d, char* _f, char* _s)
 			if (msg->expires && ((exp_body_t*)(msg->expires->parsed))->valid) {
 				requested_exp = ((exp_body_t*)(msg->expires->parsed))->val;
 			} else {
-				LM_WARN("No expired defined\n");
+				requested_exp = default_expires;
 			}
 		} else {
 			if (str2int(&(request_c->expires->body), (unsigned int*)&requested_exp)<0) {
 				LM_ERR("unable to get expires from [%.*s]\n",
 					request_c->expires->body.len, request_c->expires->body.s);
-				return -1;
+				goto done;
 			}
 		}
 		LM_DBG("Binding received from client [%.*s] with requested expires [%d]\n",
@@ -959,7 +962,7 @@ int save(struct sip_msg* _m, char* _d, char* _f, char* _s)
 							LM_ERR("unable to get expires from [%.*s]\n",
 								_c->expires->body.len,
 								_c->expires->body.s);
-							return -1;
+							goto done;
 						}
 						LM_DBG("Binding received from upper registrar"
 							" [%.*s] with imposed expires [%d]\n",
@@ -986,7 +989,7 @@ int save(struct sip_msg* _m, char* _d, char* _f, char* _s)
 							LM_ERR("forced binding to BIG:"
 								" %d > MAX_FORCED_BINDING_LEN\n",
 								forced_binding.len);
-							return -1;
+							goto done;
 						}
 					}
 				} else {
@@ -1033,7 +1036,11 @@ int save(struct sip_msg* _m, char* _d, char* _f, char* _s)
 	}
 
 done:
+	/* remove whatever was parsed and attached as pkg to the shm cloned req */
 	clean_msg_clone(t->uas.request, t->uas.request, t->uas.end_request);
+	/* free and restore the shm path vec */
+	if (msg->path_vec.s) pkg_free(msg->path_vec.s);
+	msg->path_vec = path_bk;
 
 	return ret;
 }

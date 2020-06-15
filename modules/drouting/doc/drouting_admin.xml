@@ -159,8 +159,8 @@
 	<itemizedlist>
 	<listitem><para>id (string)</para></listitem>
 	<listitem><para>SIP address (SIP URI)</para></listitem>
-	<listitem><para>type (number to allow to group GW based on purpose,
-	like inbound, outbound, etc)</para></listitem>
+	<listitem><para>type (positive integer which allows GWs to be grouped by purpose,
+	e.g. inbound, outbound, etc.)</para></listitem>
 	<listitem>strip value (number of digits) from dialled
 	number<para></para></listitem>
 	<listitem><para>prefix (string) to be added to dialled
@@ -221,7 +221,7 @@
 	<quote>dr_rules</quote>.
 	</para>
 	<para>
-	In DR, a carrier is defined by:
+	In DR, a routing rule is defined by:
 	</para>
 	<itemizedlist>
 	<listitem><para>group (list of numbers) - rules can be grouped (a rule may
@@ -707,8 +707,13 @@ modparam("drouting", "rule_attrs_avp", '$avp(11)')
 	<section>
 		<title><varname>define_blacklist</varname> (str)</title>
 		<para>
-		Defines a blacklist based on a list of GW types - the list will contain
-		the IPs (no port, all protocols) of the GWs with the specified types.
+		Defines a blacklist based on a list of GW types - the blacklist will 
+		be populated with the IPs (no port, all protocols) of the GWs having 
+		the specified types.
+		</para>
+		<para>
+		If partitions are used, prefix the blacklist definition string with 
+		the name of the partition followed by ":" separator.
 		</para>
 		<para>
 		Multiple instances of this param are allowed.
@@ -723,6 +728,8 @@ modparam("drouting", "rule_attrs_avp", '$avp(11)')
 ...
 modparam("drouting", "define_blacklist", 'bl_name= 3,5,25,23')
 modparam("drouting", "define_blacklist", 'list= 4,2')
+modparam("drouting", "define_blacklist", 'pstn:list2 = 5,6')
+modparam("drouting", "define_blacklist", 'pstn:list3 = 7,8')
 ...
 	</programlisting>
 		</example>
@@ -1551,7 +1558,7 @@ if (use_next_gw("my_partition", , "$var(carrier_attrs)")) {
 					<para>
 					<emphasis role='bold'>type</emphasis> (optional) - GW/destination
 					type to be checked; when omitting this parameter or specifying
-					a negative value i.e. "-1", matching will be done against all groups
+					a special value ("-1" or "0"), matching will be done against all types.
 					(in a given partition if <varname>use_partition</varname> parameter is 1; if
 					<varname>use_partitions</varname> is 1 the partition being mandatory at this
 					point, it is not possible to do matching against all the partitions)
@@ -1633,8 +1640,8 @@ if (goes_to_gw("my_partition", "1", , "$var(gw_attrs)")) {
 		<function moreinfo="none">is_from_gw([partition','] [type], [flag], [gw_attrs_pvar])</function>
 		</title>
 		<para>
-		The function checks if the sender of the message (its source IP)
-		is a gateway from a certain group.
+		The function checks if the sender of the message (source IP + source
+		port) is a gateway from a certain group.
 		</para>
 		<para>
 		This function can be used from REQUEST_ROUTE, FAILURE_ROUTE
@@ -1661,7 +1668,7 @@ if (goes_to_gw("my_partition", "1", , "$var(gw_attrs)")) {
 					<para>
 					<emphasis role='bold'>type</emphasis> (optional) - GW/destination
 					type to be checked; when omitting this parameter or specifying
-					a negative value i.e. "-1", matching will be done against all groups
+					a special value ("-1" or "0"), matching will be done against all types.
 					</para>
 				</listitem>
 				<listitem>
@@ -1690,8 +1697,8 @@ if (goes_to_gw("my_partition", "1", , "$var(gw_attrs)")) {
 						</listitem>
 						<listitem>
 							<para>
-							<emphasis role='bold'>'n'</emphasis> (Ignore port) - ignores port
-							number during matching
+							<emphasis role='bold'>'n'</emphasis> (Ignore port) - ignore the
+							source port during matching
 							</para>
 						</listitem>
 						<listitem>
@@ -1714,31 +1721,31 @@ if (goes_to_gw("my_partition", "1", , "$var(gw_attrs)")) {
 		<example>
 		<title><function>is_from_gw</function> usage when <varname>use_partitions</varname> is 0</title>
 		<programlisting format="linespecific">
-...
-if (is_from_gw("3","1") {
+# match the source IP (only) against all gateways
+if (is_from_gw("3", "n")) {
+	...
 }
-...
 </programlisting>
 		</example>
 
 		<example>
 		<title><function>is_from_gw</function> usage when <varname>use_partitions</varname> is 1</title>
 		<programlisting format="linespecific">
-...
-if (is_from_gw("my_partition","3","1") {
+# match the source IP and port against all "outbound" gateways and return its carrier
+if (is_from_gw("outbound", "3", "c")) {
+	...
 }
-...
 </programlisting>
 		</example>
 	</section>
 
 	<section>
 		<title>
-		<function moreinfo="none">dr_is_gw([partition,] src_avp, [type], [flag], [gw_attrs_pvar])</function>
+		<function moreinfo="none">dr_is_gw([partition,] src_pv, [type], [flag], [gw_attrs_pvar])</function>
 		</title>
 		<para>
-		The function checks if the ip address in pvar src_pv is a gateway
-		from a certain group.
+		The function checks if the SIP URI hostname part stored inside the
+		"src_pv" pseudo-variable is a gateway from a certain group.
 		</para>
 		<para>
 		This function can be used from REQUEST_ROUTE, ONREPLY_ROUTE, FAILURE_ROUTE,
@@ -1760,15 +1767,16 @@ if (is_from_gw("my_partition","3","1") {
 				</listitem>
 				<listitem>
 					<para>
-					<emphasis role='bold'>src_avp</emphasis> (mandatory) - avp containing a SIP URI.
-					Does not support other OpenSIPS pseudo-variables.
+					<emphasis role='bold'>src_pv</emphasis> (mandatory) -
+					pseudo-variable containing a SIP URI.  If the URI hostname
+					part is a FQDN, it will be resolved prior to matching.
 					</para>
 				</listitem>
 				<listitem>
 					<para>
 					<emphasis role='bold'>type</emphasis> (optional) - GW/destination
 					type to be checked; when omitting this parameter or specifying
-					a negative value i.e. "-1", matching will be done against all groups
+					a special value ("-1" or "0"), matching will be done against all types.
 					</para>
 				</listitem>
 				<listitem>
@@ -1819,19 +1827,19 @@ if (is_from_gw("my_partition","3","1") {
 		<example>
 		<title><function>dr_is_gw</function> usage when <varname>use_partitions</varname> is 0</title>
 		<programlisting format="linespecific">
-...
-if (dr_is_gw("$avp(uac)","3") {
+# match the SIP URI host within $var(uac) against all gateways
+if (dr_is_gw("$var(uac)", "n")) {
+	...
 }
-...
 </programlisting>
 		</example>
 		<example>
 		<title><function>dr_is_gw</function> usage when <varname>use_partitions</varname> is 1</title>
 		<programlisting format="linespecific">
-...
-if (dr_is_gw("my_partition","$avp(uac)","3") {
+# match the SIP URI host within $var(uac) against all "outbound" gateways
+if (dr_is_gw("outbound", "$avp(uac)", "n")) {
+	...
 }
-...
 </programlisting>
 		</example>
 	</section>

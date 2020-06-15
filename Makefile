@@ -241,6 +241,16 @@ tool-xsltproc:
 		echo "error: docbook.xsl not found (docbook-xsl)"; exit 1; \
 	fi
 
+.PHONY: git-dir
+git-dir:
+	@if [ ! -r .git ]; then \
+		echo "error: Not a git repo! (.git dir not found)"; exit 1; \
+	fi
+
+.PHONY: modules-contrib
+modules-contrib: git-dir
+	@set -e; ./doc/build-contrib.sh $(modules)
+
 .PHONY: modules-readme
 modules-readme: tool-lynx tool-xsltproc
 	@set -e; \
@@ -429,22 +439,17 @@ bin:
 deb-orig-tar: tar
 	mv "$(NAME)-$(RELEASE)_src".tar.gz ../$(NAME)_$(RELEASE).orig.tar.gz
 
-.PHONY: deb-%
-deb-%:
+.PHONY: deb
+deb:
 	rm -rf debian
 	# dpkg-source cannot use links for debian source
-	cp -r packaging/debian/common debian
-	[ "$@" = "deb-common" ] || cp -r packaging/debian/$(@:deb-%=%)/* debian
+	cp -r packaging/debian debian
 	dpkg-buildpackage \
 		-I.git -I.gitignore \
 		-I*.swp -I*~ \
 		-i\\.git\|debian\|^\\.\\w+\\.swp\|lex\\.yy\\.c\|cfg\\.tab\\.\(c\|h\)\|\\w+\\.patch \
 		-rfakeroot -tc $(DEBBUILD_EXTRA_OPTIONS)
 	rm -rf debian
-
-.PHONY: deb
-deb: deb-common
-
 
 .PHONY: sunpkg
 sunpkg:

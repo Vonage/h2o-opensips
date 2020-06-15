@@ -31,7 +31,7 @@
 #include "parser/msg_parser.h"
 
 
-/* The possible values of the status of async operatations (as reported by
+/* The possible values of the status of async operations (as reported by
  * module functions, at start and resume)
  * NOTE: all values in this enum must be negative
  */
@@ -62,7 +62,7 @@ typedef int (async_start_function)
 	(struct sip_msg *msg, struct action* a , int resume_route);
 
 typedef int (async_resume_function)
-	(int *fd, void *param);
+	(int fd, void *param);
 
 extern async_start_function  *async_start_f;
 extern async_resume_function *async_resume_f;

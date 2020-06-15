@@ -411,7 +411,6 @@ parse_err:
 static int get_column_types(cache_entry_t *c_entry, db_val_t *values, int nr_columns)
 {
 	unsigned int i;
-	long long one = 1;
 	db_type_t val_type;
 
 	c_entry->nr_ints = 0;
@@ -425,14 +424,17 @@ static int get_column_types(cache_entry_t *c_entry, db_val_t *values, int nr_col
 			case DB_BIGINT:
 			case DB_DOUBLE:
 				c_entry->nr_ints++;
-				c_entry->column_types &= ~(one << i);
+				c_entry->column_types &= ~(1LL << i);
 				break;
 			case DB_STRING:
 			case DB_STR:
+			case DB_BLOB:
 				c_entry->nr_strs++;
-				c_entry->column_types |= (one << i);
+				c_entry->column_types |= (1LL << i);
 				break;
 			default:
+				LM_ERR("Unsupported type: %d for column: %.*s\n", val_type,
+					c_entry->columns[i]->len, c_entry->columns[i]->s);
 				return -1;
 		}
 	}
@@ -457,6 +459,9 @@ static unsigned int get_cdb_val_size(cache_entry_t *c_entry, db_val_t *values, i
 				break;
 			case DB_STR:
 				len += VAL_STR(values + i).len;
+				break;
+			case DB_BLOB:
+				len += VAL_BLOB(values + i).len;
 				break;
 			default: continue;
 		}
@@ -534,6 +539,9 @@ static int insert_in_cachedb(cache_entry_t *c_entry, db_handlers_t *db_hdls, db_
 			case DB_STR:
 				str_val = VAL_STR(values + i);
 				break;
+			case DB_BLOB:
+				str_val = VAL_BLOB(values + i);
+				break;
 			default: continue;
 		}
 		if (VAL_NULL(values + i))
@@ -560,6 +568,9 @@ static int insert_in_cachedb(cache_entry_t *c_entry, db_handlers_t *db_hdls, db_
 			break;
 		case DB_STR:
 			str_key = VAL_STR(key);
+			break;
+		case DB_BLOB:
+			str_key = VAL_BLOB(key);
 			break;
 		case DB_INT:
 			int_key_buf = sint2str(VAL_INT(key), &int_key_len);
@@ -771,10 +782,8 @@ static int load_entire_table(cache_entry_t *c_entry, db_handlers_t *db_hdls, int
 	}
 	row = RES_ROWS(sql_res);
 	values = ROW_VALUES(row);
-	if (get_column_types(c_entry, values + 1, ROW_N(row) - 1) < 0) {
-		LM_ERR("One ore more SQL columns have an unsupported type\n");
+	if (get_column_types(c_entry, values + 1, ROW_N(row) - 1) < 0)
 		goto error;
-	}
 
 	/* load the rows into the cahchedb */
 	do {
@@ -862,7 +871,7 @@ static int load_key(cache_entry_t *c_entry, db_handlers_t *db_hdls, str key, db_
 		return -2;
 
 	} else if (RES_ROW_N(*sql_res) > 1) {
-		LM_ERR("To many columns returned\n");
+		LM_ERR("SQL query returned multiple rows\n");
 		goto sql_error;
 	}
 
@@ -870,10 +879,8 @@ static int load_key(cache_entry_t *c_entry, db_handlers_t *db_hdls, str key, db_
 	*values = ROW_VALUES(row);
 
 	if (c_entry->nr_ints + c_entry->nr_strs == 0 &&
-		get_column_types(c_entry, *values, ROW_N(row)) < 0) {
-		LM_ERR("SQL column has unsupported type\n");
+		get_column_types(c_entry, *values, ROW_N(row)) < 0)
 		goto sql_error;
-	}
 
 	if (insert_in_cachedb(c_entry, db_hdls, &key_val, *values, 0, ROW_N(row)) < 0)
 		return -1;
@@ -888,26 +895,24 @@ sql_error:
 
 void reload_timer(unsigned int ticks, void *param)
 {
-	cache_entry_t *c_entry;
 	db_handlers_t *db_hdls;
 	str rld_vers_key;
 	int rld_vers = 0;
 
-	for (c_entry = *entry_list, db_hdls = db_hdls_list; c_entry;
-		c_entry = c_entry->next, db_hdls = db_hdls->next) {
-		if (c_entry->on_demand)
+	for (db_hdls = db_hdls_list; db_hdls; db_hdls = db_hdls->next) {
+		if (db_hdls->c_entry->on_demand)
 			continue;
 
-		rld_vers_key.len = c_entry->id.len + 23;
+		rld_vers_key.len = db_hdls->c_entry->id.len + 23;
 		rld_vers_key.s = pkg_malloc(rld_vers_key.len);
 		if (!rld_vers_key.s) {
 			LM_ERR("No more pkg memory\n");
 			return;
 		}
-		memcpy(rld_vers_key.s, c_entry->id.s, c_entry->id.len);
-		memcpy(rld_vers_key.s + c_entry->id.len, "_sql_cacher_reload_vers", 23);
+		memcpy(rld_vers_key.s, db_hdls->c_entry->id.s, db_hdls->c_entry->id.len);
+		memcpy(rld_vers_key.s + db_hdls->c_entry->id.len, "_sql_cacher_reload_vers", 23);
 
-		lock_start_write(c_entry->ref_lock);
+		lock_start_write(db_hdls->c_entry->ref_lock);
 
 		if(db_hdls->cdbf.get_counter(db_hdls->cdbcon,
 			&rld_vers_key, &rld_vers) < 0) {
@@ -916,10 +921,10 @@ void reload_timer(unsigned int ticks, void *param)
 			continue;
 		}
 
-		if (load_entire_table(c_entry, db_hdls, rld_vers) < 0)
-			LM_ERR("Failed to reload table %.*s\n", c_entry->table.len, c_entry->table.s);
+		if (load_entire_table(db_hdls->c_entry, db_hdls, rld_vers) < 0)
+			LM_ERR("Failed to reload table %.*s\n", db_hdls->c_entry->table.len, db_hdls->c_entry->table.s);
 
-		lock_stop_write(c_entry->ref_lock);
+		lock_stop_write(db_hdls->c_entry->ref_lock);
 
 		pkg_free(rld_vers_key.s);
 	}
@@ -928,7 +933,6 @@ void reload_timer(unsigned int ticks, void *param)
 static struct mi_root* mi_reload(struct mi_root *root, void *param)
 {
 	struct mi_node *node;
-	cache_entry_t *c_entry;
 	db_handlers_t *db_hdls;
 	db_val_t *values;
 	db_res_t *sql_res = NULL;
@@ -945,18 +949,17 @@ static struct mi_root* mi_reload(struct mi_root *root, void *param)
 	}
 	entry_id = node->value;
 
-	for (c_entry = *entry_list, db_hdls = db_hdls_list; c_entry;
-		c_entry = c_entry->next, db_hdls = db_hdls->next)
-		if (!memcmp(entry_id.s, c_entry->id.s, entry_id.len))
+	for (db_hdls = db_hdls_list; db_hdls; db_hdls = db_hdls->next)
+		if (!memcmp(entry_id.s, db_hdls->c_entry->id.s, entry_id.len))
 			break;
-	if (!c_entry) {
+	if (!db_hdls) {
 		LM_ERR("Entry %.*s not found\n", entry_id.len, entry_id.s);
-		return init_mi_tree(500, MI_SSTR("ERROR Cache entry not found\n"));
+		return init_mi_tree(500, MI_SSTR("ERROR Cache entry not found"));
 	}
 
 	/* key */
 	node = node->next;
-	if (c_entry->on_demand) {
+	if (db_hdls->c_entry->on_demand) {
 		if (!node || !node->value.len || !node->value.s) {
 			LM_ERR("missing key parameter\n");
 			return init_mi_tree(400, MI_SSTR(MI_MISSING_PARM));
@@ -964,15 +967,15 @@ static struct mi_root* mi_reload(struct mi_root *root, void *param)
 		key = node->value;
 	}
 
-	if (c_entry->on_demand) {
-		src_key.len = c_entry->id.len + key.len;
+	if (db_hdls->c_entry->on_demand) {
+		src_key.len = db_hdls->c_entry->id.len + key.len;
 		src_key.s = pkg_malloc(src_key.len);
 		if (!src_key.s) {
 			LM_ERR("No more shm memory\n");
 			return NULL;
 		}
-		memcpy(src_key.s, c_entry->id.s, c_entry->id.len);
-		memcpy(src_key.s + c_entry->id.len, key.s, key.len);
+		memcpy(src_key.s, db_hdls->c_entry->id.s, db_hdls->c_entry->id.len);
+		memcpy(src_key.s + db_hdls->c_entry->id.len, key.s, key.len);
 
 		lock_get(queries_lock);
 
@@ -985,7 +988,7 @@ static struct mi_root* mi_reload(struct mi_root *root, void *param)
 			lock_get(it->wait_sql_query);
 		}
 
-		rc = load_key(c_entry, db_hdls, key, &values, &sql_res);
+		rc = load_key(db_hdls->c_entry, db_hdls, key, &values, &sql_res);
 		if (rc == 0)
 			db_hdls->db_funcs.free_result(db_hdls->db_con, sql_res);
 
@@ -995,34 +998,34 @@ static struct mi_root* mi_reload(struct mi_root *root, void *param)
 			lock_release(queries_lock);
 
 		if (rc == -1)
-			return init_mi_tree(500, MI_SSTR("ERROR Reloading key from SQL database\n"));
+			return init_mi_tree(500, MI_SSTR("ERROR Reloading key from SQL database"));
 		else if (rc == -2)
-			return init_mi_tree(500, MI_SSTR("ERROR Reloading key from SQL database, key not found\n"));
+			return init_mi_tree(500, MI_SSTR("ERROR Reloading key from SQL database, key not found"));
 
 	} else {
-		rld_vers_key.len = c_entry->id.len + 23;
+		rld_vers_key.len = db_hdls->c_entry->id.len + 23;
 		rld_vers_key.s = pkg_malloc(rld_vers_key.len);
 		if (!rld_vers_key.s) {
 			LM_ERR("No more pkg memory\n");
 			return NULL;
 		}
-		memcpy(rld_vers_key.s, c_entry->id.s, c_entry->id.len);
-		memcpy(rld_vers_key.s + c_entry->id.len, "_sql_cacher_reload_vers", 23);
+		memcpy(rld_vers_key.s, db_hdls->c_entry->id.s, db_hdls->c_entry->id.len);
+		memcpy(rld_vers_key.s + db_hdls->c_entry->id.len, "_sql_cacher_reload_vers", 23);
 
-		lock_start_write(c_entry->ref_lock);
+		lock_start_write(db_hdls->c_entry->ref_lock);
 
 		if (db_hdls->cdbf.add(db_hdls->cdbcon, &rld_vers_key, 1, 0, &rld_vers) < 0) {
 			LM_DBG("Failed to increment reload version integer from cachedb\n");
-			return init_mi_tree(500, MI_SSTR("ERROR Reloading SQL database\n"));
+			return init_mi_tree(500, MI_SSTR("ERROR Reloading SQL database"));
 		}
 		pkg_free(rld_vers_key.s);
 
-		if (load_entire_table(c_entry, db_hdls, rld_vers) < 0) {
+		if (load_entire_table(db_hdls->c_entry, db_hdls, rld_vers) < 0) {
 			LM_DBG("Failed to reload table\n");
-			return init_mi_tree(500, MI_SSTR("ERROR Reloading SQL database\n"));
+			return init_mi_tree(500, MI_SSTR("ERROR Reloading SQL database"));
 		}
 
-		lock_stop_write(c_entry->ref_lock);
+		lock_stop_write(db_hdls->c_entry->ref_lock);
 	}
 
 	return init_mi_tree(200, MI_SSTR(MI_OK_S));
@@ -1133,17 +1136,19 @@ static int mod_init(void)
 static int child_init(int rank)
 {
 	db_handlers_t *db_hdls;
-	cache_entry_t *c_entry;
 
-	for (db_hdls = db_hdls_list, c_entry = *entry_list; db_hdls;
-		db_hdls = db_hdls->next, c_entry = c_entry->next) {
-		db_hdls->cdbcon = db_hdls->cdbf.init(&c_entry->cachedb_url);
+	for (db_hdls = db_hdls_list; db_hdls; db_hdls = db_hdls->next) {
+		db_hdls->cdbcon = db_hdls->cdbf.init(&db_hdls->c_entry->cachedb_url);
 		if (!db_hdls->cdbcon) {
 			LM_ERR("Cannot connect to cachedb from child\n");
 			return -1;
 		}
 
-		if ((db_hdls->db_con = db_hdls->db_funcs.init(&c_entry->db_url)) == 0) {
+		// LM_DBG("DDD Connecting to DB for c_entry id=%.*s url=%.*s\n backpointer to c_entry id=%.*s\n",
+		// 	c_entry->id.len, c_entry->id.s, c_entry->db_url.len, c_entry->db_url.s,
+		// 	db_hdls->c_entry->id.len, db_hdls->c_entry->id.s);
+
+		if ((db_hdls->db_con = db_hdls->db_funcs.init(&db_hdls->c_entry->db_url)) == 0) {
 			LM_ERR("Cannot connect to SQL DB from child\n");
 			return -1;
 		}
@@ -1305,15 +1310,30 @@ static void optimize_cdb_decode(pv_name_fix_t *pv_name)
 		pv_name->col_offset = -1;
 }
 
+static void unlink_from_query_list(struct queried_key *pos)
+{
+	struct queried_key *prev;
+
+	if (pos == *queries_in_progress) {
+		*queries_in_progress = (*queries_in_progress)->next;
+		return;
+	}
+
+	for (prev = *queries_in_progress; prev->next != pos; prev = prev->next) ;
+
+	prev->next = pos->next;
+}
+
 /*  return:
  *  0 - succes
  *  1 - succes, null value in db
  * -1 - error
  * -2 - not found in sql db
  */
-static int on_demand_load(pv_name_fix_t *pv_name, str *cdb_res, str *str_res, int *int_res)
+static int on_demand_load(pv_name_fix_t *pv_name, str *cdb_res, str *str_res,
+							int *int_res)
 {
-	struct queried_key *it, *prev = NULL, *tmp, *new_key;
+	struct queried_key *it, *tmp, *new_key;
 	str src_key;
 	db_res_t *sql_res = NULL;
 	db_val_t *values;
@@ -1321,7 +1341,8 @@ static int on_demand_load(pv_name_fix_t *pv_name, str *cdb_res, str *str_res, in
 	int i, rld_vers_dummy, rc;
 
 	for (i = 0; i < pv_name->c_entry->nr_columns; i++)
-		if (!memcmp((*pv_name->c_entry->columns[i]).s, pv_name->col.s, pv_name->col.len)) {
+		if (!memcmp((*pv_name->c_entry->columns[i]).s, pv_name->col.s,
+			pv_name->col.len)) {
 			pv_name->col_nr = i;
 			break;
 		}
@@ -1355,12 +1376,10 @@ static int on_demand_load(pv_name_fix_t *pv_name, str *cdb_res, str *str_res, in
 				lock_destroy(it->wait_sql_query);
 				lock_dealloc(it->wait_sql_query);
 				/* if this is the last process waiting, delete key from list */
-				if (prev)
-					prev->next = it->next;
-				else
-					*queries_in_progress = it->next;
+				unlink_from_query_list(it);
 				tmp = it;
 				it = it->next;
+				shm_free(tmp->key.s);
 				shm_free(tmp);
 			} else if (it->nr_waiting_procs > 1) {
 				it->nr_waiting_procs--;
@@ -1376,11 +1395,10 @@ static int on_demand_load(pv_name_fix_t *pv_name, str *cdb_res, str *str_res, in
 
 			if (pv_name->last_str == -1)
 				optimize_cdb_decode(pv_name);
+
 			return cdb_val_decode(pv_name, cdb_res, 0, str_res, int_res);
-		} else {
+		} else
 			it = it->next;
-		}
-		prev = it;
 	}
 
 	if (!it) {	/* if key not found in list */
@@ -1396,29 +1414,27 @@ static int on_demand_load(pv_name_fix_t *pv_name, str *cdb_res, str *str_res, in
 		new_key->wait_sql_query = lock_alloc();
 		if (!new_key->wait_sql_query) {
 			LM_ERR("No more memory for wait_sql_query lock\n");
+			shm_free(new_key);
 			lock_release(queries_lock);
 			return -1;
 		}
 		if (!lock_init(new_key->wait_sql_query)) {
 			LM_ERR("Failed to init wait_sql_query lock\n");
+			lock_dealloc(new_key->wait_sql_query);
+			shm_free(new_key);
 			lock_release(queries_lock);
 			return -1;
 		}
-		new_key->next = NULL;
-		if (*queries_in_progress)
-			new_key->next = *queries_in_progress;
+
+		new_key->next = *queries_in_progress;
 		*queries_in_progress = new_key;
 
 		lock_get(new_key->wait_sql_query);
 
 		lock_release(queries_lock);
 
-		rc = load_key(pv_name->c_entry, pv_name->db_hdls, pv_name->key, &values, &sql_res);
-
-		if (rc) {
-			lock_release(new_key->wait_sql_query);
-			return rc;
-		}
+		rc = load_key(pv_name->c_entry, pv_name->db_hdls, pv_name->key, &values,
+				&sql_res);
 
 		lock_get(queries_lock);
 
@@ -1428,12 +1444,15 @@ static int on_demand_load(pv_name_fix_t *pv_name, str *cdb_res, str *str_res, in
 		if (new_key->nr_waiting_procs == 0) {
 			lock_destroy(new_key->wait_sql_query);
 			lock_dealloc(new_key->wait_sql_query);
-			*queries_in_progress = new_key->next;
+			unlink_from_query_list(new_key);
 			shm_free(new_key->key.s);
 			shm_free(new_key);
 		}
 
 		lock_release(queries_lock);
+
+		if (rc < 0)
+			return rc;
 
 		if (VAL_NULL(values + pv_name->col_nr))
 			return 1;
@@ -1446,6 +1465,9 @@ static int on_demand_load(pv_name_fix_t *pv_name, str *cdb_res, str *str_res, in
 				break;
 			case DB_STR:
 				str_res = &(VAL_STR(values + pv_name->col_nr));
+				break;
+			case DB_BLOB:
+				str_res = &(VAL_BLOB(values + pv_name->col_nr));
 				break;
 			case DB_INT:
 				*int_res = VAL_INT(values + pv_name->col_nr);
@@ -1567,11 +1589,9 @@ int pv_get_sql_cached_value(struct sip_msg *msg,  pv_param_t *param, pv_value_t 
 {
 	pv_name_fix_t *pv_name;
 	str name_s;
-	cache_entry_t *it_entries;
 	db_handlers_t *it_db;
 	int rc, rc2, int_res = 0, l = 0;
 	char *ch = NULL;
-	long long one = 1;
 	str str_res = {NULL, 0}, cdb_res = {NULL, 0};
 	int entry_rld_vers;
 
@@ -1599,14 +1619,13 @@ int pv_get_sql_cached_value(struct sip_msg *msg,  pv_param_t *param, pv_value_t 
 	}
 
 	if (!pv_name->c_entry) {
-		for (it_entries = *entry_list, it_db = db_hdls_list; it_entries;
-			it_entries = it_entries->next, it_db = it_db->next)
-			if (!memcmp(it_entries->id.s, pv_name->id.s, pv_name->id.len)) {
-				pv_name->c_entry = it_entries;
+		for (it_db = db_hdls_list; it_db; it_db = it_db->next)
+			if (!memcmp(it_db->c_entry->id.s, pv_name->id.s, pv_name->id.len)) {
+				pv_name->c_entry = it_db->c_entry;
 				pv_name->db_hdls = it_db;
 				break;
 			}
-		if (!it_entries) {
+		if (!it_db) {
 			LM_WARN("Unknown caching id %.*s\n", pv_name->id.len, pv_name->id.s);
 			return pv_get_null(msg, param, res);
 		}
@@ -1677,7 +1696,7 @@ int pv_get_sql_cached_value(struct sip_msg *msg,  pv_param_t *param, pv_value_t 
 		}
 	}
 
-	if ((pv_name->c_entry->column_types & (one << pv_name->col_nr)) != 0) {
+	if ((pv_name->c_entry->column_types & (1LL << pv_name->col_nr)) != 0) {
 		if (pkg_str_resize(&valbuff, str_res.len) != 0) {
 			LM_ERR("failed to alloc buffer\n");
 			goto out_free_null;

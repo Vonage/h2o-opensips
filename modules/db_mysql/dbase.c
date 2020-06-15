@@ -32,10 +32,9 @@
 
 #include <stdio.h>
 #include <string.h>
-#include <mysql/mysql.h>
-#include <mysql/errmsg.h>
-#include <mysql/mysqld_error.h>
-#include <mysql/mysql_version.h>
+#include <mysql.h>
+#include <errmsg.h>
+#include <mysqld_error.h>
 #include "../../mem/mem.h"
 #include "../../dprint.h"
 #include "../../db/db_query.h"
@@ -181,6 +180,10 @@ static inline int wrapper_single_mysql_real_query(const db_con_t *conn,
 		case CR_SERVER_GONE_ERROR:
 		case CR_SERVER_LOST:
 		case CR_COMMANDS_OUT_OF_SYNC:
+			return -1; /* reconnection error -> <0 */
+		case ER_LOCK_DEADLOCK:
+			LM_WARN("server error (%i): %s\n", error,
+				mysql_error(CON_CONNECTION(conn)));
 			return -1; /* reconnection error -> <0 */
 		default:
 			LM_CRIT("driver error (%i): %s\n", error,

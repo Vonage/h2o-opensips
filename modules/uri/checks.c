@@ -199,16 +199,16 @@ int del_uri_param(struct sip_msg* _msg, char* _param, char* _s)
 	}
 
 	if (parse_sip_msg_uri(_msg) < 0) {
-	        LM_ERR("ruri parsing failed\n");
-	        return -1;
+		LM_ERR("ruri parsing failed\n");
+		return -1;
 	}
 
 	parsed_uri = &(_msg->parsed_uri);
 
 	params = parsed_uri->params;
 	if (0 == params.s || 0 == params.len) {
-		LM_WARN("RURI contains no params to delete! Returning...\n");
-		return 0;
+		LM_DBG("RURI contains no params to delete! Returning...\n");
+		return -1;
 	}
 
 	while (params.len) {
@@ -234,6 +234,9 @@ int del_uri_param(struct sip_msg* _msg, char* _param, char* _s)
 
 		if (!str_strcmp(param, &key)) {
 			/* found the param to remove */
+			/* include the leading ';' */
+			param_tok.s--;
+			param_tok.len++;
 			old_uri = *GET_RURI(_msg);
 			new_uri.len = old_uri.len - param_tok.len;
 			new_uri.s = pkg_malloc(new_uri.len);
@@ -242,17 +245,16 @@ int del_uri_param(struct sip_msg* _msg, char* _param, char* _s)
 				return -1;
 			}
 
-			begin_len = param_tok.s - old_uri.s - 1/*remove also the ';'
-													before the param */;
+			begin_len = param_tok.s - old_uri.s;
 			memcpy(new_uri.s, old_uri.s, begin_len);
 
 			end_len = old_uri.len - ((param_tok.s + param_tok.len) - old_uri.s);
 			if (end_len)
-				memcpy(new_uri.s + begin_len, param_tok.s + param_tok.len, end_len+1);
+				memcpy(new_uri.s + begin_len, param_tok.s + param_tok.len, end_len);
 
 			if (set_ruri(_msg, &new_uri) == 1) {
 				pkg_free(new_uri.s);
-				return  0;
+				return  1;
 			} else {
 				pkg_free(new_uri.s);
 				return -1;
@@ -262,7 +264,7 @@ int del_uri_param(struct sip_msg* _msg, char* _param, char* _s)
 
 	LM_DBG("requested key not found in RURI\n");
 
-	return 0;
+	return -1;
 }
 
 /*

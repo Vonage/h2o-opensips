@@ -199,8 +199,7 @@ int add_dest2list(int id, str uri, struct socket_info *sock, int state,
 	/* store uri and attrs strings */
 
 	dp->uri.len = uri.len;
-	if (puri.user.len == 0 && puri.passwd.len == 0 && puri.params.len == 0
-			&& puri.headers.len == 0) {
+	if (puri.user.len == 0 && puri.passwd.len == 0 && puri.headers.len == 0) {
 
 		/* The uri from db is good for ds_select_dst */
 		dp->uri.s = shm_malloc(uri.len + 1 + attrs.len + 1 + description.len + 1);
@@ -214,7 +213,7 @@ int add_dest2list(int id, str uri, struct socket_info *sock, int state,
 	}
 	else {
 		dp->dst_uri.len = uri_typestrlen(puri.type) + 1 + puri.host.len
-						+ (puri.port.len ? puri.port.len + 1 : 0);
+						+ (puri.port.len ? puri.port.len + 1 : 0) + puri.params.len;
 		dp->uri.s = shm_malloc(uri.len+1 + dp->dst_uri.len + 1 + attrs.len+1
 								+ description.len + 1);
 		if(dp->uri.s==NULL){
@@ -234,6 +233,10 @@ int add_dest2list(int id, str uri, struct socket_info *sock, int state,
 		if (puri.port.len) {
 			*(p++) = ':';
 			memcpy(p, puri.port.s, puri.port.len);
+		}
+		if (puri.params.len) {
+			memcpy(p, puri.params.s, puri.params.len);
+			p += puri.params.len;
 		}
 		dp->dst_uri.s[dp->dst_uri.len]='\0';
 	}
@@ -2012,7 +2015,7 @@ int ds_is_in_list(struct sip_msg *_m, gparam_t *gp_ip, gparam_t *gp_port,
 		return -1;
 	}
 
-	if ( (ip=str2ip( &val.rs ))==NULL ) {
+	if ( (ip=str2ip( &val.rs ))==NULL && (ip=str2ip6( &val.rs ))==NULL ) {
 		LM_ERR("IP val is not IP <%.*s>\n",val.rs.len,val.rs.s);
 		return -1;
 	}

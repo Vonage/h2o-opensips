@@ -887,18 +887,20 @@ struct tcp_connection* tcp_conn_new(int sock, union sockaddr_union* su,
 int tcp_conn_send(struct tcp_connection *c)
 {
 	long response[2];
-	int n;
+	int n, fd;
 
 	/* inform TCP main about this new connection */
 	if (c->state==S_CONN_CONNECTING) {
+		/* store the local fd now, before TCP main overwrites it */
+		fd = c->s;
 		response[0]=(long)c;
 		response[1]=ASYNC_CONNECT;
-		n=send_fd(unix_tcp_sock, response, sizeof(response), c->s);
+		n=send_fd(unix_tcp_sock, response, sizeof(response), fd);
 		if (n<=0) {
 			LM_ERR("Failed to send the socket to main for async connection\n");
 			goto error;
 		}
-		close(c->s);
+		close(fd);
 	} else {
 		response[0]=(long)c;
 		response[1]=CONN_NEW;
@@ -1079,6 +1081,11 @@ inline static int handle_tcpconn_ev(struct tcp_connection* tcpconn, int fd_i,
 			tcpconn->state = S_CONN_OK;
 			LM_DBG("Successfully completed previous async connect\n");
 
+			/* now that we completed the async connection, we also need to
+			 * listen for READ events, otherwise these will get lost */
+			if (tcpconn->flags & F_CONN_REMOVED_READ)
+				reactor_add_reader( tcpconn->s, F_TCPCONN, RCT_PRIO_NET, tcpconn);
+
 			goto async_write;
 		} else {
 			/* we're coming from an async write -
@@ -1199,6 +1206,8 @@ inline static int handle_tcp_worker(struct tcp_child* tcp_c, int fd_i)
 			break;
 		case ASYNC_WRITE:
 			tcp_c->busy--;
+			/* fall through*/
+		case ASYNC_WRITE2:
 			if (tcpconn->state==S_CONN_BAD){
 				tcpconn_destroy(tcpconn);
 				break;
@@ -1213,10 +1222,13 @@ inline static int handle_tcp_worker(struct tcp_child* tcp_c, int fd_i)
 		case CONN_EOF:
 			/* WARNING: this will auto-dec. refcnt! */
 			tcp_c->busy--;
-			/* main doesn't listen on it => we don't have to delete it
-			 if (tcpconn->s!=-1)
-				io_watch_del(&io_h, tcpconn->s, -1, IO_FD_CLOSING);
-			*/
+			/* fall through*/
+		case CONN_ERROR2:
+			if ((tcpconn->flags & F_CONN_REMOVED) != F_CONN_REMOVED &&
+				(tcpconn->s!=-1)){
+				reactor_del_all( tcpconn->s, -1, IO_FD_CLOSING);
+				tcpconn->flags|=F_CONN_REMOVED;
+			}
 			tcpconn_destroy(tcpconn); /* closes also the fd */
 			break;
 		default:
@@ -1572,7 +1584,10 @@ int tcp_init(void)
 	/* first we do auto-detection to see if there are any TCP based
 	 * protocols loaded */
 	for ( i=PROTO_FIRST ; i<PROTO_LAST ; i++ )
-		if (is_tcp_based_proto(i)) {tcp_disabled=0;break;}
+		if (is_tcp_based_proto(i) && proto_has_listeners(i)) {
+			tcp_disabled=0;
+			break;
+		}
 
 	if (tcp_disabled)
 		return 0;

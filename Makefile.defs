@@ -62,7 +62,7 @@ MAIN_NAME=opensips
 #version number
 VERSION_MAJOR = 2
 VERSION_MINOR = 2
-VERSION_SUBMINOR = 5
+VERSION_SUBMINOR = 8
 VERSION_BUILD =
 
 ifneq (,$(VERSION_BUILD))
@@ -170,7 +170,7 @@ else ifneq (,$(findstring gcc, $(CC_LONGVER)))
 	#XXX: for now treat 4+.x the same as 4.x
 	CC_CLASS=$(shell echo "$(CC_SHORTVER)" | \
 				 sed -e 's/2\.9.*/2.9x/' -e 's/3\.[0-9]/3.x/' \
-				 -e 's/[4-9]\.[0-9]/4.x/')
+				 -e 's/[4-9]\(\.[0-9]\)\?/4.x/')
 endif
 
 ifneq (, $(findstring Sun, $(CC_LONGVER)))

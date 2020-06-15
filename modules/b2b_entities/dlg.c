@@ -602,7 +602,7 @@ int b2b_prescript_f(struct sip_msg *msg, void *uparam)
 		/* send 200 OK and exit */
 		tmb.t_reply(msg, 200, &reason);
 		tm_tran = tmb.t_gett();
-		if(tm_tran)
+		if(tm_tran && tm_tran!=T_UNDEFINED)
 			tmb.unref_cell(tm_tran);
 
 		/* No need to apply lumps */
@@ -675,7 +675,6 @@ search_dialog:
 			if(ret== 0)
 			{
 				LM_DBG("It is a retransmission, drop\n");
-				tmb.unref_cell(tmb.t_gett());
 			}
 			else
 				LM_DBG("Error when creating tm transaction\n");
@@ -837,7 +836,6 @@ logic_notify:
 			if(ret== 0)
 			{
 				LM_DBG("It is a retransmission, drop\n");
-				tmb.unref_cell(tmb.t_gett());
 			}
 			else
 				LM_DBG("Error when creating tm transaction\n");
@@ -1144,7 +1142,8 @@ b2b_dlg_t* b2b_new_dlg(struct sip_msg* msg, str* local_contact,
 
 	if(msg->record_route!=NULL && msg->record_route->body.s!= NULL)
 	{
-		if( print_rr_body(msg->record_route, &dlg.route_set[CALLER_LEG], (init_dlg?1:0), 0)!= 0)
+		if( print_rr_body(msg->record_route, &dlg.route_set[CALLER_LEG],
+		(init_dlg?1:0), 0, NULL)!= 0)
 		{
 			LM_ERR("failed to process record route\n");
 		}
@@ -1868,7 +1867,7 @@ dlg_leg_t* b2b_new_leg(struct sip_msg* msg, str* to_tag, int mem_type)
 
 	if(msg->record_route!=NULL && msg->record_route->body.s!= NULL)
 	{
-		if( print_rr_body(msg->record_route, &route_set, 1, 0)!= 0)
+		if( print_rr_body(msg->record_route, &route_set, 1, 0, NULL)!= 0)
 		{
 			LM_ERR("failed to process record route\n");
 			goto error;

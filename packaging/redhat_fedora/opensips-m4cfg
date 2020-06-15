@@ -1,0 +1,43 @@
+#!/bin/bash
+
+prog=opensips
+cfgdir="/etc/$prog"
+configfile="$cfgdir/$prog.cfg"
+m4configfile="$cfgdir/$prog.m4"
+m4archivedir="$cfgdir/archive"
+defaultsfile=/etc/sysconfig/opensips
+
+# Load startup options if available
+if [ -f $defaultsfile ]; then
+   . $defaultsfile || true
+fi
+
+S_MEMORY=$((`echo $S_MEMORY | sed -e 's/[^0-9]//g'`))
+P_MEMORY=$((`echo $P_MEMORY | sed -e 's/[^0-9]//g'`))
+[ $S_MEMORY -le 0 ] && S_MEMORY=32
+[ $P_MEMORY -le 0 ] && P_MEMORY=32
+
+# Generate config from M4
+if [ -f $m4configfile ]; then
+	cd "$cfgdir"
+	m4 -Q $m4configfile >$configfile.tmp
+	if [ $? != 0 ]; then
+		echo "cannot process m4 macro"
+		rm "$configfile.tmp"
+		exit 1
+	fi
+
+	[ -e $configfile ] || touch $configfile
+
+	# compare configs
+	if [ `md5sum ${configfile}|awk '{print $1}'` != `md5sum ${configfile}.tmp|awk '{print $1}'` ]; then
+		mkdir -p "${m4archivedir}"
+		mv "${configfile}" "${m4archivedir}/${prog}.cfg-`date +%Y%m%d_%H%M%S`"
+	fi
+
+	mv "${configfile}.tmp" "${configfile}"
+	chown ${prog}:${prog} ${configfile}
+	chmod 640 ${configfile}
+fi
+
+exec $prog -m $S_MEMORY -M $P_MEMORY -c -f $configfile

@@ -1460,10 +1460,10 @@ int tr_eval_sdp(struct sip_msg *msg, tr_param_t *tp,int subtype,
 	if(_tr_sdp_str.len==0 || _tr_sdp_str.len!=val->rs.len ||
 			strncmp(_tr_sdp_str.s, val->rs.s, val->rs.len)!=0)
 	{
-		if(val->rs.len>_tr_sdp_str.len)
+		if(val->rs.len + 3 > _tr_sdp_str.len)
 		{
 			if(_tr_sdp_str.s) pkg_free(_tr_sdp_str.s);
-				_tr_sdp_str.s = (char*)pkg_malloc((val->rs.len+1));
+				_tr_sdp_str.s = (char*)pkg_malloc((val->rs.len+1 /* NULL */ + 2 /* \r\n */));
 			if(_tr_sdp_str.s==NULL)
 			{
 				LM_ERR("no more private memory\n");
@@ -1472,8 +1472,10 @@ int tr_eval_sdp(struct sip_msg *msg, tr_param_t *tp,int subtype,
 			}
 		}
 
-		_tr_sdp_str.len = val->rs.len;
-		memcpy(_tr_sdp_str.s, val->rs.s, val->rs.len);
+		_tr_sdp_str.len = val->rs.len + 2;
+		_tr_sdp_str.s[0] = '\r';
+		_tr_sdp_str.s[1] = '\n';
+		memcpy(_tr_sdp_str.s + 2, val->rs.s, val->rs.len);
 		_tr_sdp_str.s[_tr_sdp_str.len] = '\0';
 
 	}
@@ -1624,7 +1626,16 @@ int tr_eval_ip(struct sip_msg *msg, tr_param_t *tp,int subtype,
 			break;
 		case TR_IP_RESOLVE:
 			val->flags = PV_VAL_STR;
-			server = resolvehost(val->rs.s,0);
+			buffer = pkg_malloc(val->rs.len + 1);
+			if (!buffer) {
+				LM_ERR("out of pkg memory!\n");
+				val->flags = PV_VAL_NULL;
+				return -1;
+			}
+			memcpy(buffer, val->rs.s, val->rs.len);
+			buffer[val->rs.len] = '\0';
+			server = resolvehost(buffer, 0);
+			pkg_free(buffer);
 			if (!server || !server->h_addr)
 			{
 				val->rs.s = "";
@@ -1695,7 +1706,8 @@ int tr_eval_re(struct sip_msg *msg, tr_param_t *tp, int subtype,
 				}
 				LM_DBG("Trying to apply regexp [%.*s] on : [%.*s]\n",
 						sv.len,sv.s,val->rs.len, val->rs.s);
-				if (!buf_re.s || buf_re.len != sv.len || memcmp(buf_re.s, sv.s, sv.len) != 0) {
+				if (subst_re==NULL || !buf_re.s || buf_re.len != sv.len ||
+				memcmp(buf_re.s, sv.s, sv.len) != 0) {
 					LM_DBG("we must compile the regexp\n");
 					if (subst_re != NULL) {
 						LM_DBG("freeing prev regexp\n");

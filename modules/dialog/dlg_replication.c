@@ -193,6 +193,7 @@ int dlg_replicated_create(struct dlg_cell *cell, str *ftag, str *ttag, int safe)
 	bin_pop_str(&vars);
 	bin_pop_str(&profiles);
 	bin_pop_int(&dlg->user_flags);
+	bin_pop_int(&dlg->mod_flags);
 	bin_pop_int(&dlg->flags);
 	bin_pop_int((void *) &dlg->tl.timeout);
 	bin_pop_int(&dlg->legs[DLG_CALLER_LEG].last_gen_cseq);
@@ -335,6 +336,7 @@ int dlg_replicated_update(void)
 	bin_pop_str(&vars);
 	bin_pop_str(&profiles);
 	bin_pop_int(&dlg->user_flags);
+	bin_pop_int(&dlg->mod_flags);
 	bin_pop_int(&dlg->flags);
 
 	bin_pop_int(&timeout);
@@ -513,6 +515,7 @@ void replicate_dialog_created(struct dlg_cell *dlg)
 	bin_push_str(vars);
 	bin_push_str(profiles);
 	bin_push_int(dlg->user_flags);
+	bin_push_int(dlg->mod_flags);
 	bin_push_int(dlg->flags &
 			     ~(DLG_FLAG_NEW|DLG_FLAG_CHANGED|DLG_FLAG_VP_CHANGED));
 	bin_push_int((unsigned int)time(0) + dlg->tl.timeout - get_ticks());
@@ -551,6 +554,12 @@ void replicate_dialog_updated(struct dlg_cell *dlg)
 	bin_push_int(clusterer_api.get_my_id());
 
 	dlg_lock_dlg(dlg);
+	if (dlg->state < DLG_STATE_CONFIRMED_NA) {
+		LM_DBG("not replicating update in state %d (%.*s)\n", dlg->state,
+				dlg->callid.len, dlg->callid.s);
+		dlg_unlock_dlg(dlg);
+		return;
+	}
 	if (dlg->state == DLG_STATE_DELETED) {
 		/* we no longer need to update anything */
 		LM_WARN("not replicating dlg update message due to bad state %d (%.*s)\n",
@@ -595,6 +604,7 @@ void replicate_dialog_updated(struct dlg_cell *dlg)
 	bin_push_str(vars);
 	bin_push_str(profiles);
 	bin_push_int(dlg->user_flags);
+	bin_push_int(dlg->mod_flags);
 	bin_push_int(dlg->flags &
 			     ~(DLG_FLAG_NEW|DLG_FLAG_CHANGED|DLG_FLAG_VP_CHANGED));
 	bin_push_int((unsigned int)time(0) + dlg->tl.timeout - get_ticks());
@@ -886,6 +896,11 @@ static void dlg_replicated_profiles(struct receive_info *ri, int server_id)
 			old_name = name;
 		}
 		profile = old_profile;
+
+		if (profile->repl_type != REPL_PROTOBIN) {
+			LM_WARN("Received a replication packet for a local profile\n");
+			return;
+		}
 
 		if (bin_pop_int(&has_value) < 0) {
 			LM_ERR("cannot pop profile's has_value int\n");

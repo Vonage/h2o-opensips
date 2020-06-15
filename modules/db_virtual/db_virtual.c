@@ -435,30 +435,29 @@ int db_virtual_bind_api(const str* mod, db_func_t *dbb)
      */
     s.s = strchr(mod->s, '/');
     s.s +=2;
+    s.len = mod->len - (s.s - mod->s);
 
 
     for(i=0; i< global->size; i++){
-        if(strncmp(s.s, global->set_list[i].set_name.s,
+        if ( (s.len==global->set_list[i].set_name.len) &&
+            strncmp(s.s, global->set_list[i].set_name.s,
                 global->set_list[i].set_name.len) == 0)
             break;
     }
+    if (i==global->size) {
+        LM_ERR("virtual set <%.*s> was not found. Did you define it?\n",
+            s.len, s.s);
+        return -1;
+    }
 
-    LM_DBG("REDUCING capabilities for %.*s\n",
-        global->set_list[i].set_name.len, global->set_list[i].set_name.s);
-
-    dbb->cap = DB_CAP_FAILOVER;
-    for(j=0; j< global->set_list[i].size; j++){
+    dbb->cap = global->set_list[i].db_list[0].dbf.cap;
+    for(j=1; j< global->set_list[i].size; j++){
         dbb->cap &= global->set_list[i].db_list[j].dbf.cap;
     }
 
-    if(global->set_list[i].set_mode == FAILOVER){
-        dbb->cap &= DB_CAP_FAILOVER;
-    }else if(global->set_list[i].set_mode == PARALLEL){
-        dbb->cap &= DB_CAP_PARALLEL;
-    }else if(global->set_list[i].set_mode == ROUND){
-        dbb->cap &= DB_CAP_ROUND;
-    }
-
+    LM_DBG("Computed capabilities for %.*s are %x\n",
+        global->set_list[i].set_name.len, global->set_list[i].set_name.s,
+        dbb->cap);
 
     dbb->use_table         = db_virtual_use_table;
     dbb->init              = db_virtual_init;
