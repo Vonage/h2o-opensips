@@ -248,6 +248,7 @@ int record_route(struct sip_msg* _m, str *params)
 
 	from = 0; /* Makes gcc happy */
 	user.len = 0;
+	user.s = 0;
 	lp = lp2 = NULL;
 
 	if (add_username) {

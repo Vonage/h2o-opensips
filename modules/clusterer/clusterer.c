@@ -700,6 +700,9 @@ clusterer_bcast_msg(bin_packet_t *packet, int dst_cid,
 
 		matched_once = 1;
 
+		/* skip node in the probing states */
+		if (node->link_state >= LS_RETRY_SEND_FAIL)
+			continue;
 		rc = msg_send_retry(packet, node, 1, &ev_actions_required);
 		if (rc != -2)	/* at least one node is up */
 			down = 0;
