@@ -872,9 +872,8 @@ static int w_agent_login(struct sip_msg *req, char *agent_v, char *state_v)
 
 
 	/* get state */
-	unsigned int gparam_int_value_flag = GPARAM_INT_VALUE_FLAG;
 	if (fixup_get_isvalue( req, (gparam_p)state_v, &state, &agent_s,
-	&flags)!=0 || ((flags|gparam_int_value_flag)==0) ) {
+	&flags)!=0 || ((flags|GPARAM_INT_VALUE_FLAG)==0) ) {
 		LM_ERR("unable to evaluate state spec \n");
 		return -1;
 	}
