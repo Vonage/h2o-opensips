@@ -16,7 +16,7 @@
 #include "../../dprint.h"
 #include "../../mem/shm_mem.h"
 #include "../../sr_module.h"
-#include "../../net/apfi_proto.h"
+#include "../../net/api_proto.h"
 #include "../../net/api_proto_net.h"
 #include "../../net/net_tcp.h"
 #include "../../socket_info.h"
