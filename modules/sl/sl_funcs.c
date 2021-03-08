@@ -97,10 +97,12 @@ int sl_shutdown(void)
 }
 
 
-int sl_get_totag(struct sip_msg *msg, str *totag)
+int sl_gen_totag(struct sip_msg *msg, str *totag)
 {
+	calc_tag_suffix( msg, tag_suffix );
 	*totag = sl_tag;
-	return 0;
+
+	return 1;
 }
 
 
@@ -167,7 +169,7 @@ int sl_send_reply_helper(struct sip_msg *msg ,int code, str *text)
 		(msg->to || (parse_headers(msg,HDR_TO_F, 0)!=-1 && msg->to))
 		&& (get_to(msg)->tag_value.s==0 || get_to(msg)->tag_value.len==0) )
 	{
-		calc_crc_suffix( msg, tag_suffix );
+		calc_tag_suffix( msg, tag_suffix );
 		buf.s = build_res_buf_from_sip_req( code, text, &sl_tag, msg,
 			(unsigned int*)&buf.len, &dummy_bm);
 	} else {
@@ -207,9 +209,17 @@ error:
 	return -1;
 }
 
-int sl_send_reply(struct sip_msg *msg ,int code, str *text)
+int sl_send_reply(struct sip_msg *msg ,int code, str *text, str *totag)
 {
-	return sl_send_reply_helper(msg, code, text);
+	int ret;
+
+	if ( (ret=sl_send_reply_helper(msg, code, text))<0)
+		return ret;
+
+	if (totag)
+		*totag = sl_tag;
+
+	return ret;
 }
 
 
@@ -270,7 +280,7 @@ int sl_filter_ACK(struct sip_msg *msg, void *bar )
 		if ( tag_str->len==TOTAG_VALUE_LEN )
 		{
 			/* calculate the variable part of to-tag */
-			calc_crc_suffix(msg, tag_suffix);
+			calc_tag_suffix(msg, tag_suffix);
 			/* test whether to-tag equal now */
 			if (memcmp(tag_str->s,sl_tag.s,sl_tag.len)==0) {
 				LM_DBG("local ACK found -> dropping it!\n");

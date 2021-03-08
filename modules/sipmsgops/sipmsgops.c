@@ -291,6 +291,7 @@ struct module_exports exports= {
 	MOD_TYPE_DEFAULT,/* class of this module */
 	MODULE_VERSION,
 	DEFAULT_DLFLAGS, /* dlopen flags */
+	0,				 /* load function */
 	NULL,            /* OpenSIPS module dependencies */
 	cmds,       /* exported functions */
 	0,          /* exported async functions */
@@ -300,6 +301,7 @@ struct module_exports exports= {
 	0,          /* exported pseudo-variables */
 	0,			/* exported transformations */
 	0,          /* extra processes */
+	0,          /* module pre-initialization function */
 	mod_init,   /* module initialization function */
 	0,          /* response function */
 	0,          /* destroy function */
@@ -1539,7 +1541,7 @@ static int sip_validate_hdrs(struct sip_msg *msg)
 
 			case HDR_PROXY_AUTHENTICATE_T:
 			case HDR_WWW_AUTHENTICATE_T:
-				CHECK_HDR_FUNC(parse_authenticate_header, hf);
+				CHECK_HDR_FUNC(_parse_authenticate_header, hf);
 				break;
 
 			case HDR_CALLID_T:

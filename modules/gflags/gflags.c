@@ -109,6 +109,7 @@ struct module_exports exports = {
 	MOD_TYPE_DEFAULT,/* class of this module */
 	MODULE_VERSION,
 	DEFAULT_DLFLAGS, /* dlopen flags */
+	0,				 /* load function */
 	NULL,            /* OpenSIPS module dependencies */
 	cmds,        /* exported functions */
 	0,           /* exported async functions */
@@ -118,6 +119,7 @@ struct module_exports exports = {
 	0,           /* exported pseudo-variables */
 	0,			 /* exported transformations */
 	0,           /* extra processes */
+	0,           /* module pre-initialization function */
 	mod_init,    /* module initialization function */
 	0,           /* response function*/
 	mod_destroy, /* destroy function */
@@ -148,7 +150,7 @@ static int fixup_gflags( void** param, int param_no)
 	}
 	if ( myint >= 8*sizeof(*gflags) ) {
 		LM_ERR("flag <%d> out of "
-			"range [0..%lu]\n", myint, ((unsigned long)8*sizeof(*gflags))-1 );
+			"range [0..%zu]\n", myint, 8*sizeof(*gflags)-1);
 		return E_CFG;
 	}
 	/* convert from flag index to flag bitmap */

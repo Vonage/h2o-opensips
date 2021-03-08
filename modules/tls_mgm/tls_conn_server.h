@@ -91,7 +91,7 @@ static inline void tls_append_master_secret( SSL* ctx, struct tls_data* data )
 #if OPENSSL_VERSION_NUMBER < 0x10100000L
 	master.len = string2hex( s->master_key, s->master_key_length, ssl_print_master_buf );
 #else
-	SSL_SESSION_get_master_key(s, (unsigned char *)master.s,
+	master.len = SSL_SESSION_get_master_key(s, (unsigned char *)master.s,
 		SSL_MAX_MASTER_KEY_LENGTH * 2);
 #endif
 
@@ -479,7 +479,7 @@ static int tls_connect(struct tcp_connection *c, short *poll_events, trace_dest 
  * does not transit a connection into S_CONN_OK then tcp layer would not
  * call tcp_read
  */
-static int tls_fix_read_conn(struct tcp_connection *c, trace_dest t_dst)
+static inline int tls_fix_read_conn(struct tcp_connection *c, trace_dest t_dst)
 {
 	/*
 	* no lock acquired
@@ -566,7 +566,7 @@ static int tls_write(struct tcp_connection *c, int fd, const void *buf,
 /*
  * fixme: probably does not work correctly
  */
-static int tls_blocking_write(struct tcp_connection *c, int fd, const char *buf,
+static inline int tls_blocking_write(struct tcp_connection *c, int fd, const char *buf,
 										size_t len, struct tls_mgm_binds *api, trace_dest t_dst)
 {
 	#define MAX_SSL_RETRIES 32

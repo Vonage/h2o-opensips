@@ -37,6 +37,7 @@
 #include "sr_module.h"
 #include "action.h"
 #include "str.h"
+#include "trim.h"
 #include "evi/evi_modules.h"
 #include "evi/evi_core.h"
 
@@ -53,18 +54,17 @@ typedef struct _int_str_t {
 
 struct sip_msg;
 
+/* the amount of decimals to be displayed for "float" and "double" values */
+#define FLOATING_POINT_PRECISION 8
+
 /* zero-string wrapper */
 #define ZSW(_c) ((_c)?(_c):"")
-
-/* str initialization */
-#define str_init(_string)  {_string, sizeof(_string) - 1}
 
 /* returns string beginning and length without insignificant chars */
 #define trim_len( _len, _begin, _mystr ) \
 	do{ 	static char _c; \
 		(_len)=(_mystr).len; \
-		while ((_len) && ((_c=(_mystr).s[(_len)-1])==0 || _c=='\r' || \
-					_c=='\n' || _c==' ' || _c=='\t' )) \
+		while ((_len) && ((_c=(_mystr).s[(_len)-1])==0 || is_ws(_c))) \
 			(_len)--; \
 		(_begin)=(_mystr).s; \
 		while ((_len) && ((_c=*(_begin))==' ' || _c=='\t')) { \
@@ -288,6 +288,18 @@ static inline char* sint2str(long l, int* len)
 	return p;
 }
 
+static inline char* double2str(double d, int* len)
+{
+	static int buf;
+
+	buf = (buf + 1) % INT2STR_BUF_NO;
+	*len = snprintf(int2str_buf[buf], INT2STR_MAX_LEN - 1, "%0.*lf",
+	                FLOATING_POINT_PRECISION, d);
+	int2str_buf[buf][*len] = '\0';
+
+	return int2str_buf[buf];
+}
+
 
 /* faster memchr version */
 static inline char* q_memchr(char* p, int c, unsigned int size)
@@ -441,7 +453,7 @@ inline static int string2hex(
 		str++;
 
 	}
-	return orig_len-len;
+	return orig_len * 2;
 }
 
 /* portable sleep in microseconds (no interrupt handling now) */
@@ -705,24 +717,30 @@ static inline int shm_str_dup(str* dst, const str* src)
 /*
  * Make a copy of an str structure using shm_malloc
  *	  + an additional '\0' byte, so you can make use of dst->s
+ *
+ * dst == src is allowed!
  */
 static inline int shm_nt_str_dup(str* dst, const str* src)
 {
-	if (!src->s) {
+	const str _src = *src;
+
+	if (!_src.s) {
 		memset(dst, 0, sizeof *dst);
 		return 0;
 	}
 
-	dst->s = shm_malloc(src->len + 1);
+	dst->s = shm_malloc(_src.len + 1);
 	if (!dst->s) {
 		LM_ERR("no shared memory left\n");
 		dst->len = 0;
+		if (dst == src)
+			*dst = _src;
 		return -1;
 	}
 
-	memcpy(dst->s, src->s, src->len);
-	dst->len = src->len;
-	dst->s[dst->len] = '\0';
+	memcpy(dst->s, _src.s, _src.len);
+	dst->len = _src.len;
+	dst->s[_src.len] = '\0';
 	return 0;
 }
 
@@ -816,6 +834,29 @@ static inline int pkg_str_dup(str* dst, const str* src)
 	return 0;
 }
 
+/*
+ * Make a copy of a str structure using pkg_malloc
+ *	  + an additional '\0' byte, so you can make use of dst->s
+ */
+static inline int pkg_nt_str_dup(str* dst, const str* src)
+{
+	const str _src = *src;
+
+	dst->s = pkg_malloc(_src.len + 1);
+	if (!dst->s) {
+		LM_ERR("no private memory left\n");
+		dst->len = 0;
+		if (dst == src)
+			*dst = _src;
+		return -1;
+	}
+
+	memcpy(dst->s, _src.s, _src.len);
+	dst->len = _src.len;
+	dst->s[_src.len] = '\0';
+	return 0;
+}
+
 static inline char *pkg_strdup(const char *str)
 {
 	char *rval;
@@ -850,6 +891,42 @@ static inline int pkg_str_extend(str *in, int size)
 
 	return 0;
 }
+
+
+/*
+ * test if two str's are equal
+ */
+static inline int str_match(const str *a, const str *b)
+{
+	return a->len == b->len && !memcmp(a->s, b->s, a->len);
+}
+
+
+/*
+ * test if two str's are equal, case-insensitive
+ */
+static inline int str_casematch(const str *a, const str *b)
+{
+	char *p, *q, *end;
+
+	if (a->len != b->len)
+		return 0;
+
+	p = a->s;
+	q = b->s;
+	end = p + a->len;
+
+	if (p == end || p == q)
+		return 1;
+
+	do {
+		if (tolower(*p) != tolower(*q++))
+			return 0;
+	} while (++p < end);
+
+	return 1;
+}
+
 
 /*
  * compare two str's
@@ -899,7 +976,9 @@ static inline char* str_strstr(const str *stra, const str *strb)
 
 	if (stra==NULL || strb==NULL || stra->s==NULL || strb->s==NULL
 			|| stra->len<=0 || strb->len<=0) {
-		LM_ERR("bad parameters\n");
+#ifdef EXTRA_DEBUG
+		LM_DBG("bad parameters\n");
+#endif
 		return NULL;
 	}
 
@@ -939,7 +1018,9 @@ static inline int str_strncasecmp(const str *stra, const str *strb, int n)
 	if(stra==NULL || strb==NULL || stra->s ==NULL || strb->s==NULL
 	|| stra->len<0 || strb->len<0)
 	{
-		LM_ERR("bad parameters\n");
+#ifdef EXTRA_DEBUG
+		LM_DBG("bad parameters\n");
+#endif
 		return -2;
 	}
 
@@ -974,7 +1055,9 @@ static inline int str_strcasecmp(const str *stra, const str *strb)
 	if(stra==NULL || strb==NULL || stra->s ==NULL || strb->s==NULL
 	|| stra->len<0 || strb->len<0)
 	{
-		LM_ERR("bad parameters\n");
+#ifdef EXTRA_DEBUG
+		LM_DBG("bad parameters\n");
+#endif
 		return -2;
 	}
 	alen = stra->len;
@@ -1010,10 +1093,9 @@ static inline int str_strcasecmp(const str *stra, const str *strb)
 	} while(0)
 
 
-
-int tcp_timeout_con_get;
-int tcp_timeout_receive_fd;
-int tcp_timeout_send;
+extern int tcp_timeout_con_get;
+extern int tcp_timeout_receive_fd;
+extern int tcp_timeout_send;
 
 #define reset_tcp_vars(threshold) \
 	do { \
@@ -1206,6 +1288,15 @@ static inline void * l_memmem(const void *b1, const void *b2,
 	return NULL;
 }
 
+/**
+ * Make any database URL log-friendly by masking its password, if any
+ * Note: makes use of a single, static buffer -- use accordingly!
+ */
+char *db_url_escape(const str *url);
+static inline char *_db_url_escape(char *url)
+{
+	return db_url_escape(_str(url));
+}
 
 int user2uid(int* uid, int* gid, char* user);
 

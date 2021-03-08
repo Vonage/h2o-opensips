@@ -120,7 +120,11 @@ static int parse_branch(str branch)
 		return 1;
 	}
 
-	reverse_hex2int(branch.s, end - branch.s, &hash_id);
+	if (reverse_hex2int(branch.s, end - branch.s, &hash_id)<0
+	|| hash_id>=NH_TABLE_ENTRIES ) {
+		// invalid hash ID received
+		return -1;
+	}
 
 	branch.len -= (end - branch.s + 1);
 	branch.s = end + 1;
@@ -136,7 +140,7 @@ static int parse_branch(str branch)
 		unlock_hash(hash_id);
 		return 0;
 	}
-	LM_DBG("ping received for %lu\n", ct_coords);
+	LM_DBG("ping received for %llu\n", (unsigned long long)ct_coords);
 
 	sipping_latency =
 	    (timeval_st.tv_sec - p_cell->last_send_time.tv_sec) * 1000000 +
@@ -211,7 +215,8 @@ static int sipping_rpl_filter(struct sip_msg *rpl)
 	/* it's a reply to a SIP NAT ping -> absorb it and stop any
 	 * further processing of it */
 	if (!ignore_reply(rpl) && match_ctid &&
-	    parse_branch(rpl->via1->branch->value))
+	     (rpl->via1 && rpl->via1->branch &&
+	      parse_branch(rpl->via1->branch->value)))
 			goto skip;
 
 	return 0;
@@ -286,8 +291,8 @@ build_branch(char *branch, int *size,
 
 		lock_release(&htable->timer_list.mutex);
 
-		LM_DBG("ping cell acquired (new=%d, old_state=%d) for %lu\n",
-			(old_state==PING_CELL_STATE_NONE)?1:0, old_state, ct_coords);
+		LM_DBG("ping cell acquired (new=%d, old_state=%d) for %llu\n",
+			(old_state==PING_CELL_STATE_NONE)?1:0, old_state, (unsigned long long)ct_coords);
 	} else {
 		label = sipping_callid_cnt;
 	}

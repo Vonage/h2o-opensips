@@ -114,7 +114,7 @@ static param_export_t params[] = {
 	{ "ws_port",           INT_PARAM, &ws_port           },
 	{ "ws_max_msg_chunks", INT_PARAM, &ws_max_msg_chunks },
 	{ "ws_send_timeout",   INT_PARAM, &ws_send_timeout   },
-	{ "ws_resource",       STR_PARAM, &ws_resource       },
+	{ "ws_resource",       STR_PARAM, &ws_resource.s     },
 	{ "ws_handshake_timeout", INT_PARAM, &ws_hs_read_tout },
 	{ "trace_destination",     STR_PARAM,         &trace_destination_name.s  },
 	{ "trace_on",						 INT_PARAM, &trace_is_on_tmp        },
@@ -143,7 +143,8 @@ struct module_exports exports = {
 	MOD_TYPE_DEFAULT,/* class of this module */
 	MODULE_VERSION,
 	DEFAULT_DLFLAGS, /* dlopen flags */
-	&deps,            /* OpenSIPS module dependencies */
+	0,				 /* load function */
+	&deps,           /* OpenSIPS module dependencies */
 	cmds,       /* exported functions */
 	0,          /* exported async functions */
 	params,     /* module parameters */
@@ -152,6 +153,7 @@ struct module_exports exports = {
 	0,          /* exported pseudo-variables */
 	0,			/* exported transformations */
 	0,          /* extra processes */
+	0,          /* module pre-initialization function */
 	mod_init,   /* module initialization function */
 	0,          /* response function */
 	0,          /* destroy function */
@@ -184,6 +186,8 @@ static int proto_ws_init(struct proto_info *pi)
 static int mod_init(void)
 {
 	LM_INFO("initializing WebSocket protocol\n");
+
+	ws_resource.len = strlen(ws_resource.s);
 
 	if (trace_destination_name.s) {
 		if ( !net_trace_api ) {
@@ -408,9 +412,9 @@ static int proto_ws_send(struct socket_info* send_sock,
 	if (to){
 		su2ip_addr(&ip, to);
 		port=su_getport(to);
-		n = tcp_conn_get(id, &ip, port, PROTO_WS, &c, &fd);
+		n = tcp_conn_get(id, &ip, port, PROTO_WS, NULL, &c, &fd);
 	}else if (id){
-		n = tcp_conn_get(id, 0, 0, PROTO_NONE, &c, &fd);
+		n = tcp_conn_get(id, 0, 0, PROTO_NONE, NULL, &c, &fd);
 	}else{
 		LM_CRIT("prot_tls_send called with null id & to\n");
 		get_time_difference(get,tcpthreshold,tcp_timeout_con_get);
@@ -427,6 +431,10 @@ static int proto_ws_send(struct socket_info* send_sock,
 	/* was connection found ?? */
 	if (c==0) {
 		if (tcp_no_new_conn) {
+			return -1;
+		}
+		if (!to) {
+			LM_ERR("Unknown destination - cannot open new ws connection\n");
 			return -1;
 		}
 		LM_DBG("no open tcp connection found, opening new one\n");
@@ -486,6 +494,8 @@ send_it:
 
 	/* mark the ID of the used connection (tracing purposes) */
 	last_outgoing_tcp_id = c->id;
+	send_sock->last_local_real_port = c->rcv.dst_port;
+	send_sock->last_remote_real_port = c->rcv.src_port;
 
 	tcp_conn_release(c, 0);
 	return n;

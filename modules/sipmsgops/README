@@ -512,7 +512,7 @@ add_body_part("Hello World!", "text/plain");
      * -10 - No Via header.
      * -11 - Request URI parse error.
      * -12 - Bad hostname in R-URI.
-     * -13 - No Max-Forward header.
+     * -13 - No Max-Forwards header.
      * -14 - No Contact header.
      * -15 - Path user for non-Register request.
      * -16 - No allow header in 405 reply.
@@ -522,8 +522,8 @@ add_body_part("Hello World!", "text/plain");
      * -20 - No WWW-Authorize header in 401 reply.
      * -21 - No Content-Type header
      * -22 - To header parse error
-     * -23 - From header parse error
-     * -24 - Bad hostname in To header
+     * -23 - Bad hostname in To header
+     * -24 - From header parse error
      * -25 - Bad hostname in From header
      * -26 - Contact header parse error
      * -255 - undefined errors.
@@ -907,9 +907,9 @@ Chapter 2. Contributors
    Table 2.1. Top contributors by DevScore^(1), authored
    commits^(2) and lines added/removed^(3)
      Name DevScore Commits Lines ++ Lines --
-   1. Bogdan-Andrei Iancu (@bogdan-iancu) 48 25 1509 598
-   2. Razvan Crainea (@razvancrainea) 38 14 2890 38
-   3. Liviu Chircu (@liviuchircu) 22 16 237 220
+   1. Bogdan-Andrei Iancu (@bogdan-iancu) 49 26 1518 604
+   2. Razvan Crainea (@razvancrainea) 41 17 2893 39
+   3. Liviu Chircu (@liviuchircu) 26 19 241 224
    4. Vlad Paiu (@vladpaiu) 9 4 281 68
    5. Mihai Tiganus (@tallicamike) 6 3 155 28
    6. Ovidiu Sas (@ovidiusas) 4 2 22 1
@@ -918,9 +918,9 @@ Chapter 2. Contributors
    9. Fabian Gast (@fgast) 3 1 4 4
    10. Jarrod Baumann (@jarrodb) 3 1 2 2
 
-   All remaining contributors: Ezequiel Lovelle, Peter Lemenkov
-   (@lemenkov), Walter Doekes (@wdoekes), Nick Altmann (@nikbyte),
-   Ionut Ionita (@ionutrazvanionita), Vlad Patrascu
+   All remaining contributors: Ezequiel Lovelle (@lovelle), Peter
+   Lemenkov (@lemenkov), Walter Doekes (@wdoekes), Nick Altmann
+   (@nikbyte), Ionut Ionita (@ionutrazvanionita), Vlad Patrascu
    (@rvlad-patrascu).
 
    (1) DevScore = author_commits + author_lines_added /
@@ -943,16 +943,16 @@ Chapter 2. Contributors
 
    Table 2.2. Most recently active contributors^(1) to this module
                       Name                   Commit Activity
-   1.  Razvan Crainea (@razvancrainea)     Feb 2012 - Mar 2019
-   2.  Liviu Chircu (@liviuchircu)         Nov 2012 - Nov 2018
-   3.  Fabian Gast (@fgast)                Nov 2018 - Nov 2018
-   4.  Bogdan-Andrei Iancu (@bogdan-iancu) Feb 2012 - Jun 2018
+   1.  Liviu Chircu (@liviuchircu)         Nov 2012 - Sep 2020
+   2.  Bogdan-Andrei Iancu (@bogdan-iancu) Feb 2012 - Nov 2019
+   3.  Razvan Crainea (@razvancrainea)     Feb 2012 - Sep 2019
+   4.  Fabian Gast (@fgast)                Nov 2018 - Nov 2018
    5.  Ovidiu Sas (@ovidiusas)             Feb 2018 - Feb 2018
    6.  Vlad Patrascu (@rvlad-patrascu)     May 2017 - May 2017
    7.  Jarrod Baumann (@jarrodb)           Mar 2016 - Mar 2016
    8.  Julián Moreno Patiño                Feb 2016 - Feb 2016
    9.  Ionut Ionita (@ionutrazvanionita)   Dec 2015 - Dec 2015
-   10. Ezequiel Lovelle                    Oct 2014 - Oct 2014
+   10. Ezequiel Lovelle (@lovelle)         Oct 2014 - Oct 2014
 
    All remaining contributors: Vlad Paiu (@vladpaiu), Mihai
    Tiganus (@tallicamike), Boris Ratner, Nick Altmann (@nikbyte),
@@ -965,8 +965,8 @@ Chapter 3. Documentation
 
 3.1. Contributors
 
-   Last edited by: Fabian Gast (@fgast), Bogdan-Andrei Iancu
-   (@bogdan-iancu), Liviu Chircu (@liviuchircu), Ovidiu Sas
+   Last edited by: Liviu Chircu (@liviuchircu), Fabian Gast
+   (@fgast), Bogdan-Andrei Iancu (@bogdan-iancu), Ovidiu Sas
    (@ovidiusas), Julián Moreno Patiño, Razvan Crainea
    (@razvancrainea), Mihai Tiganus (@tallicamike), Vlad Paiu
    (@vladpaiu), Boris Ratner, Nick Altmann (@nikbyte).

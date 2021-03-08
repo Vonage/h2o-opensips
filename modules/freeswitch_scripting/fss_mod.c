@@ -97,6 +97,7 @@ struct module_exports exports= {
 	MOD_TYPE_DEFAULT, /* class of this module */
 	MODULE_VERSION,
 	DEFAULT_DLFLAGS,  /* dlopen flags */
+	0,				  /* load function */
 	&deps,            /* OpenSIPS module dependencies */
 	cmds,             /* exported functions */
 	NULL,             /* exported async functions */
@@ -106,6 +107,7 @@ struct module_exports exports= {
 	NULL,             /* exported pseudo-variables */
 	NULL,             /* exported transformations */
 	NULL,             /* extra processes */
+	0,                /* module pre-initialization function */
 	mod_init,         /* module initialization function */
 	NULL,             /* reply processing function */
 	mod_destroy,      /* destroy function */
@@ -163,12 +165,13 @@ static int mod_init(void)
 
 	free_shm_str_dlist(&startup_fs_subs);
 
+	fss_db_close();
+
 	return 0;
 }
 
 static void mod_destroy(void)
 {
-	fss_db_close();
 }
 
 static int fixup_fs_esl(void **param, int param_no)

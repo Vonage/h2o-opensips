@@ -26,11 +26,13 @@
 
 
 
+#define _GNU_SOURCE
+
 #include "../../sr_module.h"
 #include "../../db/db.h"
 #include "http_dbase.h"
-
-
+#include "../../ssl_init_tweaks.h"
+#include "../../pt.h"
 
 
 static int http_mod_init(void);
@@ -82,7 +84,8 @@ struct module_exports exports = {
 	MOD_TYPE_SQLDB,  /* class of this module */
 	MODULE_VERSION,
 	DEFAULT_DLFLAGS, /* dlopen flags */
-	NULL,            /* OpenSIPS module dependencies */
+	0,				 /* load function */
+	0,               /* OpenSIPS module dependencies */
 	cmds,
 	0,
 	params,          /*  module parameters */
@@ -91,6 +94,7 @@ struct module_exports exports = {
 	0,               /* exported pseudo-variables */
 	0,				 /* exported transformations */
 	0,               /* extra processes */
+	0,               /* module pre-initialization function */
 	http_mod_init,   /* module initialization function */
 	0,               /* response function*/
 	0,               /* destroy function */

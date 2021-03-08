@@ -91,7 +91,7 @@ static int tls_conn_init(struct tcp_connection* c, struct tls_mgm_binds *api)
 		if (dom) {
 			LM_DBG("found socket based TLS server domain "
 				"[%s:%d]\n", ip_addr2a(&dom->addr), dom->port);
-				c->extra_data = SSL_new(dom->ctx);
+				c->extra_data = SSL_new(dom->ctx[process_no]);
 				api->release_domain(dom);
 		} else {
 			LM_ERR("no TLS server domain found\n");
@@ -103,7 +103,7 @@ static int tls_conn_init(struct tcp_connection* c, struct tls_mgm_binds *api)
 
 		dom = api->find_client_domain(&c->rcv.src_ip, c->rcv.src_port);
 		if (dom) {
-			c->extra_data = SSL_new(dom->ctx);
+			c->extra_data = SSL_new(dom->ctx[process_no]);
 			api->release_domain(dom);
 		} else {
 			LM_ERR("no TLS client domain found\n");
@@ -113,6 +113,11 @@ static int tls_conn_init(struct tcp_connection* c, struct tls_mgm_binds *api)
 
 	if (!c->extra_data) {
 		LM_ERR("failed to create SSL structure\n");
+		return -1;
+	}
+
+	if (!SSL_set_ex_data(c->extra_data, SSL_EX_DOM_IDX, dom)) {
+		LM_ERR("Failed to store tls_domain pointer in SSL struct\n");
 		return -1;
 	}
 
@@ -241,6 +246,15 @@ static int tls_read(struct tcp_connection * c,struct tcp_req *r)
 	return read;
 }
 
+
+static int tls_conn_extra_match(struct tcp_connection *c, void *id)
+{
+	if ( (c->flags&F_CONN_ACCEPTED) ||
+	(SSL_get_ex_data(c->extra_data, SSL_EX_DOM_IDX) == id) )
+		return 1; /*true*/
+
+	return 0; /*false*/
+}
 
 #endif /* TLS_CONN_OPS_H */
 

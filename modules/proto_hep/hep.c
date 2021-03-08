@@ -77,10 +77,10 @@ extern compression_api_t compression_api;
 
 struct hep_message_id hep_ids[] = {
 	{ "sip" ,  0x01},
-	{ "xlog",  0x56},
-	{ "mi"  ,  0x57},
-	{ "rest",  0x58},
-	{ "net", 0x59},
+	{ "xlog",  0x64},
+	{ "mi"  ,  0x57},    // not standard
+	{ "rest",  0x58},    // not standard
+	{ "net",   0x59},    // not standard
 	{ "control", 0x60},
 	{ NULL  ,  0   }
 };
@@ -198,7 +198,7 @@ int unpack_hepv12(char *buf, int len, struct hep_desc* h)
 	if(heph->hp_v == 2) {
 		offset+=sizeof(struct hep_timehdr);
 		heptime_tmp = (struct hep_timehdr*) hep_payload;
-
+		hep_payload += sizeof(struct hep_timehdr);
 
 		heptime.tv_sec = heptime_tmp->tv_sec;
 		heptime.tv_usec = heptime_tmp->tv_usec;
@@ -544,7 +544,7 @@ parse_hep_uri(const str *token, str *uri, str *transport, str* version)
 					return -1;
 				}
 
-				if (_word_start == -1 || (value.len == 0 || value.s == 0)) {
+				if (_word_start == -1 || value.len == 0) {
 					LM_ERR("Invalid null value for <%.*s>!\n", name.len, name.s);
 					return -1;
 				}
@@ -877,8 +877,8 @@ static trace_message create_hep12_message(union sockaddr_union* from_su, union s
 			hep_msg->u.hepv12.addr.hep_ipheader.hp_src = from_su->sin.sin_addr;
 			hep_msg->u.hepv12.addr.hep_ipheader.hp_dst = to_su->sin.sin_addr;
 
-			hep_msg->u.hepv12.hdr.hp_sport = htons(from_su->sin.sin_port); /* src port */
-			hep_msg->u.hepv12.hdr.hp_dport = htons(to_su->sin.sin_port); /* dst port */
+			hep_msg->u.hepv12.hdr.hp_sport = from_su->sin.sin_port; /* src port */
+			hep_msg->u.hepv12.hdr.hp_dport = to_su->sin.sin_port; /* dst port */
 
 			break;
 		case AF_INET6:
@@ -886,8 +886,8 @@ static trace_message create_hep12_message(union sockaddr_union* from_su, union s
 			hep_msg->u.hepv12.addr.hep_ip6header.hp6_src = from_su->sin6.sin6_addr;
 			hep_msg->u.hepv12.addr.hep_ip6header.hp6_dst = to_su->sin6.sin6_addr;
 
-			hep_msg->u.hepv12.hdr.hp_sport = htons(from_su->sin6.sin6_port); /* src port */
-			hep_msg->u.hepv12.hdr.hp_dport = htons(to_su->sin6.sin6_port); /* dst port */
+			hep_msg->u.hepv12.hdr.hp_sport = from_su->sin6.sin6_port; /* src port */
+			hep_msg->u.hepv12.hdr.hp_dport = to_su->sin6.sin6_port; /* dst port */
 			break;
      }
 
@@ -961,13 +961,13 @@ static trace_message create_hep3_message(union sockaddr_union* from_su, union so
 		/* SRC PORT */
 		hep_msg->u.hepv3.hg.src_port.chunk.vendor_id = htons(GENERIC_VENDOR_ID);
 		hep_msg->u.hepv3.hg.src_port.chunk.type_id   = htons(0x0007);
-		hep_msg->u.hepv3.hg.src_port.data = htons(from_su->sin.sin_port);
+		hep_msg->u.hepv3.hg.src_port.data = from_su->sin.sin_port;
 		hep_msg->u.hepv3.hg.src_port.chunk.length = htons(sizeof(hep_msg->u.hepv3.hg.src_port));
 
 		/* DST PORT */
 		hep_msg->u.hepv3.hg.dst_port.chunk.vendor_id = htons(GENERIC_VENDOR_ID);
 		hep_msg->u.hepv3.hg.dst_port.chunk.type_id   = htons(0x0008);
-		hep_msg->u.hepv3.hg.dst_port.data = htons(to_su->sin.sin_port);
+		hep_msg->u.hepv3.hg.dst_port.data = to_su->sin.sin_port;
 		hep_msg->u.hepv3.hg.dst_port.chunk.length = htons(sizeof(hep_msg->u.hepv3.hg.dst_port));
 	}
 	/* IPv6 */
@@ -981,7 +981,7 @@ static trace_message create_hep3_message(union sockaddr_union* from_su, union so
 		/* DST IPv6 */
 		hep_msg->u.hepv3.addr.ip6_addr.dst_ip6.chunk.vendor_id = htons(GENERIC_VENDOR_ID);
 		hep_msg->u.hepv3.addr.ip6_addr.dst_ip6.chunk.type_id   = htons(0x0006);
-		hep_msg->u.hepv3.addr.ip6_addr.dst_ip6.data = from_su->sin6.sin6_addr;
+		hep_msg->u.hepv3.addr.ip6_addr.dst_ip6.data = to_su->sin6.sin6_addr;
 		hep_msg->u.hepv3.addr.ip6_addr.dst_ip6.chunk.length = htons(sizeof(hep_msg->u.hepv3.addr.ip6_addr.dst_ip6));
 
 		iplen = sizeof(hep_msg->u.hepv3.addr.ip6_addr.dst_ip6) + sizeof(hep_msg->u.hepv3.addr.ip6_addr.src_ip6);
@@ -989,13 +989,13 @@ static trace_message create_hep3_message(union sockaddr_union* from_su, union so
 		/* SRC PORT */
 		hep_msg->u.hepv3.hg.src_port.chunk.vendor_id = htons(GENERIC_VENDOR_ID);
 		hep_msg->u.hepv3.hg.src_port.chunk.type_id   = htons(0x0007);
-		hep_msg->u.hepv3.hg.src_port.data = htons(from_su->sin6.sin6_port);
+		hep_msg->u.hepv3.hg.src_port.data = from_su->sin6.sin6_port;
 		hep_msg->u.hepv3.hg.src_port.chunk.length = htons(sizeof(hep_msg->u.hepv3.hg.src_port));
 
 		/* DST PORT */
 		hep_msg->u.hepv3.hg.dst_port.chunk.vendor_id = htons(GENERIC_VENDOR_ID);
 		hep_msg->u.hepv3.hg.dst_port.chunk.type_id   = htons(0x0008);
-		hep_msg->u.hepv3.hg.dst_port.data = htons(to_su->sin6.sin6_port);
+		hep_msg->u.hepv3.hg.dst_port.data = to_su->sin6.sin6_port;
 		hep_msg->u.hepv3.hg.dst_port.chunk.length = htons(sizeof(hep_msg->u.hepv3.hg.dst_port));
 	}
 
@@ -1068,7 +1068,7 @@ static int add_generic_chunk(struct hep_desc* hep_msg, void* data, int len, int 
 {
 	#define CHECK_LEN(__len, __cmp, __field)              \
 		if (__len != __cmp) {                             \
-			LM_ERR(__field" size should be %ld!\n", __cmp); \
+			LM_ERR(__field" size should be %zd!\n", __cmp); \
 			return -1;                                    \
 		}
 
@@ -1544,7 +1544,7 @@ int add_hep_correlation(trace_message message, char* corr_name, str* corr_value)
 
 		cJSON_AddStrToObject( root, corr_name, corr_value->s, corr_value->len);
 	} else {
-		if ( !memcmp( corr_name, "sip", sizeof("sip") ) ) {
+		if ( !memcmp( corr_name, "sip", sizeof("sip") - 1 ) ) {
 			/* we'll save sip correlation id as the actual correlation */
 			sip_correlation = pkg_malloc( sizeof(str) + corr_value->len );
 			if ( !sip_correlation ) {
@@ -1670,6 +1670,7 @@ int send_hep_message(trace_message message, trace_dest dest, struct socket_info*
 	/* */
 	p=mk_proxy( &hep_dest->ip, hep_dest->port_no ? hep_dest->port_no : HEP_PORT, hep_dest->transport, 0);
 	if (p == NULL) {
+		pkg_free(buf);
 		LM_ERR("bad hep host name!\n");
 		return -1;
 	}
@@ -1677,6 +1678,8 @@ int send_hep_message(trace_message message, trace_dest dest, struct socket_info*
 	to=(union sockaddr_union *)pkg_malloc(sizeof(union sockaddr_union));
 	if (to == 0) {
 		LM_ERR("no more pkg mem!\n");
+		pkg_free(buf);
+		free_proxy(p);
 		pkg_free(p);
 		return -1;
 	}

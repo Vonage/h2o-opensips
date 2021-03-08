@@ -1541,8 +1541,8 @@ int do_action(struct action* a, struct sip_msg* msg)
 			}
 
 			cdb_raw_entry **cdb_reply = NULL;
-			int val_number=0,i,j;
-			int key_number=0;
+			int num_cols=0,i,j;
+			int num_rows=0;
 			pvname_list_t *cdb_res,*it;
 			int_str avp_val;
 			int_str avp_name;
@@ -1551,15 +1551,15 @@ int do_action(struct action* a, struct sip_msg* msg)
 			if (a->elem[2].u.data) {
 				cdb_res = (pvname_list_t*)a->elem[2].u.data;
 				for (it=cdb_res;it;it=it->next)
-					val_number++;
+					num_cols++;
 
-				LM_DBG("The query expects %d results back\n",val_number);
+				LM_DBG("The query expects %d fields per result\n", num_cols);
 
-				ret = cachedb_raw_query( &a->elem[0].u.s, &name_s, &cdb_reply,val_number,&key_number);
-				if (ret >= 0 && val_number > 0) {
-					for (i=key_number-1; i>=0;i--) {
+				ret = cachedb_raw_query( &a->elem[0].u.s, &name_s, &cdb_reply,num_cols,&num_rows);
+				if (ret >= 0 && num_cols > 0) {
+					for (i=num_rows-1; i>=0;i--) {
 						it=cdb_res;
-						for (j=0;j < val_number;j++) {
+						for (j=0;j < num_cols;j++) {
 							avp_type = 0;
 							if (pv_get_avp_name(msg,&it->sname.pvp,&avp_name.n,
 								&avp_type) != 0) {
@@ -1585,7 +1585,7 @@ int do_action(struct action* a, struct sip_msg* msg)
 							}
 							if (add_avp(avp_type,avp_name.n,avp_val) != 0) {
 								LM_ERR("Unable to add AVP\n");
-								free_raw_fetch(cdb_reply,val_number,key_number);
+								free_raw_fetch(cdb_reply,num_cols,num_rows);
 								return -1;
 							}
 next_avp:
@@ -1596,7 +1596,7 @@ next_avp:
 							}
 						}
 					}
-					free_raw_fetch(cdb_reply,val_number,key_number);
+					free_raw_fetch(cdb_reply,num_cols,num_rows);
 				}
 			}
 			else
@@ -1606,7 +1606,7 @@ next_avp:
 			script_trace("core", "xdbg", msg, a->file, a->line) ;
 			if (a->elem[0].type == SCRIPTVAR_ELEM_ST)
 			{
-				ret = xdbg(msg, a->elem[0].u.data, val.rs.s);
+				ret = xdbg(msg, a->elem[0].u.data);
 				if (ret < 0)
 				{
 					LM_ERR("error while printing xdbg message\n");
@@ -1650,7 +1650,7 @@ next_avp:
 					ret=E_BUG;
 					break;
 				}
-				ret = xlog_1(msg,a->elem[0].u.data, val.rs.s);
+				ret = xlog_1(msg,a->elem[0].u.data);
 				if (ret < 0)
 				{
 					LM_ERR("error while printing xlog message\n");
@@ -1877,7 +1877,8 @@ next_avp:
 			aitem = (struct action *)(a->elem[0].u.data);
 			if (async_script_start_f==NULL || a->elem[0].type!=ACTIONS_ST ||
 			a->elem[1].type!=NUMBER_ST || aitem->type!=AMODULE_T) {
-				LM_ALERT("BUG in async expression\n");
+				LM_ALERT("BUG in async expression "
+				         "(is the 'tm' module loaded?)\n");
 			} else {
 				script_trace("async",
 					((acmd_export_t*)(aitem->elem[0].u.data))->name,
@@ -2219,5 +2220,83 @@ void __script_trace(char *class, char *action, struct sip_msg *msg,
 		LM_GEN1(script_trace_log_level, "[Script Trace][%s:%d][%s %s]"\
 			" -> (%.*s)\n", file, line,
 			class?class:"", action, val.len, val.s);
+	}
+}
+
+
+static const char *_sip_msg_buf =
+"DUMMY sip:user@dummy.com SIP/2.0\r\n"
+"Via: SIP/2.0/UDP 127.0.0.1;branch=z9hG4bKdummy\r\n"
+"To: <sip:to@dummy.com>\r\n"
+"From: <sip:from@dummy.com>;tag=1\r\n"
+"Call-ID: dummy-1\r\n"
+"CSeq: 1 DUMMY\r\n\r\n";
+static struct sip_msg* dummy_static_req= NULL;
+static int dummy_static_in_used = 0;
+
+struct sip_msg* get_dummy_sip_msg(void)
+{
+	struct sip_msg* req;
+
+	if (dummy_static_req == NULL || dummy_static_in_used) {
+		/* if the static request is not yet allocated, or the static
+		 * request is already in used (nested calls?), we better allocate
+		 * a new structure */
+		LM_DBG("allocating new sip msg\n");
+		req = (struct sip_msg*)pkg_malloc(sizeof(struct sip_msg));
+		if(req == NULL)
+		{
+			LM_ERR("No more memory\n");
+			return NULL;
+		}
+		memset( req, 0, sizeof(struct sip_msg));
+
+		req->buf = (char*)_sip_msg_buf;
+		req->len = strlen(_sip_msg_buf);
+		req->rcv.src_ip.af = AF_INET;
+		req->rcv.dst_ip.af = AF_INET;
+
+		parse_msg((char*)_sip_msg_buf, strlen(_sip_msg_buf), req);
+		parse_headers( req, HDR_EOH_F, 0);
+		if (dummy_static_req==NULL) {
+			dummy_static_req = req;
+			dummy_static_in_used = 1;
+			LM_DBG("setting as static to %p\n",req);
+		}
+	} else {
+		/* reuse the static request */
+		req = dummy_static_req;
+		LM_DBG("reusing the static sip msg %p\n",req);
+	}
+
+	return req;
+}
+
+void release_dummy_sip_msg( struct sip_msg* req)
+{
+	struct hdr_field* hdrs;
+
+	if (req==dummy_static_req) {
+		/* for the static request, just strip out the potential
+		 * changes (lumps, new_uri, dst_uri, etc), but keep the parsed
+		 * list of headers (this never changes) */
+		LM_DBG("cleaning the static sip msg %p\n",req);
+		hdrs = req->headers;
+		req->headers = NULL;
+		free_sip_msg(req);
+		req->headers = hdrs;
+		req->msg_cb = NULL;
+		req->new_uri.s = req->dst_uri.s = req->path_vec.s = NULL;
+		req->new_uri.len = req->dst_uri.len = req->path_vec.len = 0;
+		req->set_global_address.s = req->set_global_port.s = NULL;
+		req->set_global_address.len = req->set_global_port.len = 0;
+		req->add_rm = req->body_lumps = NULL;
+		req->reply_lump = NULL;
+		dummy_static_in_used = 0;
+	} else {
+		LM_DBG("freeing allocated sip msg %p\n",req);
+		/* is was an 100% allocated request */
+		free_sip_msg(req);
+		pkg_free(req);
 	}
 }

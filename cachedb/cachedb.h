@@ -61,16 +61,30 @@ typedef struct cachedb_funcs_t {
 	/* NOTE: "val->s" shall be allocated in PKG memory,
 	 * and MUST be freed by the calling layer! */
 	int (*get) (cachedb_con *con, str *attr, str *val);
+
+	/**
+	 * Gets the value of a counter.
+	 * Return values:
+	 *  -2: key does not exist
+	 *  -1: internal error
+	 *   0: key found and value returned in the `val` parameter
+	 */
 	int (*get_counter) (cachedb_con *con, str *attr, int *val);
 	int (*set) (cachedb_con *con, str *attr, str *val, int expires);
 	int (*remove) (cachedb_con *con, str *attr);
+	/*
+	 * _remove() - Remove a key/value record matching @key == @attr
+	 * Note: on some backends (e.g. MongoDB), the @key may be ignored,
+	 *       since the primary key name is hardcoded (e.g. "_id")
+	 */
+	int (*_remove) (cachedb_con *con, str *attr, const str *key);
 	int (*add) (cachedb_con *con, str *attr, int val,
 	        int expires, int *new_val);
 	int (*sub) (cachedb_con *con, str *attr, int val,
 	        int expires, int *new_val);
 	/* bi-dimensional array will be returned */
 	int (*raw_query) (cachedb_con *con, str *query, cdb_raw_entry ***reply,
-	                  int expected_key_no,int *reply_no);
+	                  int num_cols, int *num_rows);
 	int (*truncate) (cachedb_con *con);
 
 	int (*db_query_trans) (cachedb_con *con, const str *table,
@@ -160,5 +174,5 @@ int cachedb_bind_mod(str *url,cachedb_funcs *funcs);
 int cachedb_put_connection(str *cachedb_name,cachedb_con *con);
 
 void cachedb_end_connections(str *cachedb_name);
-void free_raw_fetch(cdb_raw_entry **reply, int no_val, int no_key);
+void free_raw_fetch(cdb_raw_entry **reply, int num_cols, int num_rows);
 #endif

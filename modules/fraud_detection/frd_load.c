@@ -73,8 +73,6 @@ str seqcalls_thresh_warn_col = str_init(FRD_SEQCALLS_THRESH_WARN_COL);
 str seqcalls_thresh_crit_col = str_init(FRD_SEQCALLS_THRESH_CRIT_COL);
 
 
-unsigned int frd_data_rev;
-
 static db_con_t *db_handle;
 static db_func_t dbf;
 
@@ -227,11 +225,21 @@ parse_error:
 }
 
 static int create_time_rec(const str *time_start, const str *time_end,
-		const str *week_days, tmrec_p trec)
+		const str *week_days, tmrec_p trec, tmrec_p *out_rec)
 {
 	int end_h, end_m;
 
 	memset(trec, 0, sizeof(tmrec_t));
+
+	/* the default, "catch-all" time rec - using NULL is optimal */
+	if (str_match(time_start, _str("00:00")) &&
+	        str_match(time_end, _str("23:59")) &&
+	        str_match(week_days, _str("Mon-Sun"))) {
+		*out_rec = NULL;
+		return 0;
+	} else {
+		*out_rec = trec;
+	}
 
 	if (strtime(time_start, &trec->ts.tm_hour, &trec->ts.tm_min) != 0
 			|| strtime(time_end, &end_h, &end_m) != 0)
@@ -346,6 +354,8 @@ static int frd_load_data(dr_head_p drp, free_list_t **fl)
 		fl_it->n = row_count;
 
 		for (i = 0; i < row_count; ++i) {
+			tmrec_p trec;
+
 			values = ROW_VALUES(rows + i);
 			fl_it->trec[i].byday = NULL;
 
@@ -368,7 +378,8 @@ static int frd_load_data(dr_head_p drp, free_list_t **fl)
 			get_str_from_dbval(end_h_col.s, values + 4, 1, 1, end_time, null_val);
 			get_str_from_dbval(days_col.s, values + 5, 1, 1, days, null_val);
 
-			if (create_time_rec(&start_time, &end_time, &days, fl_it->trec + i) != 0)
+			if (create_time_rec(&start_time, &end_time, &days, fl_it->trec + i,
+			        &trec) != 0)
 				goto null_val;
 
 			/* Now load the thresholds */
@@ -381,7 +392,7 @@ static int frd_load_data(dr_head_p drp, free_list_t **fl)
 			}
 
 			/* Rule OK, time to put it in DR */
-			if (drb.add_rule(drp, rid, &prefix, pid, 0, fl_it->trec + i,
+			if (drb.add_rule(drp, rid, &prefix, pid, 0, trec,
 						(void*)(&fl_it->thr[i])) != 0) {
 
 				LM_ERR("Cannot add rule in dr <%u>. Skipping...\n", rid);
@@ -463,7 +474,6 @@ int frd_reload_data(void)
 
 	old_head = *dr_head;
 	old_list = free_list;
-	++frd_data_rev;
 	lock_start_write(frd_data_lock);
 	*dr_head = new_head;
 	free_list = new_list;

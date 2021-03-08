@@ -237,10 +237,12 @@ static inline int insert_contacts(struct sip_msg* _m, contact_t* _c,
 				if (r==NULL || r->contacts==NULL) {
 					LM_CRIT("BUG - overflow detected with r=%p and "
 						"contacts=%p\n",r,r->contacts);
+					rerrno = R_INTERNAL;
 					goto error;
 				}
 				if (ul.delete_ucontact( r, r->contacts, 0)!=0) {
 					LM_ERR("failed to remove contact\n");
+					rerrno = R_INTERNAL;
 					goto error;
 				}
 			} else {
@@ -434,6 +436,8 @@ static inline int update_contacts(struct sip_msg* _m, urecord_t* _r,
 				LM_ERR("failed to insert contact\n");
 				goto error;
 			}
+
+			num++;
 		} else {
 			/* Contact found */
 			if (e == 0) {
@@ -647,6 +651,7 @@ int save_aux(struct sip_msg* _m, str* forced_binding, char* _d, char* _f, char* 
 		if (parse_contacts(forced_binding, &forced_c) < 0) {
 			LM_ERR("Unable to parse forced binding [%.*s]\n",
 				forced_binding->len, forced_binding->s);
+			rerrno = R_INTERNAL;
 			goto error;
 		}
 		/* prevent processing all the headers from the message */
@@ -673,6 +678,12 @@ int save_aux(struct sip_msg* _m, str* forced_binding, char* _d, char* _f, char* 
 
 	if (extract_aor( &uri, &sctx.aor,0,0) < 0) {
 		LM_ERR("failed to extract Address Of Record\n");
+		goto error;
+	}
+
+	if (sctx.aor.len == 0) {
+		LM_ERR("the AoR URI is missing the 'username' part!\n");
+		rerrno = R_AOR_PARSE;
 		goto error;
 	}
 
@@ -932,6 +943,8 @@ int _remove(struct sip_msg *msg, char *udomain, char *aor_gp, char *contact_gp,
 		LM_ERR("failed to extract Address Of Record\n");
 		return E_BAD_URI;
 	}
+
+	memset( &delete_nh_he, 0, sizeof(struct hostent));
 
 	ul.lock_udomain((udomain_t *)udomain, &aor_user);
 

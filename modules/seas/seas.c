@@ -119,6 +119,7 @@ struct module_exports exports=
    MOD_TYPE_DEFAULT,/* class of this module */
    MODULE_VERSION,
    DEFAULT_DLFLAGS,
+   0,               /* load function */
    &deps,           /* OpenSIPS module dependencies */
    cmds,
    0,
@@ -128,6 +129,7 @@ struct module_exports exports=
    0,
    0,           /* exported transformations */
    0,           /* extra processes */
+   0,           /* module pre-initialization function */
    seas_init,   /* module initialization function */
    (response_function) 0,
    (destroy_function) seas_exit,   /* module exit function */

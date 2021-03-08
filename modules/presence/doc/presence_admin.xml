@@ -35,7 +35,7 @@
 	</para>
 	</section>
 
-	<section id="presence_clustering">
+	<section id="presence_clustering" xreflabel="Presence Clustering">
 	<title>Presence clustering</title>
 	<para>
 	To read and understand the presence clustering, its abilities and how to
@@ -230,8 +230,8 @@ modparam("presence", "cluster_pres_events" ,"presence, dialog;sla, message-summa
 		<title>Set <varname>cluster_sharing_tags</varname> parameter</title>
 		<programlisting format="linespecific">
 ...
-modparam("presence", "cluster_pres_events" ,"vip1=active")
-modparam("presence", "cluster_pres_events" ,"vip2=backup")
+modparam("presence", "cluster_sharing_tags" ,"vip1=active")
+modparam("presence", "cluster_sharing_tags" ,"vip2=backup")
 ...
 </programlisting>
 		</example>
@@ -707,8 +707,8 @@ modparam("presence", "pres_htable_size", 11)
 		<itemizedlist>
 			<listitem>
 				<para>
-				<emphasis>force_active</emphasis> - options parameter that 
-				controlls what is the default policy (of the presentity) on 
+				<emphasis>force_active</emphasis> - optional parameter that 
+				controls what is the default policy (of the presentity) on 
 				accepting new subscriptions (accept or reject) - of course, 
 				this parameter makes sense only when using a presence 
 				configuration with privacy rules enabled (force_active 
@@ -716,9 +716,9 @@ modparam("presence", "pres_htable_size", 11)
 				</para>
 				<para>
 				There are scenarios where the presentity (the party you 
-				subscribe to) can not upload an XCAP document with it's 
-				privacy rules (to controll which watchers are allowed to 
-				subscribe to it). In such case, from script level, you can
+				subscribe to) can not upload an XCAP document with its
+				privacy rules (to control which watchers are allowed to 
+				subscribe to it). In such cases, from script level, you can
 				force the presence server to consider the current subscription
 				allowed (with Subscription-Status:active) by calling the 
 				handle_subscribe() function with the string parameter "1".
@@ -726,7 +726,7 @@ modparam("presence", "pres_htable_size", 11)
 			</listitem>
 			<listitem>
 				<para>
-				<emphasis>sharing_tag</emphasis> - options parameter telling
+				<emphasis>sharing_tag</emphasis> - optional parameter telling
 				the owner tag (for the subscription) in clusetering scenarios 
 				where the subscription data is shared between multiple 
 				servers - see the <xref linkend="presence_clustering"/>
@@ -938,6 +938,56 @@ _empty_line_
 _empty_line_
 	  </programlisting>
 	</section>
+
+	<section id="mi_pres_set_sharing_tag_active" xreflabel="pres_set_sharing_tag_active">
+	  <title>
+		<function moreinfo="none">pres_set_sharing_tag_active</function>
+	  </title>
+	  <para>
+			Set the given sharing tag to the <emphasis>active</emphasis> state.
+			The information about this change is also broadcasted in the
+			cluster in order to force any other node that may be active on this
+			tag to step down to backup.
+	  </para>
+		<para>
+		For more details, see the <xref linkend="presence_clustering"/> chapter.
+		</para>
+	  <para>
+		Name: <emphasis>pres_set_sharing_tag_active</emphasis>
+	  </para>
+	  <para>Parameters: <emphasis>tag</emphasis> - name of the tag to be set active
+	  </para>
+	  <para>
+		MI FIFO Command Format:
+	  </para>
+	  <programlisting  format="linespecific">
+		opensipsctl fifo pres_set_sharing_tag_active vip1
+	  </programlisting>
+	</section>
+
+	<section id="mi_pres_list_sharing_tags" xreflabel="pres_list_sharing_tags">
+	  <title>
+		<function moreinfo="none">pres_list_sharing_tags</function>
+	  </title>
+	  <para>
+		Lists all known sharing tags and their states.
+	  </para>
+		<para>
+		For more details, see the <xref linkend="presence_clustering"/> chapter.
+		</para>
+	  <para>
+		Name: <emphasis>pres_list_sharing_tags</emphasis>
+	  </para>
+		<para>Parameters: <emphasis>Command takes no parameters</emphasis>
+		</para>
+	  <para>
+		MI FIFO Command Format:
+	  </para>
+	  <programlisting  format="linespecific">
+		opensipsctl fifo pres_list_sharing_tags
+	  </programlisting>
+	</section>
+
 </section>
 
 

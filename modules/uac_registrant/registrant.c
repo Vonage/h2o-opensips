@@ -127,7 +127,7 @@ static param_export_t params[]= {
 	{"default_expires",	INT_PARAM,			&default_expires},
 	{"timer_interval",	INT_PARAM,			&timer_interval},
 	{"db_url",		STR_PARAM,			&db_url.s},
-	{"table_name",		STR_PARAM,			&reg_table_name},
+	{"table_name",		STR_PARAM,			&reg_table_name.s},
 	{"registrar_column",	STR_PARAM,			&registrar_column.s},
 	{"proxy_column",	STR_PARAM,			&proxy_column.s},
 	{"aor_column",		STR_PARAM,			&aor_column.s},
@@ -166,6 +166,7 @@ struct module_exports exports= {
 	MOD_TYPE_DEFAULT,       /* class of this module */
 	MODULE_VERSION,			/* module version */
 	DEFAULT_DLFLAGS,		/* dlopen flags */
+	0,						/* load function */
 	&deps,                  /* OpenSIPS module dependencies */
 	cmds,				/* exported functions */
 	0,					/* exported async functions */
@@ -174,7 +175,8 @@ struct module_exports exports= {
 	mi_cmds,			/* exported MI functions */
 	NULL,				/* exported pseudo-variables */
 	0,					/* exported transformations */
-	0,				/* extra processes */
+	0,					/* extra processes */
+	0,					/* module pre-initialization function */
 	mod_init,			/* module initialization function */
 	(response_function) NULL,	/* response handling function */
 	(destroy_function) mod_destroy,	/* destroy function */
@@ -275,8 +277,6 @@ static int child_init(int rank)
 	return 0;
 }
 
-
-void shm_free_param(void* param) {shm_free(param);}
 
 struct reg_tm_cback_data {
 	struct cell *t;
@@ -411,11 +411,9 @@ int run_reg_tm_cback(void *e_data, void *data, void *r_data)
 		}
 
 		if (statuscode==WWW_AUTH_CODE) {
-			if (0 == parse_www_authenticate_header(msg))
-				auth = get_www_authenticate(msg);
+			parse_www_authenticate_header(msg, &auth);
 		} else if (statuscode==PROXY_AUTH_CODE) {
-			if (0 == parse_proxy_authenticate_header(msg))
-				auth = get_proxy_authenticate(msg);
+			parse_proxy_authenticate_header(msg, &auth);
 		}
 		if (auth == NULL) {
 			LM_ERR("Unable to extract authentication info\n");
@@ -626,7 +624,11 @@ int send_register(unsigned int hash_index, reg_record_t *rec, str *auth_hdr)
 		&rec->td,		/* dialog structure*/
 		reg_tm_cback,		/* callback function */
 		(void *)cb_param,	/* callback param */
-		shm_free_param);	/* function to release the parameter */
+		osips_shm_free);	/* function to release the parameter */
+
+	if (result < 1)
+		shm_free(cb_param);
+
 	LM_DBG("result=[%d]\n", result);
 	return result;
 }
