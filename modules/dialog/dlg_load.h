@@ -28,6 +28,7 @@
 #define _DIALOG_DLG_LOAD_H_
 
 #include "dlg_cb.h"
+#include "dlg_ctx.h"
 #include "dlg_handlers.h"
 #include "dlg_profile.h"
 #include "dlg_vals.h"
@@ -56,10 +57,22 @@ struct dlg_binds {
 	set_mod_flag_f       set_mod_flag;
 	is_mod_flag_set_f    is_mod_flag_set;
 
-	ref_dlg_f            ref_dlg;
-	unref_dlg_f          unref_dlg;
+	ref_dlg_f            dlg_ref;
+	unref_dlg_f          dlg_unref;
 
 	get_rr_param_f       get_rr_param;
+
+	dlg_ctx_register_int_f dlg_ctx_register_int;
+	dlg_ctx_register_str_f dlg_ctx_register_str;
+	dlg_ctx_register_ptr_f dlg_ctx_register_ptr;
+
+	dlg_ctx_put_int_f dlg_ctx_put_int;
+	dlg_ctx_put_str_f dlg_ctx_put_str;
+	dlg_ctx_put_ptr_f dlg_ctx_put_ptr;
+
+	dlg_ctx_get_int_f dlg_ctx_get_int;
+	dlg_ctx_get_str_f dlg_ctx_get_str;
+	dlg_ctx_get_ptr_f dlg_ctx_get_ptr;
 };
 
 

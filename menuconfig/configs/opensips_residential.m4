@@ -8,7 +8,7 @@
 #   re-generating the scenario with different options.#
 #
 # Please refer to the Core CookBook at:
-#      http://www.opensips.org/Resources/DocsCookbooks
+#      https://opensips.org/Resources/DocsCookbooks
 # for a explanation of possible statements, functions and parameters.
 #
 
@@ -395,8 +395,9 @@ ifelse(ENABLE_TCP, `yes', ifelse(ENABLE_TLS, `yes', `
 			setbflag(SIP_PING_FLAG);
 		}',`')dnl
 
+		# store the registration and generate a SIP reply
 		if (!save("location"))
-			sl_reply_error();
+			xlog("failed to register AoR $tu\n");
 
 		exit;
 	}

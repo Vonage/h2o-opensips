@@ -191,11 +191,11 @@ modparam("rtpengine", "rtpengine_retr", 2)
 	<section id="param_extra_id_pv" xreflabel="extra_id_pv">
 		<title><varname>extra_id_pv</varname> (string)</title>
 		<para>
-			The parameter sets the PV defination to use when the <quote>b</quote>
-			parameter is used on rtpengine_delete(), rtpengine_offer(),
-			rtpengine_answer() or rtpengine_manage() command.
+			The parameter sets the PV definition to use when the <quote>via-branch=extra</quote>
+			option is used on the rtpengine_delete(), rtpengine_offer(),
+			rtpengine_answer() or rtpengine_manage() commands.
 		</para><para>
-			Default is empty, the <quote>b</quote> parameter may not be used then.
+			Default is empty, the <quote>via-branch=extra</quote> option may not be used then.
 		</para>
 		<example>
 		<title>Set <varname>extra_id_pv</varname> parameter</title>
@@ -455,7 +455,9 @@ rtpengine_offer();
 				</para></listitem>
 				<listitem><para>
 				<emphasis>symmetric</emphasis> - flags that for the UA from which
-				message is received, support symmetric RTP must be forced.
+				message is received, support symmetric RTP must be forced. You do not
+				need to explicitly specify this value, as it is the default, and the
+				behavior is only changed when the  <emphasis>asymmetric</emphasis> is used.
 				</para></listitem>
 				<listitem><para>
 				<emphasis>repacketize=NN</emphasis> - requests the &rtp; proxy to perform
@@ -734,13 +736,6 @@ rtpengine_delete();
 		<listitem>
 			<para>
 			If INVITE with SDP, then do <function>rtpengine_offer()</function>
-			</para>
-		</listitem>
-		<listitem>
-			<para>
-			If INVITE with SDP, when the tm module is loaded, mark transaction with
-			internal flag FL_SDP_BODY to know that the 1xx and 2xx are for
-			<function>rtpengine_answer()</function>
 			</para>
 		</listitem>
 		<listitem>

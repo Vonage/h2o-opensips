@@ -650,7 +650,7 @@ cachedb_con* cachedb_do_init(str *url,void* (*new_connection)(struct cachedb_id 
 
 	id = new_cachedb_id(url);
 	if (!id) {
-		LM_ERR("cannot parse url [%.*s]\n",url->len,url->s);
+		LM_ERR("cannot parse url [%s]\n", db_url_escape(url));
 		pkg_free(res);
 		return 0;
 	}
@@ -757,12 +757,12 @@ int cachedb_raw_query(str* cachedb_name, str* attr, cdb_raw_entry*** reply,int e
 	return ret;
 }
 
-void free_raw_fetch(cdb_raw_entry **reply, int no_val, int no_key)
+void free_raw_fetch(cdb_raw_entry **reply, int num_cols, int num_rows)
 {
 	int i,j;
 
-	for (i=0;i<no_key;i++) {
-		for (j=0;j<no_val;j++) {
+	for (i=0;i<num_rows;i++) {
+		for (j=0;j<num_cols;j++) {
 			if (reply[i][j].type == CDB_STR)
 				pkg_free(reply[i][j].val.s.s);
 		}

@@ -22,10 +22,44 @@
 #include <stdarg.h>
 
 #include "struct_hist.h"
+
 #include "../../mem/shm_mem.h"
 #include "../../dprint.h"
 #include "../../locking.h"
 #include "../../pt.h"
+#include "../list.h"
+
+struct struct_hist {
+	void *obj;
+	char *obj_name;
+	utime_t created;
+	struct struct_hist_list *shlist;
+
+	int ref;
+
+	struct struct_hist_action *actions;
+	int len;
+	int max_len;
+	int flush_offset;
+
+	gen_lock_t wlock;
+	int auto_logging;
+
+	struct list_head list;
+};
+
+struct struct_hist_list {
+	char *obj_name;
+
+	struct list_head objects;
+	int len;
+	int win_sz;
+	long long total_obj;
+	int auto_logging;
+	int init_actions_sz;
+
+	gen_lock_t wlock;
+};
 
 static inline const char *verb2str(enum struct_hist_verb verb)
 {
@@ -42,10 +76,11 @@ static inline const char *verb2str(enum struct_hist_verb verb)
 	return sh_verb_strs[verb];
 }
 
-static void sh_unref_unsafe(struct struct_hist *sh, struct struct_hist_list *list);
+static void sh_unref_unsafe(struct struct_hist *sh);
 static void sh_free(struct struct_hist *sh);
 
-struct struct_hist_list *shl_init(char *obj_name, int window_size)
+struct struct_hist_list *_shl_init(char *obj_name, int window_size,
+			int auto_logging, int init_actions_sz)
 {
 	struct struct_hist_list *shl;
 
@@ -60,8 +95,22 @@ struct struct_hist_list *shl_init(char *obj_name, int window_size)
 	lock_init(&shl->wlock);
 	shl->win_sz = window_size;
 	shl->obj_name = obj_name;
+	shl->auto_logging = !!auto_logging;
+	shl->init_actions_sz = init_actions_sz;
 
 	return shl;
+}
+
+void sh_list_flush(struct struct_hist_list *shl)
+{
+	struct list_head *_;
+
+	lock_get(&shl->wlock);
+
+	list_for_each_prev (_, &shl->objects)
+		sh_flush(list_entry(_, struct struct_hist, list));
+
+	lock_release(&shl->wlock);
 }
 
 void shl_destroy(struct struct_hist_list *shl)
@@ -69,7 +118,10 @@ void shl_destroy(struct struct_hist_list *shl)
 	struct list_head *el, *next;
 	struct struct_hist *sh;
 
-	list_for_each_safe(el, next, &shl->objects) {
+	if (!shl)
+		return;
+
+	list_for_each_safe (el, next, &shl->objects) {
 		sh = list_entry(el, struct struct_hist, list);
 		sh_free(sh);
 	}
@@ -77,11 +129,11 @@ void shl_destroy(struct struct_hist_list *shl)
 	shm_free(shl);
 }
 
-struct struct_hist *sh_push(void *obj, struct struct_hist_list *list)
+struct struct_hist *_sh_push(void *obj, struct struct_hist_list *list, int refs)
 {
 	struct struct_hist *sh, *last;
 
-	if (!obj)
+	if (!obj || !list)
 		return NULL;
 
 	sh = shm_malloc(sizeof *sh);
@@ -89,21 +141,26 @@ struct struct_hist *sh_push(void *obj, struct struct_hist_list *list)
 		LM_ERR("oom\n");
 		return NULL;
 	}
-	memset(sh, 0, sizeof *sh);
+	/* CAREFUL: sh is not memset, for speed reasons! */
 
-	sh->actions = shm_malloc(ACTIONS_SIZE * sizeof *sh->actions);
+	sh->actions = shm_malloc(list->init_actions_sz * sizeof *sh->actions);
 	if (!sh->actions) {
 		LM_ERR("oom2\n");
 		shm_free(sh);
 		return NULL;
 	}
-	memset(sh->actions, 0, ACTIONS_SIZE * sizeof *sh->actions);
+	/* CAREFUL: sh->actions is not memset, for speed reasons! */
 
 	sh->obj = obj;
 	sh->obj_name = list->obj_name;
 	sh->created = get_uticks();
-	sh->ref = 2; /* one for "list", one for "return sh;" */
-	sh->max_len = ACTIONS_SIZE;
+	sh->shlist = list;
+	sh->ref = 1 + refs; /* one for "list", the rest are for the caller */
+	sh->len = 0;
+	sh->max_len = list->init_actions_sz;
+	sh->flush_offset = 0;
+	sh->auto_logging = list->auto_logging;
+
 	lock_init(&sh->wlock);
 
 	lock_get(&list->wlock);
@@ -116,7 +173,7 @@ struct struct_hist *sh_push(void *obj, struct struct_hist_list *list)
 		list_del(&last->list);
 		INIT_LIST_HEAD(&last->list);
 		list->len--;
-		sh_unref_unsafe(last, list);
+		sh_unref_unsafe(last);
 	}
 	lock_release(&list->wlock);
 
@@ -129,54 +186,66 @@ static void sh_free(struct struct_hist *sh)
 	shm_free(sh);
 }
 
-void sh_unref(struct struct_hist *sh, struct struct_hist_list *list)
+void sh_unref(struct struct_hist *sh)
 {
-	lock_get(&list->wlock);
-	sh_unref_unsafe(sh, list);
-	lock_release(&list->wlock);
+	gen_lock_t *shl_lock = &sh->shlist->wlock;
+
+	lock_get(shl_lock);
+	sh_unref_unsafe(sh);
+	lock_release(shl_lock);
 }
 
-static void flush_sh(struct struct_hist *sh)
+static void _sh_flush(struct struct_hist *sh, int do_logging)
 {
-#ifdef ENABLE_SH_LOGGING
 	int i;
 
-	for (i = 0; i < sh->len; i++) {
-		LM_INFO("%5d. %p-%lld | %-15s | %-12lld | %-5d | %s |\n",
-		        i + 1 + sh->flush_offset,
-				sh->obj,
-				sh->created,
-		        verb2str(sh->actions[i].verb),
-		        sh->actions[i].t,
-		        sh->actions[i].pid,
-		        sh->actions[i].log);
+	if (do_logging) {
+		for (i = 0; i < sh->len; i++) {
+			LM_INFO("%5d. %p-%lld | %-15s | %-12lld | %-5d | %s |\n",
+			        i + 1 + sh->flush_offset,
+					sh->obj,
+					sh->created,
+			        verb2str(sh->actions[i].verb),
+			        sh->actions[i].t,
+			        sh->actions[i].pid,
+			        sh->actions[i].log);
+		}
 	}
-#endif
+
 	sh->flush_offset += sh->len;
 	sh->len = 0;
 }
 
-static void sh_unref_unsafe(struct struct_hist *sh, struct struct_hist_list *list)
+void sh_flush(struct struct_hist *sh)
+{
+	lock_get(&sh->wlock);
+	_sh_flush(sh, 1);
+	lock_release(&sh->wlock);
+}
+
+static void sh_unref_unsafe(struct struct_hist *sh)
 {
 	sh->ref--;
 	if (sh->ref != 0)
 		return;
-#ifdef ENABLE_SH_LOGGING
-	lock_get(&sh->wlock);
 
-	LM_INFO("%s %p free, %d actions follow\n", sh->obj_name, sh->obj, sh->len);
-	LM_INFO("=====================================\n");
-	flush_sh(sh);
+	if (sh->auto_logging) {
+		lock_get(&sh->wlock);
 
-	lock_release(&sh->wlock);
-#endif
-	if (!list_empty(&sh->list)) {
-		list_del(&sh->list);
+		LM_INFO("%s %p free, %d actions follow\n", sh->obj_name, sh->obj, sh->len);
+		LM_INFO("=====================================\n");
+		_sh_flush(sh, 1);
+
+		lock_release(&sh->wlock);
 	}
+
+	if (!list_empty(&sh->list))
+		list_del(&sh->list);
+
 	sh_free(sh);
 }
 
-int sh_log(struct struct_hist *sh, enum struct_hist_verb verb, char *fmt, ...)
+int _sh_log(struct struct_hist *sh, enum struct_hist_verb verb, char *fmt, ...)
 {
 	va_list ap;
 	int n;
@@ -189,11 +258,12 @@ int sh_log(struct struct_hist *sh, enum struct_hist_verb verb, char *fmt, ...)
 	lock_get(&sh->wlock);
 
 	if (flushable(sh)) {
-#ifdef ENABLE_SH_LOGGING
-		LM_INFO("%s %p flush, %d actions follow\n", sh->obj_name, sh->obj, sh->len);
-		LM_INFO("=====================================\n");
-#endif
-		flush_sh(sh);
+		if (sh->auto_logging) {
+			LM_INFO("%s %p flush, %d actions follow\n", sh->obj_name, sh->obj, sh->len);
+			LM_INFO("=====================================\n");
+		}
+
+		_sh_flush(sh, sh->auto_logging);
 	} else if (sh->len == sh->max_len) {
 		new = shm_realloc(sh->actions, sh->max_len * 2 * sizeof *sh->actions);
 		if (!new) {
@@ -201,7 +271,7 @@ int sh_log(struct struct_hist *sh, enum struct_hist_verb verb, char *fmt, ...)
 			LM_ERR("oom\n");
 			return -1;
 		}
-		memset(&new[sh->max_len], 0, sh->max_len * sizeof *sh->actions);
+		/* CAREFUL: newly added actions are not memset, for speed reasons! */
 
 		sh->actions = new;
 		sh->max_len *= 2;

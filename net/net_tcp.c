@@ -157,7 +157,7 @@ static inline int init_sock_keepalive(int s)
 				strerror(errno));
 			return -1;
 		}
-		LM_INFO("TCP keepalive enabled on socket %d\n",s);
+		LM_DBG("TCP keepalive enabled on socket %d\n",s);
 	}
 #endif
 #ifdef HAVE_TCP_KEEPINTVL
@@ -530,7 +530,7 @@ int tcp_get_correlation_id( int id, unsigned long long *cid)
 
 /*! \brief _tcpconn_find with locks and acquire fd */
 int tcp_conn_get(int id, struct ip_addr* ip, int port, enum sip_protos proto,
-									struct tcp_connection** conn, int* conn_fd)
+			void *proto_extra_id, struct tcp_connection** conn, int* conn_fd)
 {
 	struct tcp_connection* c;
 	struct tcp_connection* tmp;
@@ -569,7 +569,10 @@ int tcp_conn_get(int id, struct ip_addr* ip, int port, enum sip_protos proto,
 				if (c->state != S_CONN_BAD &&
 				    port == a->port &&
 				    proto == c->type &&
-				    ip_addr_cmp(ip, &c->rcv.src_ip))
+				    ip_addr_cmp(ip, &c->rcv.src_ip) &&
+				    (proto_extra_id==NULL ||
+				    protos[proto].net.conn_match==NULL ||
+				    protos[proto].net.conn_match( c, proto_extra_id)) )
 					goto found;
 			}
 			TCPCONN_UNLOCK(part);
@@ -723,9 +726,11 @@ static void _tcpconn_rm(struct tcp_connection* c)
 	if (protos[c->type].net.conn_clean)
 		protos[c->type].net.conn_clean(c);
 
+#ifdef DBG_TCPCON
 	sh_log(c->hist, TCP_DESTROY, "type=%d", c->type);
-	sh_unref(c->hist, con_hist);
+	sh_unref(c->hist);
 	c->hist = NULL;
+#endif
 
 	shm_free(c);
 }
@@ -834,6 +839,8 @@ static struct tcp_connection* tcpconn_new(int sock, union sockaddr_union* su,
 							struct socket_info* si, int state, int flags)
 {
 	struct tcp_connection *c;
+	union sockaddr_union local_su;
+	unsigned int su_size;
 
 	c=(struct tcp_connection*)shm_malloc(sizeof(struct tcp_connection));
 	if (c==0){
@@ -855,7 +862,13 @@ static struct tcp_connection* tcpconn_new(int sock, union sockaddr_union* su,
 	c->rcv.src_port=su_getport(su);
 	c->rcv.bind_address = si;
 	c->rcv.dst_ip = si->address;
-	c->rcv.dst_port = si->port_no;
+	su_size = sockaddru_len(local_su);
+	if (getsockname(sock, (struct sockaddr *)&local_su, &su_size)<0) {
+		LM_ERR("failed to get info on received interface/IP %d/%s\n",
+			errno, strerror(errno));
+		goto error;
+	}
+	c->rcv.dst_port = su_getport(&local_su);
 	print_ip("tcpconn_new: new tcp connection to: ", &c->rcv.src_ip, "\n");
 	LM_DBG("on port %d, proto %d\n", c->rcv.src_port, si->proto);
 	c->id=(*connection_id)++;
@@ -872,19 +885,14 @@ static struct tcp_connection* tcpconn_new(int sock, union sockaddr_union* su,
 	/* start with the default conn lifetime */
 	c->lifetime = get_ticks()+tcp_con_lifetime;
 	c->flags|=F_CONN_REMOVED|flags;
+#ifdef DBG_TCPCON
 	c->hist = sh_push(c, con_hist);
-
-	if (protos[si->proto].net.conn_init &&
-	protos[si->proto].net.conn_init(c)<0) {
-		LM_ERR("failed to do proto %d specific init for conn %p\n",
-			si->proto,c);
-		goto error1;
-	}
+#endif
 
 	tcp_connections_no++;
 	return c;
 
-error1:
+error:
 	lock_destroy(&c->write_lock);
 error0:
 	shm_free(c);
@@ -924,6 +932,15 @@ struct tcp_connection* tcp_conn_new(int sock, union sockaddr_union* su,
 	c->refcnt++; /* safe to do it w/o locking, it's not yet
 					available to the rest of the world */
 	sh_log(c->hist, TCP_REF, "connect, (%d)", c->refcnt);
+
+	if (protos[c->type].net.conn_init &&
+			protos[c->type].net.conn_init(c) < 0) {
+		LM_ERR("failed to do proto %d specific init for conn %p\n",
+				c->type, c);
+		tcp_conn_destroy(c);
+		return NULL;
+	}
+	c->flags |= F_CONN_INIT;
 
 	return c;
 }
@@ -1020,12 +1037,11 @@ static inline int handle_new_connect(struct socket_info* si)
 {
 	union sockaddr_union su;
 	struct tcp_connection* tcpconn;
-	socklen_t su_len;
+	socklen_t su_len = sizeof(su);
 	int new_sock;
 	int id;
 
-	/* got a connection on r */
-	su_len=sizeof(su);
+	/* coverity[overrun-buffer-arg: FALSE] - union has 28 bytes, CID #200070 */
 	new_sock=accept(si->socket, &(su.s), &su_len);
 	if (new_sock==-1){
 		if ((errno==EAGAIN)||(errno==EWOULDBLOCK))
@@ -1128,7 +1144,7 @@ inline static int handle_tcpconn_ev(struct tcp_connection* tcpconn, int fd_i,
 		/* we received a write event */
 		if (tcpconn->state==S_CONN_CONNECTING) {
 			/* we're coming from an async connect & write
-			 * let's see if we connected successfully*/
+			 * let's see if we connected successfully */
 			err_len=sizeof(err);
 			if (getsockopt(tcpconn->s, SOL_SOCKET, SO_ERROR, &err, &err_len) < 0 || \
 					err != 0) {
@@ -1151,8 +1167,10 @@ inline static int handle_tcpconn_ev(struct tcp_connection* tcpconn, int fd_i,
 
 			/* now that we completed the async connection, we also need to
 			 * listen for READ events, otherwise these will get lost */
-			if (tcpconn->flags & F_CONN_REMOVED_READ)
+			if (tcpconn->flags & F_CONN_REMOVED_READ) {
 				reactor_add_reader( tcpconn->s, F_TCPCONN, RCT_PRIO_NET, tcpconn);
+				tcpconn->flags&=~F_CONN_REMOVED_READ;
+			}
 
 			goto async_write;
 		} else {
@@ -1283,6 +1301,8 @@ inline static int handle_tcp_worker(struct tcp_child* tcp_c, int fd_i)
 			break;
 		case ASYNC_WRITE:
 			tcp_c->busy--;
+			/* fall through*/
+		case ASYNC_WRITE2:
 			if (tcpconn->state==S_CONN_BAD){
 				sh_log(tcpconn->hist, TCP_UNREF, "tcpworker async write bad, (%d)", tcpconn->refcnt);
 				tcpconn_destroy(tcpconn);
@@ -1299,6 +1319,8 @@ inline static int handle_tcp_worker(struct tcp_child* tcp_c, int fd_i)
 		case CONN_EOF:
 			/* WARNING: this will auto-dec. refcnt! */
 			tcp_c->busy--;
+			/* fall through*/
+		case CONN_ERROR2:
 			if ((tcpconn->flags & F_CONN_REMOVED) != F_CONN_REMOVED &&
 				(tcpconn->s!=-1)){
 				reactor_del_all( tcpconn->s, -1, IO_FD_CLOSING);
@@ -1328,7 +1350,7 @@ error:
  *          - -1 on error reading from the fd,
  *          -  0 on EAGAIN  or when no  more io events are queued
  *             (receive buffer empty),
- *          -  >0 on successfull reads from the fd (the receive buffer might
+ *          -  >0 on successful reads from the fd (the receive buffer might
  *             be non-empty).
  */
 inline static int handle_worker(struct process_table* p, int fd_i)
@@ -1395,6 +1417,7 @@ inline static int handle_worker(struct process_table* p, int fd_i)
 	}
 	switch(cmd){
 		case CONN_ERROR:
+		case CONN_ERROR2:
 			/* remove from reactor only if the fd exists, and it wasn't
 			 * removed before */
 			if ((tcpconn->flags & F_CONN_REMOVED) != F_CONN_REMOVED &&
@@ -1447,6 +1470,7 @@ inline static int handle_worker(struct process_table* p, int fd_i)
 			tcpconn->flags&=~F_CONN_REMOVED_WRITE;
 			break;
 		case ASYNC_WRITE:
+		case ASYNC_WRITE2:
 			if (tcpconn->state==S_CONN_BAD){
 				tcpconn->lifetime=0;
 				break;
@@ -1477,7 +1501,7 @@ error:
  *            io events are queued on the fd (the receive buffer is empty).
  *            Usefull to detect when there are no more io events queued for
  *            sigio_rt, epoll_et, kqueue.
- *         >0 on successfull read from the fd (when there might be more io
+ *         >0 on successful read from the fd (when there might be more io
  *            queued -- the receive buffer might still be non-empty)
  */
 inline static int handle_io(struct fd_map* fm, int idx,int event_type)
@@ -1691,7 +1715,7 @@ int tcp_init(void)
 		return 0;
 
 #ifdef DBG_TCPCON
-	con_hist = shl_init("TCP con", 10000);
+	con_hist = shl_init("TCP con", 10000, 1);
 	if (!con_hist) {
 		LM_ERR("oom con hist\n");
 		goto error;
@@ -1889,7 +1913,7 @@ int tcp_start_processes(int *chd_rank, int *startup_done)
 				*startup_done = 1;
 			}
 
-			report_conditional_status( 1, 0);
+			report_conditional_status( (!no_daemon_mode), 0);
 
 			tcp_worker_proc_loop();
 		}
@@ -1955,7 +1979,7 @@ struct mi_root *mi_tcp_list_conns(struct mi_root *cmd, void *param)
 	time_t _ts;
 	char date_buf[MI_DATE_BUF_LEN];
 	int date_buf_len;
-	unsigned int i,n,part;
+	unsigned int i,j,n,part;
 	char proto[PROTO_NAME_MAX_SIZE];
 	char *p;
 	int len;
@@ -1996,14 +2020,14 @@ struct mi_root *mi_tcp_list_conns(struct mi_root *cmd, void *param)
 				if (attr==0)
 					goto error;
 
-				/* add Source */
-				attr = addf_mi_attr( node, MI_DUP_VALUE, MI_SSTR("Source"),
+				/* add Remote IP:Port */
+				attr = addf_mi_attr( node, MI_DUP_VALUE, MI_SSTR("Remote"),
 					"%s:%d",ip_addr2a(&conn->rcv.src_ip), conn->rcv.src_port);
 				if (attr==0)
 					goto error;
 
-				/* add Destination */
-				attr = addf_mi_attr( node, MI_DUP_VALUE,MI_SSTR("Destination"),
+				/* add Local IP:Port */
+				attr = addf_mi_attr( node, MI_DUP_VALUE,MI_SSTR("Local"),
 					"%s:%d",ip_addr2a(&conn->rcv.dst_ip), conn->rcv.dst_port);
 				if (attr==0)
 					goto error;
@@ -2023,6 +2047,10 @@ struct mi_root *mi_tcp_list_conns(struct mi_root *cmd, void *param)
 				if (attr==0)
 					goto error;
 
+				for( j=0 ; j<conn->aliases ; j++ )
+					/* add one node for each conn */
+					addf_mi_node_child( node, 0,
+						MI_SSTR("Alias port"), "%d",conn->con_aliases[j].port );
 				n++;
 				/* at each 50 conns, flush the tree */
 				if ( (n % 50) == 0 )

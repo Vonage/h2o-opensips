@@ -365,10 +365,11 @@ int notify_ebr_subscriptions( ebr_event *ev, evi_params_t *params)
 	for ( sub=ev->subs ; sub ; sub_prev=sub,
 								sub=sub_next?sub_next:(sub?sub->next:NULL) ) {
 
-		/* discard expired NOTIFY subscriptions */
-		if (sub->flags&EBR_SUBS_TYPE_NOTY && sub->expire<my_time) {
-			LM_DBG("subscription type [NOTIFY]from process %d(pid %d) on "
+		/* discard expired subscriptions */
+		if (sub->expire<my_time) {
+			LM_DBG("subscription type [%s] from process %d(pid %d) on "
 				"event <%.*s> expired at %d\n",
+				(sub->flags&EBR_SUBS_TYPE_WAIT)?"WAIT":"NOTIFY",
 				sub->proc_no, pt[sub->proc_no].pid,
 				sub->event->event_name.len, sub->event->event_name.s,
 				sub->expire );
@@ -513,7 +514,7 @@ void handle_ebr_ipc(int sender, void *payload)
 {
 	ebr_ipc_job *job = (ebr_ipc_job*)payload;
 	struct usr_avp **old_avps;
-	struct sip_msg req;
+	struct sip_msg *req;
 
 	LM_DBG("EBR notification received via IPC for event %.*s\n",
 		job->ev->event_name.len, job->ev->event_name.s);
@@ -522,18 +523,15 @@ void handle_ebr_ipc(int sender, void *payload)
 
 		/* this is a job for notifiying on an event */
 
+		/* prepare a fake/dummy request */
+		req = get_dummy_sip_msg();
+		if(req == NULL) {
+			LM_ERR("cannot create new dummy sip request\n");
+			goto cleanup;
+		}
+
 		/* push our list of AVPs */
 		old_avps = set_avp_list( &job->avps );
-
-		/* prepare a fake/dummy request */
-		memset( &req, 0, sizeof(struct sip_msg));
-		req.first_line.type = SIP_REQUEST;
-		req.first_line.u.request.method.s= "DUMMY";
-		req.first_line.u.request.method.len= 5;
-		req.first_line.u.request.uri.s= "sip:user@domain.com";
-		req.first_line.u.request.uri.len= 19;
-		req.rcv.src_ip.af = AF_INET;
-		req.rcv.dst_ip.af = AF_INET;
 
 		LM_DBG("using transaction reference %X:%X\n",
 			job->tm.hash, job->tm.label);
@@ -542,15 +540,16 @@ void handle_ebr_ipc(int sender, void *payload)
 
 		/* route the notification route */
 		set_route_type( REQUEST_ROUTE );
-		run_top_route( rlist[(int)(long)job->data].a, &req);
+		run_top_route( rlist[(int)(long)job->data].a, req);
 
 		if (ebr_tmb.t_set_remote_t)
 			ebr_tmb.t_set_remote_t( NULL );
 
 		/* cleanup over route execution */
 		set_avp_list( old_avps );
-		free_sip_msg( &req );
+		release_dummy_sip_msg(req);
 
+		cleanup:
 		/* destroy everything */
 		destroy_avp_list( &job->avps );
 		shm_free(job);

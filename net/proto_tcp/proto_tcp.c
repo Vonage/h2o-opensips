@@ -183,7 +183,8 @@ struct module_exports proto_tcp_exports = {
 	MOD_TYPE_DEFAULT,/* class of this module */
 	MODULE_VERSION,
 	DEFAULT_DLFLAGS, /* dlopen flags */
-	&deps,            /* OpenSIPS module dependencies */
+	0,               /* load function */
+	&deps,           /* OpenSIPS module dependencies */
 	cmds,       /* exported functions */
 	0,          /* exported async functions */
 	params,     /* module parameters */
@@ -192,6 +193,7 @@ struct module_exports proto_tcp_exports = {
 	0,          /* exported pseudo-variables */
 	0,			/* exported transformations */
 	0,          /* extra processes */
+	0,          /* module pre-initialization function */
 	mod_init,   /* module initialization function */
 	0,          /* response function */
 	0,          /* destroy function */
@@ -302,6 +304,10 @@ static void tcp_conn_clean(struct tcp_connection* c)
 {
 	struct tcp_data *d = (struct tcp_data*)c->proto_data;
 	int r;
+
+	/* was the connection initialized yet ?? */
+	if (d==NULL)
+		return;
 
 	for (r=0;r<d->async_chunks_no;r++) {
 		shm_free(d->async_chunks[r]);
@@ -767,9 +773,9 @@ static int proto_tcp_send(struct socket_info* send_sock,
 	if (to){
 		su2ip_addr(&ip, to);
 		port=su_getport(to);
-		n = tcp_conn_get(id, &ip, port, PROTO_TCP, &c, &fd);
+		n = tcp_conn_get(id, &ip, port, PROTO_TCP, NULL, &c, &fd);
 	}else if (id){
-		n = tcp_conn_get(id, 0, 0, PROTO_NONE, &c, &fd);
+		n = tcp_conn_get(id, 0, 0, PROTO_NONE, NULL, &c, &fd);
 	}else{
 		LM_CRIT("tcp_send called with null id & to\n");
 		get_time_difference(get,tcpthreshold,tcp_timeout_con_get);
@@ -792,7 +798,8 @@ static int proto_tcp_send(struct socket_info* send_sock,
 			LM_ERR("Unknown destination - cannot open new tcp connection\n");
 			return -1;
 		}
-		LM_DBG("no open tcp connection found, opening new one, async = %d\n",tcp_async);
+		LM_DBG("no open tcp connection found, opening new one, async = %d\n",
+			tcp_async);
 		/* create tcp connection */
 		if (tcp_async) {
 			n = tcpconn_async_connect(send_sock, to, buf, len, &c, &fd);
@@ -806,8 +813,6 @@ static int proto_tcp_send(struct socket_info* send_sock,
 				ip_addr2a( &c->rcv.src_ip ), c->rcv.src_port,
 				ip_addr2a( &c->rcv.dst_ip ), c->rcv.dst_port );
 
-
-
 			if (n==0) {
 				/* trace the message */
 				if ( TRACE_ON( c->flags ) &&
@@ -815,7 +820,8 @@ static int proto_tcp_send(struct socket_info* send_sock,
 					if ( tcpconn2su( c, &src_su, &dst_su) < 0 ) {
 						LM_ERR("can't create su structures for tracing!\n");
 					} else {
-						trace_message_atonce( PROTO_TCP, c->cid, &src_su, &dst_su,
+						trace_message_atonce( PROTO_TCP, c->cid,
+							&src_su, &dst_su,
 							TRANS_TRACE_CONNECT_START, TRANS_TRACE_SUCCESS,
 							&AS_CONNECT_INIT, t_dst );
 					}
@@ -823,6 +829,8 @@ static int proto_tcp_send(struct socket_info* send_sock,
 
 				/* mark the ID of the used connection (tracing purposes) */
 				last_outgoing_tcp_id = c->id;
+				send_sock->last_local_real_port = c->rcv.dst_port;
+				send_sock->last_remote_real_port = c->rcv.src_port;
 
 				/* connect is still in progress, break the sending
 				 * flow now (the actual write will be done when
@@ -911,6 +919,8 @@ static int proto_tcp_send(struct socket_info* send_sock,
 
 			/* mark the ID of the used connection (tracing purposes) */
 			last_outgoing_tcp_id = c->id;
+			send_sock->last_local_real_port = c->rcv.dst_port;
+			send_sock->last_remote_real_port = c->rcv.src_port;
 
 			/* we successfully added our write chunk - success */
 			sh_log(c->hist, TCP_SEND2MAIN, "send 3, (%d)", c->refcnt);
@@ -957,6 +967,8 @@ send_it:
 
 	/* mark the ID of the used connection (tracing purposes) */
 	last_outgoing_tcp_id = c->id;
+	send_sock->last_local_real_port = c->rcv.dst_port;
+	send_sock->last_remote_real_port = c->rcv.src_port;
 
 	sh_log(c->hist, TCP_SEND2MAIN, "send 6, (%d, async: %d)", c->refcnt, n < len);
 	tcp_conn_release(c, (n<len)?1:0/*pending data in async mode?*/ );

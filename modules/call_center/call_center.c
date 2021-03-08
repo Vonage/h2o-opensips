@@ -149,6 +149,7 @@ struct module_exports exports= {
 	MOD_TYPE_DEFAULT,/* class of this module */
 	MODULE_VERSION,
 	DEFAULT_DLFLAGS, /* dlopen flags */
+	0,				 /* load function */
 	&deps,           /* OpenSIPS module dependencies */
 	cmds,            /* exported functions */
 	0,               /* exported async functions */
@@ -158,6 +159,7 @@ struct module_exports exports= {
 	0,               /* exported pseudo-variables */
 	0,				 /* exported transformations */
 	0,               /* extra processes */
+	0,               /* module pre-initialization function */
 	mod_init,        /* module initialization function */
 	0,               /* reply processing function */
 	mod_destroy,
@@ -306,7 +308,7 @@ static int mod_init(void)
 static int child_init( int rank )
 {
 	/* init DB connection */
-	if ( rank<PROC_MAIN)
+	if ( rank<1 )
 		return 0;
 	if ( cc_connect_db(&db_url)!=0 ) {
 		LM_CRIT("cannot initialize database connection\n");
@@ -873,7 +875,7 @@ static int w_agent_login(struct sip_msg *req, char *agent_v, char *state_v)
 
 	/* get state */
 	if (fixup_get_isvalue( req, (gparam_p)state_v, &state, &agent_s,
-	&flags)!=0 || ((flags|GPARAM_INT_VALUE_FLAG)==0) ) {
+	&flags)!=0 || ((flags&GPARAM_INT_VALUE_FLAG)==0) ) {
 		LM_ERR("unable to evaluate state spec \n");
 		return -1;
 	}
@@ -1237,13 +1239,9 @@ static struct mi_root* mi_cc_list_calls(struct mi_root *cmd_tree, void *param)
 	struct mi_node *node;
 	struct mi_node *rpl;
 	struct mi_attr *attr;
+	str *state;
 	char *p;
 	int len;
-	static str call_state[12]= {{"none", 4},
-			{"welcome", 7},
-			{"queued", 6},
-			{"toagent", 7},
-			{"ended", 5}};
 
 	rpl_tree = init_mi_tree( 200, MI_SSTR("OK") );
 	if ( rpl_tree==NULL)
@@ -1267,10 +1265,10 @@ static struct mi_root* mi_cc_list_calls(struct mi_root *cmd_tree, void *param)
 				goto error;
 		if(call->ign_cback)
 			attr = add_mi_attr( node, MI_DUP_VALUE, MI_SSTR("State"), MI_SSTR("ignored"));
-		else
-			attr = add_mi_attr( node, MI_DUP_VALUE, MI_SSTR("State"), call_state[call->state].s, call_state[call->state].len);
-		if (attr==NULL)
-				goto error;
+		else {
+			state = call_state_str(call->state);
+			attr = add_mi_attr( node, MI_DUP_VALUE, MI_SSTR("State"), state->s, state->len);
+		}
 
 		LM_DBG("call->recv_time= %d, ticks= %d\n", call->recv_time, get_ticks());
 		if(call->state != CC_CALL_ENDED)

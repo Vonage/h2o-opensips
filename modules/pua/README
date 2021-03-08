@@ -209,7 +209,7 @@ if($rm=="NOTIFY")
    script in the database directories in the opensips/scripts
    folder. You can also find the complete database documentation
    on the project webpage,
-   http://www.opensips.org/html/docs/db/db-schema-devel.html.
+   https://opensips.org/docs/db/db-schema-devel.html.
 
 Chapter 2. Developer Guide
 
@@ -423,22 +423,23 @@ Chapter 3. Contributors
    commits^(2) and lines added/removed^(3)
      Name DevScore Commits Lines ++ Lines --
    1. Anca Vamanu 279 106 11549 4540
-   2. Bogdan-Andrei Iancu (@bogdan-iancu) 56 43 427 460
-   3. Liviu Chircu (@liviuchircu) 19 10 243 364
+   2. Bogdan-Andrei Iancu (@bogdan-iancu) 57 44 428 461
+   3. Liviu Chircu (@liviuchircu) 21 11 256 383
    4. Ovidiu Sas (@ovidiusas) 17 13 230 109
    5. Daniel-Constantin Mierla (@miconda) 12 8 144 97
    6. Edson Gellert Schubert 10 1 0 501
-   7. Saúl Ibarra Corretgé (@saghul) 8 5 243 31
-   8. Henning Westerholt (@henningw) 7 4 86 76
-   9. Razvan Crainea (@razvancrainea) 6 3 55 74
+   7. Razvan Crainea (@razvancrainea) 9 6 73 80
+   8. Saúl Ibarra Corretgé (@saghul) 8 5 243 31
+   9. Henning Westerholt (@henningw) 7 4 86 76
    10. Vlad Paiu (@vladpaiu) 5 3 14 50
 
    All remaining contributors: Juha Heinanen (@juha-h), Walter
    Doekes (@wdoekes), Vlad Patrascu (@rvlad-patrascu), Denis
    Bilenko, Vallimamod Abdullah, Alex Hermann, Damien Sandras
    (@dsandras), Sergio Gutierrez, Konstantin Bokarius,
-   Elena-Ramona Modroiu, John Riordan, Dusan Klinec, UnixDev,
-   Stanislaw Pitucha, Dan Pascu (@danpascu), Julien Blache.
+   Elena-Ramona Modroiu, John Riordan, Dusan Klinec (@ph4r05),
+   UnixDev, Zero King (@l2dy), Stanislaw Pitucha, Dan Pascu
+   (@danpascu), Julien Blache.
 
    (1) DevScore = author_commits + author_lines_added /
    (project_lines_added / project_commits) + author_lines_deleted
@@ -460,23 +461,24 @@ Chapter 3. Contributors
 
    Table 3.2. Most recently active contributors^(1) to this module
                       Name                   Commit Activity
-   1.  Bogdan-Andrei Iancu (@bogdan-iancu) Jan 2007 - Apr 2019
-   2.  Liviu Chircu (@liviuchircu)         Mar 2014 - Nov 2018
-   3.  Vlad Patrascu (@rvlad-patrascu)     May 2017 - Jul 2017
-   4.  Ovidiu Sas (@ovidiusas)             Nov 2010 - Feb 2016
-   5.  Razvan Crainea (@razvancrainea)     Feb 2012 - Jan 2016
-   6.  Dusan Klinec                        Dec 2015 - Dec 2015
-   7.  Damien Sandras (@dsandras)          Sep 2013 - Sep 2013
-   8.  Saúl Ibarra Corretgé (@saghul)      Oct 2012 - Aug 2013
-   9.  Vlad Paiu (@vladpaiu)               Aug 2011 - Aug 2012
-   10. Anca Vamanu                         Nov 2006 - Mar 2011
+   1.  Liviu Chircu (@liviuchircu)         Mar 2014 - Jul 2020
+   2.  Bogdan-Andrei Iancu (@bogdan-iancu) Jan 2007 - Jun 2020
+   3.  Zero King (@l2dy)                   Mar 2020 - Mar 2020
+   4.  Razvan Crainea (@razvancrainea)     Feb 2012 - Sep 2019
+   5.  Vlad Patrascu (@rvlad-patrascu)     May 2017 - Jul 2017
+   6.  Ovidiu Sas (@ovidiusas)             Nov 2010 - Feb 2016
+   7.  Dusan Klinec (@ph4r05)              Dec 2015 - Dec 2015
+   8.  Damien Sandras (@dsandras)          Sep 2013 - Sep 2013
+   9.  Saúl Ibarra Corretgé (@saghul)      Oct 2012 - Aug 2013
+   10. Vlad Paiu (@vladpaiu)               Aug 2011 - Aug 2012
 
-   All remaining contributors: Vallimamod Abdullah, Alex Hermann,
-   Stanislaw Pitucha, Walter Doekes (@wdoekes), John Riordan,
-   UnixDev, Sergio Gutierrez, Denis Bilenko, Henning Westerholt
-   (@henningw), Dan Pascu (@danpascu), Daniel-Constantin Mierla
-   (@miconda), Juha Heinanen (@juha-h), Konstantin Bokarius, Edson
-   Gellert Schubert, Julien Blache, Elena-Ramona Modroiu.
+   All remaining contributors: Anca Vamanu, Vallimamod Abdullah,
+   Alex Hermann, Stanislaw Pitucha, Walter Doekes (@wdoekes), John
+   Riordan, UnixDev, Sergio Gutierrez, Denis Bilenko, Henning
+   Westerholt (@henningw), Dan Pascu (@danpascu),
+   Daniel-Constantin Mierla (@miconda), Juha Heinanen (@juha-h),
+   Konstantin Bokarius, Edson Gellert Schubert, Julien Blache,
+   Elena-Ramona Modroiu.
 
    (1) including any documentation-related commits, excluding
    merge commits

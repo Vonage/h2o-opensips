@@ -252,7 +252,7 @@ modparam("registrar", "default_q", 1000)
 
    Example 1.5. Set tcp_persistent_flag parameter
 ...
-modparam("registrar", "tcp_persistent_flag", 7)
+modparam("registrar", "tcp_persistent_flag", "TCP_PERSIST_DURATION")
 ...
 
 1.3.6. realm_prefix (string)
@@ -766,11 +766,10 @@ if (is_registered("location","$fu")) {
      * AOR (optional)- AOR to lookup for; if missing, the source
        if the AOR is the "To" header for REGISTER request, "From"
        header for any other sip request.
-     * contact (optional)- callid to check if a contact if
-       registered with this callid (this may help you to make
-       distinction between newly registered contact (callid not
-       registered so far) and re-registration (callid already
-       registered).
+     * contact (optional)- SIP URI to check if there is a
+       registration with this URI as cotact (this may help you to
+       make distinction between multiple registrations for the
+       same user/AOR).
      * callid (optional)- callid to check if a contact if
        registered with this callid (this may help you to make
        distinction between newly registered contact (callid not
@@ -942,7 +941,7 @@ Chapter 2. Frequently Asked Questions
 
    Where can I find more about OpenSIPS?
 
-   Take a look at http://www.opensips.org/.
+   Take a look at https://opensips.org/.
 
    2.10.
 
@@ -983,11 +982,11 @@ Chapter 3. Contributors
    Table 3.1. Top contributors by DevScore^(1), authored
    commits^(2) and lines added/removed^(3)
      Name DevScore Commits Lines ++ Lines --
-   1. Bogdan-Andrei Iancu (@bogdan-iancu) 156 103 2295 1948
+   1. Bogdan-Andrei Iancu (@bogdan-iancu) 159 105 2301 1954
    2. Jan Janak (@janakj) 121 73 3465 1102
-   3. Liviu Chircu (@liviuchircu) 87 49 1397 1498
+   3. Liviu Chircu (@liviuchircu) 96 57 1426 1508
    4. Daniel-Constantin Mierla (@miconda) 23 19 160 105
-   5. Razvan Crainea (@razvancrainea) 16 11 262 72
+   5. Razvan Crainea (@razvancrainea) 19 14 265 73
    6. Vlad Paiu (@vladpaiu) 16 10 489 81
    7. Jiri Kuthan (@jiriatipteldotorg) 15 9 538 45
    8. Ionut Ionita (@ionutrazvanionita) 15 4 763 248
@@ -1001,9 +1000,10 @@ Chapter 3. Contributors
    Bock, Jeffrey Magder, Kobi Eshun (@ekobi), Marcus Hunger,
    Julián Moreno Patiño, Phil D'Amore, Klaus Darilion, Irina-Maria
    Stanescu, Dmitry Semyonov, Konstantin Bokarius, Jesus
-   Rodrigues, Dusan Klinec, Ruslan Bukin, Saúl Ibarra Corretgé
-   (@saghul), @jalung, Tolga Tarhan, Vlad Patrascu
-   (@rvlad-patrascu), Edson Gellert Schubert.
+   Rodrigues, Peter Lemenkov (@lemenkov), Dusan Klinec (@ph4r05),
+   Ruslan Bukin, Saúl Ibarra Corretgé (@saghul), @jalung, Tolga
+   Tarhan, Vlad Patrascu (@rvlad-patrascu), Edson Gellert
+   Schubert.
 
    (1) DevScore = author_commits + author_lines_added /
    (project_lines_added / project_commits) + author_lines_deleted
@@ -1025,27 +1025,27 @@ Chapter 3. Contributors
 
    Table 3.2. Most recently active contributors^(1) to this module
                       Name                   Commit Activity
-   1.  Bogdan-Andrei Iancu (@bogdan-iancu) Sep 2003 - Apr 2019
-   2.  Liviu Chircu (@liviuchircu)         Mar 2013 - Mar 2019
-   3.  Razvan Crainea (@razvancrainea)     Apr 2011 - Nov 2018
-   4.  @jalung                             Aug 2017 - Aug 2017
-   5.  Vlad Patrascu (@rvlad-patrascu)     May 2017 - May 2017
-   6.  Ovidiu Sas (@ovidiusas)             May 2011 - Mar 2017
-   7.  Ionut Ionita (@ionutrazvanionita)   Jul 2015 - Feb 2017
-   8.  Julián Moreno Patiño                Feb 2016 - Feb 2016
-   9.  Dusan Klinec                        Dec 2015 - Dec 2015
-   10. Nick Altmann (@nikbyte)             Aug 2012 - Mar 2015
+   1.  Liviu Chircu (@liviuchircu)         Mar 2013 - Jan 2021
+   2.  Bogdan-Andrei Iancu (@bogdan-iancu) Sep 2003 - Jul 2020
+   3.  Peter Lemenkov (@lemenkov)          Feb 2020 - Feb 2020
+   4.  Razvan Crainea (@razvancrainea)     Apr 2011 - Sep 2019
+   5.  @jalung                             Aug 2017 - Aug 2017
+   6.  Vlad Patrascu (@rvlad-patrascu)     May 2017 - May 2017
+   7.  Ovidiu Sas (@ovidiusas)             May 2011 - Mar 2017
+   8.  Ionut Ionita (@ionutrazvanionita)   Jul 2015 - Feb 2017
+   9.  Julián Moreno Patiño                Feb 2016 - Feb 2016
+   10. Dusan Klinec (@ph4r05)              Dec 2015 - Dec 2015
 
-   All remaining contributors: Vlad Paiu (@vladpaiu), Tolga
-   Tarhan, Saúl Ibarra Corretgé (@saghul), Ruslan Bukin,
-   Irina-Maria Stanescu, Kobi Eshun (@ekobi), Phil D'Amore, Sergio
-   Gutierrez, Klaus Darilion, Henning Westerholt (@henningw),
-   Daniel-Constantin Mierla (@miconda), Konstantin Bokarius, Edson
-   Gellert Schubert, Jesus Rodrigues, Dan Pascu (@danpascu),
-   Ancuta Onofrei, Marcus Hunger, Juha Heinanen (@juha-h),
-   Elena-Ramona Modroiu, Jeffrey Magder, Carsten Bock, Andreas
-   Granig, Dmitry Semyonov, Maksym Sobolyev (@sobomax), Jan Janak
-   (@janakj), Andrei Pelinescu-Onciul, Jiri Kuthan
+   All remaining contributors: Nick Altmann (@nikbyte), Vlad Paiu
+   (@vladpaiu), Tolga Tarhan, Saúl Ibarra Corretgé (@saghul),
+   Ruslan Bukin, Irina-Maria Stanescu, Kobi Eshun (@ekobi), Phil
+   D'Amore, Sergio Gutierrez, Klaus Darilion, Henning Westerholt
+   (@henningw), Daniel-Constantin Mierla (@miconda), Konstantin
+   Bokarius, Edson Gellert Schubert, Jesus Rodrigues, Dan Pascu
+   (@danpascu), Ancuta Onofrei, Marcus Hunger, Juha Heinanen
+   (@juha-h), Elena-Ramona Modroiu, Jeffrey Magder, Carsten Bock,
+   Andreas Granig, Dmitry Semyonov, Maksym Sobolyev (@sobomax),
+   Jan Janak (@janakj), Andrei Pelinescu-Onciul, Jiri Kuthan
    (@jiriatipteldotorg).
 
    (1) including any documentation-related commits, excluding
@@ -1055,8 +1055,8 @@ Chapter 4. Documentation
 
 4.1. Contributors
 
-   Last edited by: Liviu Chircu (@liviuchircu), Bogdan-Andrei
-   Iancu (@bogdan-iancu), Razvan Crainea (@razvancrainea), Ionut
+   Last edited by: Bogdan-Andrei Iancu (@bogdan-iancu), Liviu
+   Chircu (@liviuchircu), Razvan Crainea (@razvancrainea), Ionut
    Ionita (@ionutrazvanionita), Julián Moreno Patiño, Nick Altmann
    (@nikbyte), Vlad Paiu (@vladpaiu), Ovidiu Sas (@ovidiusas),
    Irina-Maria Stanescu, Kobi Eshun (@ekobi), Sergio Gutierrez,

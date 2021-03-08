@@ -185,6 +185,7 @@ struct module_exports exports= {
 	MOD_TYPE_DEFAULT,               /* class of this module */
 	MODULE_VERSION,                 /* module version */
 	DEFAULT_DLFLAGS,                /* dlopen flags */
+	0,				                /* load function */
 	&deps,                          /* OpenSIPS module dependencies */
 	cmds,                           /* exported functions */
 	0,                              /* exported async functions */
@@ -194,6 +195,7 @@ struct module_exports exports= {
 	0,                              /* exported pseudo-variables */
 	0,								/* exported transformations */
 	0,                              /* extra processes */
+	0,                              /* module pre-initialization function */
 	mod_init,                       /* module initialization function */
 	(response_function) 0,          /* response handling function */
 	(destroy_function) mod_destroy, /* destroy function */
@@ -246,9 +248,11 @@ static int mod_init(void)
 		return -1;
 	}
 
+	if(b2bl_db_mode)
+		init_db_url(db_url, 1);
+
 	if(b2bl_db_mode && db_url.s)
 	{
-		db_url.len = strlen(db_url.s);
 		b2bl_dbtable.len = strlen(b2bl_dbtable.s);
 		/* binding to database module  */
 		if (db_bind_mod(&db_url, &b2bl_dbf))
@@ -748,11 +752,16 @@ static void mod_destroy(void)
 
 	b2b_scenario_t* scenario, *next;
 
-	if(b2bl_db)
-	{
-		if(b2bl_db_mode==WRITE_BACK)
+	if (b2bl_db_mode==WRITE_BACK && b2bl_dbf.init) {
+
+		b2bl_db = b2bl_dbf.init(&db_url);
+		if(!b2bl_db)
+		{
+			LM_ERR("connecting to database failed\n");
+		} else {
 			b2b_logic_dump(1);
-		b2bl_dbf.close(b2bl_db);
+			b2bl_dbf.close(b2bl_db);
+		}
 	}
 
 	scenario = extern_scenarios;

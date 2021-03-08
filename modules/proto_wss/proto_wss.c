@@ -61,6 +61,9 @@ static struct ws_req wss_current_req;
 
 int wss_hs_read_tout = 100;
 
+/* check the SSL certificate when comes to TCP conn reusage */
+static int cert_check_on_conn_reusage = 0;
+
 /* XXX: this information should be dynamically provided */
 static str wss_resource = str_init("/");
 
@@ -124,11 +127,12 @@ static param_export_t params[] = {
 	/* XXX: should we drop the ws prefix? */
 	{ "wss_port",           INT_PARAM, &wss_port           },
 	{ "wss_max_msg_chunks", INT_PARAM, &wss_max_msg_chunks },
-	{ "wss_resource",       STR_PARAM, &wss_resource       },
+	{ "wss_resource",       STR_PARAM, &wss_resource.s     },
 	{ "wss_handshake_timeout", INT_PARAM, &wss_hs_read_tout},
 	{ "trace_destination",     STR_PARAM,         &trace_destination_name.s  },
-	{ "trace_on",						 INT_PARAM, &trace_is_on_tmp        },
-	{ "trace_filter_route",				 STR_PARAM, &trace_filter_route     },
+	{ "trace_on",					INT_PARAM, &trace_is_on_tmp           },
+	{ "trace_filter_route",			STR_PARAM, &trace_filter_route        },
+	{ "cert_check_on_conn_reusage",	INT_PARAM, &cert_check_on_conn_reusage},
 	{0, 0, 0}
 };
 
@@ -152,6 +156,7 @@ struct module_exports exports = {
 	MOD_TYPE_DEFAULT,/* class of this module */
 	MODULE_VERSION,
 	DEFAULT_DLFLAGS, /* dlopen flags */
+	0,				 /* load function */
 	&deps,            /* OpenSIPS module dependencies */
 	cmds,       /* exported functions */
 	0,          /* exported async functions */
@@ -161,6 +166,7 @@ struct module_exports exports = {
 	0,          /* exported pseudo-variables */
 	0,			/* exported transformations */
 	0,          /* extra processes */
+	0,          /* module pre-initialization function */
 	mod_init,   /* module initialization function */
 	0,          /* response function */
 	0,          /* destroy function */
@@ -184,6 +190,10 @@ static int proto_wss_init(struct proto_info *pi)
 
 	pi->net.conn_init		= wss_conn_init;
 	pi->net.conn_clean		= ws_conn_clean;
+	if (cert_check_on_conn_reusage)
+		pi->net.conn_match		= tls_conn_extra_match;
+	else
+		pi->net.conn_match		= NULL;
 	pi->net.report			= wss_report;
 
 	return 0;
@@ -193,6 +203,8 @@ static int proto_wss_init(struct proto_info *pi)
 static int mod_init(void)
 {
 	LM_INFO("initializing Secure WebSocket protocol\n");
+
+	wss_resource.len = strlen(wss_resource.s);
 
 	if(load_tls_mgm_api(&tls_mgm_api) != 0){
 		LM_DBG("failed to find tls API - is tls_mgm module loaded?\n");
@@ -268,6 +280,7 @@ static int wss_conn_init(struct tcp_connection* c)
 
 	ret = tls_conn_init(c, &tls_mgm_api);
 	if (ret < 0) {
+		c->proto_data = NULL;
 		LM_ERR("Cannot initiate the conn\n");
 		shm_free(d);
 	}
@@ -287,6 +300,7 @@ static void ws_conn_clean(struct tcp_connection* c)
 				break;
 			case WS_ERR_NONE:
 				WS_CODE(c) = WS_ERR_NORMAL;
+				/* fall through */
 			default:
 				ws_close(c);
 				break;
@@ -417,13 +431,13 @@ error:
 /**************  WRITE related functions ***************/
 
 
-
 /*! \brief Finds a tcpconn & sends on it */
 static int proto_wss_send(struct socket_info* send_sock,
 											char* buf, unsigned int len,
 											union sockaddr_union* to, int id)
 {
 	struct tcp_connection *c;
+	struct tls_domain *dom;
 	struct timeval get;
 	struct ip_addr ip;
 	int port = 0;
@@ -436,9 +450,13 @@ static int proto_wss_send(struct socket_info* send_sock,
 	if (to){
 		su2ip_addr(&ip, to);
 		port=su_getport(to);
-		n = tcp_conn_get(id, &ip, port, PROTO_WSS, &c, &fd);
+		dom = (cert_check_on_conn_reusage==0)?
+			NULL : tls_mgm_api.find_client_domain( &ip, port);
+		n = tcp_conn_get(id, &ip, port, PROTO_WSS, dom, &c, &fd);
+		if (dom)
+			tls_mgm_api.release_domain(dom);
 	}else if (id){
-		n = tcp_conn_get(id, 0, 0, PROTO_NONE, &c, &fd);
+		n = tcp_conn_get(id, 0, 0, PROTO_NONE, NULL, &c, &fd);
 	}else{
 		LM_CRIT("prot_tls_send called with null id & to\n");
 		get_time_difference(get,tcpthreshold,tcp_timeout_con_get);
@@ -519,6 +537,8 @@ send_it:
 
 	/* mark the ID of the used connection (tracing purposes) */
 	last_outgoing_tcp_id = c->id;
+	send_sock->last_local_real_port = c->rcv.dst_port;
+	send_sock->last_remote_real_port = c->rcv.src_port;
 
 	tcp_conn_release(c, 0);
 	return n;

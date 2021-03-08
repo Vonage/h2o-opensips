@@ -134,8 +134,8 @@ modparam("cachedb_mongodb", "cachedb_url",
 
 # Connect to a mongod replica set
 modparam("cachedb_mongodb", "cachedb_url",
-         "mongodb://10.0.0.10,10.0.0.11:27017/opensipsDB.dialog?replSet=
-my-set")
+         "mongodb://10.0.0.10,10.0.0.11:27017/opensipsDB.dialog?replicaS
+et=my-set")
 
 # Connect to a mongos instance (routes to a sharded cluster)
 modparam("cachedb_mongodb", "cachedb_url",
@@ -263,14 +263,16 @@ Chapter 2. Contributors
    Table 2.1. Top contributors by DevScore^(1), authored
    commits^(2) and lines added/removed^(3)
      Name DevScore Commits Lines ++ Lines --
-   1. Liviu Chircu (@liviuchircu) 141 71 2747 2645
+   1. Liviu Chircu (@liviuchircu) 150 79 2837 2681
    2. Vlad Paiu (@vladpaiu) 34 9 2964 50
-   3. Ovidiu Sas (@ovidiusas) 10 8 92 16
-   4. Razvan Crainea (@razvancrainea) 8 6 25 24
-   5. Bogdan-Andrei Iancu (@bogdan-iancu) 4 2 2 1
-   6. @jalung 4 1 97 56
-   7. Julián Moreno Patiño 3 1 1 1
-   8. Vlad Patrascu (@rvlad-patrascu) 2 1 1 0
+   3. Razvan Crainea (@razvancrainea) 13 11 31 28
+   4. Ovidiu Sas (@ovidiusas) 10 8 92 16
+   5. Vlad Patrascu (@rvlad-patrascu) 5 3 87 2
+   6. Bogdan-Andrei Iancu (@bogdan-iancu) 5 3 2 5
+   7. Dan Pascu (@danpascu) 4 2 4 4
+   8. @jalung 4 1 97 56
+   9. Julián Moreno Patiño 3 1 1 1
+   10. Alessio Garzi (@Ozzyboshi) 2 1 1 0
 
    (1) DevScore = author_commits + author_lines_added /
    (project_lines_added / project_commits) + author_lines_deleted
@@ -291,15 +293,17 @@ Chapter 2. Contributors
 2.2. By Commit Activity
 
    Table 2.2. Most recently active contributors^(1) to this module
-                     Name                   Commit Activity
-   1. Liviu Chircu (@liviuchircu)         Mar 2014 - Apr 2019
-   2. Razvan Crainea (@razvancrainea)     Aug 2015 - Nov 2018
-   3. Bogdan-Andrei Iancu (@bogdan-iancu) Oct 2014 - Jun 2018
-   4. @jalung                             Aug 2017 - Aug 2017
-   5. Vlad Patrascu (@rvlad-patrascu)     May 2017 - May 2017
-   6. Julián Moreno Patiño                Feb 2016 - Feb 2016
-   7. Vlad Paiu (@vladpaiu)               Jan 2013 - May 2015
-   8. Ovidiu Sas (@ovidiusas)             Mar 2013 - Feb 2014
+                      Name                   Commit Activity
+   1.  Liviu Chircu (@liviuchircu)         Mar 2014 - Feb 2021
+   2.  Razvan Crainea (@razvancrainea)     Aug 2015 - Dec 2020
+   3.  Bogdan-Andrei Iancu (@bogdan-iancu) Oct 2014 - Jun 2020
+   4.  Vlad Patrascu (@rvlad-patrascu)     May 2017 - Jun 2020
+   5.  Alessio Garzi (@Ozzyboshi)          Nov 2019 - Nov 2019
+   6.  Dan Pascu (@danpascu)               May 2019 - May 2019
+   7.  @jalung                             Aug 2017 - Aug 2017
+   8.  Julián Moreno Patiño                Feb 2016 - Feb 2016
+   9.  Vlad Paiu (@vladpaiu)               Jan 2013 - May 2015
+   10. Ovidiu Sas (@ovidiusas)             Mar 2013 - Feb 2014
 
    (1) including any documentation-related commits, excluding
    merge commits

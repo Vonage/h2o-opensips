@@ -208,13 +208,13 @@ int send_shtag_active_info(struct clusterer_binds *c_api, int c_id, str *cap,
 
 	if (node_id) {
 		if (c_api->send_to(&packet, c_id, node_id) !=
-			CLUSTERER_SEND_SUCCES) {
+			CLUSTERER_SEND_SUCCESS) {
 			bin_free_packet(&packet);
 			return -1;
 		}
 	} else
 		if (c_api->send_all(&packet, c_id) !=
-			CLUSTERER_SEND_SUCCES) {
+			CLUSTERER_SEND_SUCCESS) {
 			bin_free_packet(&packet);
 			return -1;
 		}
@@ -248,7 +248,7 @@ void shlist_flush_state(struct clusterer_binds *c_api, int c_id, str *cap,
 			ni = shm_malloc(sizeof *ni);
 			if (!ni) {
 				LM_ERR("No more shm memory!\n");
-				return;
+				continue;
 			}
 			ni->node_id = node_id;
 			ni->next = tag->active_msgs_sent;

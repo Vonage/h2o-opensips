@@ -998,6 +998,7 @@ ESL_DECLARE(esl_status_t) esl_connect_timeout(esl_handle_t *handle, const char *
 	}
 
 	memcpy(&handle->sockaddr, result->ai_addr, result->ai_addrlen);	
+	freeaddrinfo(result);
 	switch(handle->sockaddr.ss_family) {
 		case AF_INET:
 			sockaddr_in = (struct sockaddr_in*)&(handle->sockaddr);
@@ -1013,7 +1014,6 @@ ESL_DECLARE(esl_status_t) esl_connect_timeout(esl_handle_t *handle, const char *
 			strncpy(handle->err, "Host resolves to unsupported address family", sizeof(handle->err));
 			goto fail;
 	}
-	freeaddrinfo(result);
 	
 	handle->sock = socket(handle->sockaddr.ss_family, SOCK_STREAM, IPPROTO_TCP);
 	
@@ -1403,7 +1403,7 @@ ESL_DECLARE(esl_status_t) esl_recv_event(esl_handle_t *handle, int check_q, esl_
 		hval = esl_event_get_header(revent, "reply-text");
 
 		if (!esl_strlen_zero(hval)) {
-			strncpy(handle->last_reply, hval, sizeof(handle->last_reply));
+			strncpy(handle->last_reply, hval, sizeof(handle->last_reply) - 1);
 		}
 
 		hval = esl_event_get_header(revent, "content-type");
@@ -1411,6 +1411,7 @@ ESL_DECLARE(esl_status_t) esl_recv_event(esl_handle_t *handle, int check_q, esl_
 		if (!esl_safe_strcasecmp(hval, "text/disconnect-notice") && revent->body) {
 			const char *dval = esl_event_get_header(revent, "content-disposition");
 			if (esl_strlen_zero(dval) || strcasecmp(dval, "linger")) {
+				free(revent->body);
 				goto fail;
 			}
 		}
@@ -1601,7 +1602,7 @@ ESL_DECLARE(esl_status_t) esl_send_recv_timed(esl_handle_t *handle, const char *
 			hval = esl_event_get_header(handle->last_sr_event, "reply-text");
 
 			if (!esl_strlen_zero(hval)) {
-				strncpy(handle->last_sr_reply, hval, sizeof(handle->last_sr_reply));
+				strncpy(handle->last_sr_reply, hval, sizeof(handle->last_sr_reply) - 1);
 			}		
 		}
 	}

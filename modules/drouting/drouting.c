@@ -156,9 +156,8 @@ static str attrs_empty = str_init("");
 static str db_partitions_table = str_init("dr_partitions"); /* default url */
 static str db_partitions_url;
 
+int use_partitions;
 
-//static int use_partitions = 0;
-// int use_partitions = 0; /* by default don't use db for config */
 static struct head_config {
 	str partition; /* partition name extracted from database */
 	str db_url;
@@ -227,8 +226,8 @@ typedef struct dr_part_gw {
 static int get_config_from_db();
 static int add_head_config();
 static int add_head_db();
-static int db_load_head(struct head_db*); /* used for populating head_db with
-											 db connections and db funcs */
+static int db_connect_head(struct head_db*); /* populate a db connection */
+
 static void trim_char(char**);
 static int fixup_dr_disable(void **,int);
 //static struct head_db * get_partition(const str *);
@@ -474,6 +473,7 @@ struct module_exports exports = {
 	MOD_TYPE_DEFAULT,/* class of this module */
 	MODULE_VERSION,
 	DEFAULT_DLFLAGS, /* dlopen flags */
+	0,				 /* load function */
 	&deps,           /* OpenSIPS module dependencies */
 	cmds,            /* Exported functions */
 	0,               /* Exported async functions */
@@ -483,6 +483,7 @@ struct module_exports exports = {
 	0,               /* exported pseudo-variables */
 	0,			 	 /* exported transformations */
 	0,               /* additional processes */
+	0,               /* Module pre-initialization function */
 	dr_init,         /* Module initialization function */
 	(response_function) 0,
 	(destroy_function) dr_exit,
@@ -692,10 +693,6 @@ end:
 }
 
 
-static void param_prob_callback_free(void *param) {
-	shm_free(param);
-}
-
 static void dr_prob_handler(unsigned int ticks, void* param)
 {
 	static char buff[1000] = {"sip:"};
@@ -758,12 +755,14 @@ static void dr_prob_handler(unsigned int ticks, void* param)
 			params->current_partition = it;
 
 			if (dr_tmb.t_request_within(&dr_probe_method, NULL, NULL, dlg,
-			dr_probing_callback, (void*)params, param_prob_callback_free)<0) {
+			dr_probing_callback, (void*)params, osips_shm_free)<0) {
 				LM_ERR("unable to execute dialog, disabling destination...\n");
 				if ( (dst->flags&DR_DST_STAT_DSBL_FLAG)==0 ) {
 					dst->flags |= DR_DST_STAT_DSBL_FLAG|DR_DST_STAT_DIRT_FLAG;
 					dr_gw_status_changed( it, dst);
 				}
+
+				shm_free(params);
 			}
 			dr_tmb.free_dlg(dlg);
 
@@ -1504,9 +1503,6 @@ static int dr_init(void)
 			goto skip;
 		}
 
-		head_db_end->db_con = pkg_malloc(sizeof(db_con_t *));
-		(*(head_db_end->db_con)) = 0;
-
 		/* bind to the SQL module */
 		if (db_bind_mod( &(head_db_end->db_url), &( head_db_end->db_funcs ))) {
 			LM_CRIT("cannot bind to database module! "
@@ -1514,6 +1510,12 @@ static int dr_init(void)
 					db_url.len, db_url.s);
 			head_db_end->db_url.s = 0;
 			goto skip;
+		}
+
+		head_db_end->db_con = pkg_malloc(sizeof(db_con_t *));
+		if (!head_db_end->db_con) {
+			LM_ERR("oom\n");
+			return -1;
 		}
 
 		if( (*head_db_end->db_con =
@@ -1745,23 +1747,16 @@ error:
 }
 
 
-static int db_load_head(struct head_db *x) {
+static int db_connect_head(struct head_db *x) {
 
 	if( *(x->db_con) ) {
-		LM_ERR(" db_con already used\n");
-		return -1;
+		LM_INFO("db_con already present\n");
+		return 1;
 	}
 	if( x->db_url.s && (*(x->db_con) = x->db_funcs.init(&(x->db_url)))==0 ) {
 		LM_ERR("cannot initialize database connection"
 				"(partition:%.*s, db_url:%.*s, len:%d)\n", x->partition.len,
 				x->partition.s, x->db_url.len, x->db_url.s, x->db_url.len);
-		return -1;
-	}
-	if( x->db_con && *(x->db_con) &&
-			x->db_funcs.use_table( *(x->db_con), &(x->drg_table)) <0 ) {
-		LM_ERR("cannot select table (partition:%.*s, drg_table:%.*s\n",
-				x->partition.len, x->partition.s, (x->drg_table).len,
-				(x->drg_table).s);
 		return -1;
 	}
 	return 0;
@@ -1778,20 +1773,15 @@ static void rpc_dr_reload_data(int sender_id, void *unused)
 
 static int dr_child_init(int rank)
 {
-	struct head_db *head_db_it = head_db_start;
-
-	/* We need DB connection from:
-	 *   - attendant - for shutdown, flushingmstate
-	 *   - timer - may trigger routes with dr group
-	 *   - workers - execute routes with dr group
-	 *   - module's proc - ??? */
-	if (rank==PROC_TCP_MAIN || rank==PROC_BIN)
-		return 0;
+	struct head_db *db = head_db_start;
 
 	LM_DBG("Child initialization on rank %d \n",rank);
-	while( head_db_it!=NULL ) {
-		db_load_head( head_db_it );
-		head_db_it = head_db_it->next;
+
+	for (db = head_db_start; db; db = db->next) {
+		if (db_connect_head(db) < 0) {
+			LM_ERR("failed to create DB connection\n");
+			return -1;
+		}
 	}
 
 	/* if child 1, send a job for itself to run the data loading after
@@ -1812,11 +1802,9 @@ static int dr_exit(void)
 	while( it!=NULL ) {
 		to_clean = it;
 		it = it->next;
-		if (dr_persistent_state && to_clean->db_con && *(to_clean->db_con))
+		if (dr_persistent_state && to_clean->db_con && *(to_clean->db_con)) {
 			dr_state_flusher(to_clean);
 
-		/* close DB connection */
-		if (to_clean->db_con && *(to_clean->db_con)) {
 			(to_clean->db_funcs).close(*(to_clean->db_con));
 			*(to_clean->db_con) = 0;
 			pkg_free(to_clean->db_con);
@@ -2403,12 +2391,27 @@ fallback_failed:
 }
 
 
-#define DR_MAX_GWLIST	64
+#define resize_dr_sort_buffer( _buf, _old_size, _new_size, _error) \
+	do { \
+		if (_new_size > _old_size) { \
+			/* need a larger buffer */ \
+			_buf = (unsigned short*)pkg_realloc( _buf, \
+				_new_size *sizeof(unsigned short) ); \
+			if (_buf==NULL) { \
+				LM_ERR("no more pkg mem (needed  %ld)\n", \
+					_new_size*sizeof(unsigned short));\
+				_old_size = 0; \
+				goto _error;\
+			}\
+			_old_size = _new_size; \
+		} \
+	}while(0) \
 
 static int sort_rt_dst(pgw_list_t *pgwl, unsigned short size,
 		int weight, unsigned short *idx)
 {
-	unsigned short running_sum[DR_MAX_GWLIST];
+	static unsigned short *running_sum = NULL;
+	static unsigned short sum_buf_size = 0;
 	unsigned int i, first, weight_sum, rand_no;
 
 	/* populate the index array */
@@ -2419,6 +2422,7 @@ static int sort_rt_dst(pgw_list_t *pgwl, unsigned short size,
 		return 0;
 
 	while (size-first>1) {
+		resize_dr_sort_buffer( running_sum, sum_buf_size, size, err);
 		/* calculate the running sum */
 		for( i=first,weight_sum=0 ; i<size ; i++ ) {
 			weight_sum += pgwl[ idx[i] ].weight ;
@@ -2435,7 +2439,7 @@ static int sort_rt_dst(pgw_list_t *pgwl, unsigned short size,
 				if (running_sum[i]>rand_no) break;
 			if (i==size) {
 				LM_CRIT("bug in weight sort\n");
-				return -1;
+				goto err;
 			}
 		} else {
 			/* randomly select index */
@@ -2453,6 +2457,8 @@ static int sort_rt_dst(pgw_list_t *pgwl, unsigned short size,
 	}
 
 	return 0;
+err:
+	return -1;
 }
 
 
@@ -2601,8 +2607,10 @@ struct head_db * get_partition(const str *name) {
 static int do_routing(struct sip_msg* msg, dr_part_group_t * part_group,
 												int flags, gparam_t* whitelist)
 {
-	unsigned short dsts_idx[DR_MAX_GWLIST];
-	unsigned short carrier_idx[DR_MAX_GWLIST];
+	static unsigned short *dsts_idx = NULL;
+	static unsigned short dsts_idx_size = 0;
+	static unsigned short *carrier_idx = NULL;
+	static unsigned short carrier_idx_size = 0;
 	struct to_body  *from;
 	struct sip_uri  uri;
 	rt_info_t  *rt_info;
@@ -2883,6 +2891,7 @@ search_again:
 	}
 
 	/* sort the destination elements in the rule */
+	resize_dr_sort_buffer( dsts_idx, dsts_idx_size, rt_info->pgwa_len, error2);
 	i = sort_rt_dst(rt_info->pgwl, rt_info->pgwa_len,
 			flags&DR_PARAM_USE_WEIGTH, dsts_idx);
 	if (i!=0) {
@@ -2926,6 +2935,8 @@ search_again:
 				continue;
 
 			/* sort the gws of the carrier */
+			resize_dr_sort_buffer( carrier_idx, carrier_idx_size,
+				dst->dst.carrier->pgwa_len, skip);
 			j = sort_rt_dst(dst->dst.carrier->pgwl, dst->dst.carrier->pgwa_len,
 					dst->dst.carrier->flags&DR_CR_FLAG_WEIGHT, carrier_idx);
 			if (j!=0) {
@@ -2966,6 +2977,8 @@ search_again:
 				}
 
 			}
+			skip:
+			;
 
 		} else {
 
@@ -3131,6 +3144,9 @@ no_gws:
 			LM_DBG("updating to %d, prefix %.*s \n",rule_idx,
 					prefix_len-(rule_idx?1:0),username.s);
 		}
+	} else if ( (flags & DR_PARAM_INTERNAL_TRIGGERED) ) {
+		/* triggered via failover, but failover dropped at this iteration */
+		destroy_avps( 0, current_partition->avpID_store_flags, 1);
 	}
 
 	if (wl_list) pkg_free(wl_list);
@@ -3149,7 +3165,8 @@ error1:
 static int route2_carrier(struct sip_msg* msg, char* part_carrier,
 		char* gw_att_pv, char* carr_att_pv)
 {
-	unsigned short carrier_idx[DR_MAX_GWLIST];
+	static unsigned short *carrier_idx;
+	static unsigned short carrier_idx_size;
 	struct sip_uri  uri;
 	pgw_list_t *cdst;
 	pcr_t *cr;
@@ -3247,6 +3264,8 @@ static int route2_carrier(struct sip_msg* msg, char* part_carrier,
 		goto no_gws;
 
 	/* sort the gws of the carrier */
+	resize_dr_sort_buffer( carrier_idx, carrier_idx_size,
+			cr->pgwa_len, error);
 	j = sort_rt_dst( cr->pgwl, cr->pgwa_len, cr->flags&DR_CR_FLAG_WEIGHT,
 			carrier_idx);
 	if (j!=0) {
@@ -3422,8 +3441,14 @@ static int route2_gw(struct sip_msg* msg, char* ch_part_gw, char* gw_att_pv)
 			LM_DBG("found and looking for gw id <%.*s>,len=%d\n",id.len, id.s, id.len);
 			gw = get_gw_by_id( (*current_partition->rdata)->pgw_tree, &id );
 			if (gw==NULL) {
-				LM_ERR("no GW found with ID <%.*s> -> ignorring\n", id.len, id.s);
-			} else if ( push_gw_for_usage(msg, current_partition, &uri, gw, NULL, NULL, idx ) ) {
+				LM_ERR("no GW found with ID <%.*s> -> ignorring\n",
+					id.len, id.s);
+			} else
+			if (gw->flags & DR_DST_STAT_DSBL_FLAG) {
+				/* is gateway disabled, skip it */
+			} else
+			if ( push_gw_for_usage(msg, current_partition, &uri, gw,
+			NULL, NULL, idx ) ) {
 				LM_ERR("failed to use gw <%.*s>, skipping\n",
 						gw->id.len, gw->id.s);
 			} else {
@@ -4310,8 +4335,9 @@ static int goes_to_gw_1(struct sip_msg* msg, char * part, char* _type, char* fla
 		return _is_dr_uri_gw(msg, part, flags_pv, (!_type ? -1 : *(int *)_type),
 				GET_NEXT_HOP(msg));
 	} else {
+		/* if no partitions, all the parms shift one to left (100 weird) */
 		gw_attrs_spec = (pv_spec_p)flags_pv;
-		return _is_dr_uri_gw(msg, NULL, flags_pv, (!_type ? -1 : *(int *)_type),
+		return _is_dr_uri_gw(msg, NULL, _type, (!part ? -1 : *(int *)part),
 				GET_NEXT_HOP(msg));
 	}
 }
@@ -4322,7 +4348,8 @@ static int goes_to_gw_1(struct sip_msg* msg, char * part, char* _type, char* fla
  */
 static int goes_to_gw_0(struct sip_msg* msg)
 {
-	return goes_to_gw_1(msg, NULL, (char *)-1, NULL, NULL);
+	int type = -1;
+	return goes_to_gw_1(msg, NULL, (char *)&type, NULL, NULL);
 }
 
 

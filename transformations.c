@@ -46,20 +46,23 @@
 #include "parser/parse_to.h"
 #include "parser/sdp/sdp_helpr_funcs.h"
 
+#include "lib/csv.h"
 #include "strcommon.h"
 #include "transformations.h"
 #include "re.h"
 
 #define TR_BUFFER_SIZE 65536
 
-/* structure for CSV transformation */
+/* two buffers are enough to allow infinite chaining (R/W <-> W/R) */
+#define TR_CHAIN_BUFS  2
 
-typedef struct csv {
-	str body;
-	struct csv* next;
-} csv_t;
+/* a separate set of chaining buffers for each script function argument */
+static char __tr_buffers[MAX_ACTION_ELEMS - 1][TR_CHAIN_BUFS][TR_BUFFER_SIZE];
+static int __crt_tr_bufs, __crt_tr_link;
 
-static char _tr_buffer[TR_BUFFER_SIZE];
+#define get_tr_buffer() \
+	__tr_buffers[__crt_tr_bufs] \
+		[__crt_tr_link = (__crt_tr_link + 1) % TR_CHAIN_BUFS]
 
 trans_extra_t *tr_extra_list;
 
@@ -150,21 +153,27 @@ int run_transformations(struct sip_msg *msg, trans_t *tr, pv_value_t *val)
 
 	if (tr==NULL || val==NULL) {
 		LM_DBG("null pointer\n");
-		return -1;
+		ret = -1;
+		goto out;
 	}
 
 	it = tr;
 	while (it) {
 		ret = (*it->trf)(msg, it->params, it->subtype, val);
 		if(ret!=0)
-			return ret;
+			goto out;
 		it = it->next;
 	}
 
-	return 0;
+out:
+	/* advancing the current set of buffers prevents any bugs when passing
+	 * multiple transformation-enabled vars as cfg function parameters */
+	__crt_tr_bufs = (__crt_tr_bufs + 1) % (MAX_ACTION_ELEMS - 1);
+
+	return ret;
 }
 
-static void trans_fill_left(pv_value_t *val, str pad, int len)
+static void trans_fill_left(pv_value_t *val, str pad, int len, char *_tr_buffer)
 {
 	char *p;
 	int r;
@@ -207,7 +216,7 @@ static void trans_fill_left(pv_value_t *val, str pad, int len)
 	}
 }
 
-static void trans_fill_right(pv_value_t *val, str pad, int len)
+static void trans_fill_right(pv_value_t *val, str pad, int len, char *_tr_buffer)
 {
 	char *p;
 	int r;
@@ -243,7 +252,7 @@ int tr_eval_string(struct sip_msg *msg, tr_param_t *tp, int subtype,
 		pv_value_t *val)
 {
 	int i, j;
-	char *p, *s;
+	char *p, *s, *_tr_buffer = get_tr_buffer();
 	str st;
 	pv_value_t v;
 
@@ -782,9 +791,9 @@ int tr_eval_string(struct sip_msg *msg, tr_param_t *tp, int subtype,
 				return 0;
 
 			if (subtype == TR_S_FILL_LEFT)
-				trans_fill_left(val, st, i);
+				trans_fill_left(val, st, i, _tr_buffer);
 			else
-				trans_fill_right(val, st, i);
+				trans_fill_right(val, st, i, _tr_buffer);
 
 			break;
 		case TR_S_WIDTH:
@@ -1315,140 +1324,12 @@ error:
 }
 
 static str _tr_csv_str = {0,0};
-static csv_t* _tr_csv_list = NULL;
-
-static int init_csv(csv_t **t,char *s,int len)
-{
-	*t = (csv_t *)pkg_malloc(sizeof(csv_t));
-	if (*t == NULL)
-	{
-		return -1;
-	}
-
-	memset(*t,0,sizeof(csv_t));
-	(*t)->body.s = s;
-	(*t)->body.len = len;
-
-	return 0;
-}
-
-void free_csv_list(csv_t *list)
-{
-	csv_t *cit;
-	for (cit=list;cit;cit=cit->next)
-		pkg_free(cit);
-}
-
-static int parse_csv(str *s,csv_t **list)
-{
-	csv_t *t = NULL;
-	csv_t *last = NULL;
-	char *string,*limit,*aux;
-	int len;
-
-	if (!s || !list)
-	{
-		LM_ERR("Invalid parameter values\n");
-		return -1;
-	}
-
-	last = NULL;
-	*list = 0;
-
-	if (!s->s)
-	{
-		LM_DBG("empty csv params, skipping\n");
-		return 0;
-	}
-
-	LM_DBG("Parsing csv for : [%.*s]\n",s->len,s->s);
-
-	string = s->s;
-	limit = string+s->len;
-
-	while (*string)
-	{
-		t = NULL;
-		/* quoted token */
-		if (*string == '\"')
-		{
-			aux = string+1;
-search:
-			/* find coresponding quote */
-			while (*aux != '\"') aux++;
-			if ( *(aux+1) != '\"')
-			{
-				/* end of current token, also skip the following comma */
-				len = aux-string+1;
-				if (init_csv(&t,string,len) < 0)
-				{
-					LM_ERR("no more memory");
-					goto error;
-				}
-				string +=len+1;
-				if (string > limit)
-				{
-					/* again, end of string */
-					if (last) { last->next = t;} else {*list = t;}
-					return 0;
-				}
-			}
-			else
-			{
-				/* quoted string inside token */
-				aux +=2;
-				/* keep searching for final double quote*/
-				goto search;
-			}
-		}
-		else
-		{
-			/* non quoted csv , find comma */
-			aux = strchr(string,',');
-			if (aux == NULL)
-			{
-				len = strlen(string);
-				if (init_csv(&t,string,len) < 0)
-				{
-					LM_ERR("no more memory");
-					goto error;
-				}
-
-				/* should be end of string ! */
-				if (last) { last->next = t;} else {*list = t;}
-				return 0;
-			}
-			else
-			{
-				len = aux - string;
-				if (init_csv(&t,string,len) < 0)
-				{
-					LM_ERR("no more memory");
-					goto error;
-				}
-				string +=len+1;
-			}
-		}
-
-		if (last) { last->next = t;} else {*list = t;}
-		last = t;
-	}
-
-	return 0;
-
-error:
-	if (t) pkg_free(t);
-	free_csv_list(*list);
-	*list = NULL;
-	return -1;
-}
-
+static csv_record* _tr_csv_list = NULL;
 
 int tr_eval_csv(struct sip_msg *msg, tr_param_t *tp,int subtype,
 		pv_value_t *val)
 {
-	str sv;
-	csv_t *cit=NULL;
+	csv_record *cit=NULL;
 	int n,i,list_size=0;
 	pv_value_t v;
 
@@ -1474,8 +1355,8 @@ int tr_eval_csv(struct sip_msg *msg, tr_param_t *tp,int subtype,
 				memset(&_tr_csv_str, 0, sizeof(str));
 				if(_tr_csv_list != NULL)
 				{
-					free_csv_list(_tr_csv_list);
-					_tr_csv_list = 0;
+					free_csv_record(_tr_csv_list);
+					_tr_csv_list = NULL;
 				}
 				goto error;
 			}
@@ -1487,13 +1368,13 @@ int tr_eval_csv(struct sip_msg *msg, tr_param_t *tp,int subtype,
 		/* reset old values */
 		if(_tr_csv_list != NULL)
 		{
-			free_csv_list(_tr_csv_list);
-			_tr_csv_list = 0;
+			free_csv_record(_tr_csv_list);
+			_tr_csv_list = NULL;
 		}
 
 		/* parse csv */
-		sv = _tr_csv_str;
-		if (parse_csv(&sv,&_tr_csv_list)<0)
+		_tr_csv_list = _parse_csv_record(&_tr_csv_str, CSV_RFC_4180);
+		if (!_tr_csv_list)
 			goto error;
 	}
 
@@ -1552,7 +1433,7 @@ int tr_eval_csv(struct sip_msg *msg, tr_param_t *tp,int subtype,
 				}
 			}
 
-			val->rs = cit->body;
+			val->rs = cit->s;
 			val->flags =  PV_VAL_STR;
 			break;
 
@@ -1678,7 +1559,7 @@ error:
 int tr_eval_ip(struct sip_msg *msg, tr_param_t *tp,int subtype,
 		pv_value_t *val)
 {
-	char *buffer;
+	char *buffer, *_tr_buffer = get_tr_buffer();
 	struct ip_addr *binary_ip;
 	str inet = str_init("INET");
 	str inet6 = str_init("INET6");
@@ -1733,8 +1614,11 @@ int tr_eval_ip(struct sip_msg *msg, tr_param_t *tp,int subtype,
 			memcpy(ip.u.addr,val->rs.s,val->rs.len);
 			ip.len = val->rs.len;
 			buffer = ip_addr2a(&ip);
-			val->rs.s = buffer;
+
 			val->rs.len = strlen(buffer);
+			memcpy(_tr_buffer, buffer, val->rs.len);
+			val->rs.s = _tr_buffer;
+
 			val->flags = PV_VAL_STR;
 			break;
 		case TR_IP_ISIP:
@@ -1761,22 +1645,25 @@ int tr_eval_ip(struct sip_msg *msg, tr_param_t *tp,int subtype,
 					return -1;
 				}
 			}
-			val->rs.s = (char *)binary_ip->u.addr;
+
+			memcpy(_tr_buffer, (char *)binary_ip->u.addr, binary_ip->len);
+			val->rs.s = _tr_buffer;
 			val->rs.len = binary_ip->len;
+
 			val->flags = PV_VAL_STR;
 			break;
 		case TR_IP_RESOLVE:
 			val->flags = PV_VAL_STR;
-			buffer = pkg_malloc(val->rs.len + 1);
-			if (!buffer) {
-				LM_ERR("out of pkg memory!\n");
+			if (val->rs.len + 1 > TR_BUFFER_SIZE) {
+				LM_ERR("failed to resolve host, length too large (%d)\n",
+				       val->rs.len);
 				val->flags = PV_VAL_NULL;
 				return -1;
 			}
-			memcpy(buffer, val->rs.s, val->rs.len);
-			buffer[val->rs.len] = '\0';
-			server = resolvehost(buffer, 0);
-			pkg_free(buffer);
+
+			memcpy(_tr_buffer, val->rs.s, val->rs.len);
+			_tr_buffer[val->rs.len] = '\0';
+			server = resolvehost(_tr_buffer, 0);
 			if (!server || !server->h_addr)
 			{
 				val->flags = PV_VAL_NULL;
@@ -1803,8 +1690,11 @@ int tr_eval_ip(struct sip_msg *msg, tr_param_t *tp,int subtype,
 			}
 
 			buffer = ip_addr2a(&ip);
-			val->rs.s = buffer;
+
 			val->rs.len = strlen(buffer);
+			memcpy(_tr_buffer, buffer, val->rs.len);
+			val->rs.s = _tr_buffer;
+
 			break;
 
 		default:

@@ -683,13 +683,16 @@ Chapter 3. Contributors
      Name DevScore Commits Lines ++ Lines --
    1. Anca Vamanu 209 98 9008 2213
    2. Ovidiu Sas (@ovidiusas) 145 101 2915 1129
-   3. Bogdan-Andrei Iancu (@bogdan-iancu) 37 31 209 192
-   4. Razvan Crainea (@razvancrainea) 26 17 516 172
-   5. Nick Altmann (@nikbyte) 14 6 461 199
-   6. Liviu Chircu (@liviuchircu) 13 10 51 98
+   3. Bogdan-Andrei Iancu (@bogdan-iancu) 39 33 231 204
+   4. Razvan Crainea (@razvancrainea) 29 20 519 173
+   5. Liviu Chircu (@liviuchircu) 14 11 54 99
+   6. Nick Altmann (@nikbyte) 14 6 461 199
    7. Vlad Paiu (@vladpaiu) 7 5 35 21
-   8. Ezequiel Lovelle 3 1 1 1
-   9. Vlad Patrascu (@rvlad-patrascu) 2 1 1 0
+   8. Ezequiel Lovelle (@lovelle) 3 1 1 1
+   9. Peter Lemenkov (@lemenkov) 3 1 1 1
+   10. Zero King (@l2dy) 3 1 1 1
+
+   All remaining contributors: Vlad Patrascu (@rvlad-patrascu).
 
    (1) DevScore = author_commits + author_lines_added /
    (project_lines_added / project_commits) + author_lines_deleted
@@ -710,16 +713,19 @@ Chapter 3. Contributors
 3.2. By Commit Activity
 
    Table 3.2. Most recently active contributors^(1) to this module
-                     Name                   Commit Activity
-   1. Razvan Crainea (@razvancrainea)     Jun 2011 - Nov 2018
-   2. Liviu Chircu (@liviuchircu)         Mar 2014 - Nov 2018
-   3. Bogdan-Andrei Iancu (@bogdan-iancu) Aug 2009 - Jun 2018
-   4. Vlad Patrascu (@rvlad-patrascu)     May 2017 - May 2017
-   5. Ovidiu Sas (@ovidiusas)             Nov 2010 - Mar 2016
-   6. Ezequiel Lovelle                    Oct 2014 - Oct 2014
-   7. Nick Altmann (@nikbyte)             Oct 2012 - Jan 2013
-   8. Anca Vamanu                         Aug 2009 - May 2012
-   9. Vlad Paiu (@vladpaiu)               Aug 2011 - Mar 2012
+                      Name                   Commit Activity
+   1.  Bogdan-Andrei Iancu (@bogdan-iancu) Aug 2009 - Jan 2021
+   2.  Liviu Chircu (@liviuchircu)         Mar 2014 - Jul 2020
+   3.  Zero King (@l2dy)                   Mar 2020 - Mar 2020
+   4.  Peter Lemenkov (@lemenkov)          Feb 2020 - Feb 2020
+   5.  Razvan Crainea (@razvancrainea)     Jun 2011 - Sep 2019
+   6.  Vlad Patrascu (@rvlad-patrascu)     May 2017 - May 2017
+   7.  Ovidiu Sas (@ovidiusas)             Nov 2010 - Mar 2016
+   8.  Ezequiel Lovelle (@lovelle)         Oct 2014 - Oct 2014
+   9.  Nick Altmann (@nikbyte)             Oct 2012 - Jan 2013
+   10. Anca Vamanu                         Aug 2009 - May 2012
+
+   All remaining contributors: Vlad Paiu (@vladpaiu).
 
    (1) including any documentation-related commits, excluding
    merge commits

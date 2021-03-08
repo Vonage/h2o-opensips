@@ -176,6 +176,7 @@ struct module_exports exports = {
 	MOD_TYPE_DEFAULT,/* class of this module */
 	MODULE_VERSION,  /* module version */
 	DEFAULT_DLFLAGS, /* dlopen flags */
+	0,				 /* load function */
 	&deps,           /* OpenSIPS module dependencies */
 	cmds,
 	0,
@@ -185,6 +186,7 @@ struct module_exports exports = {
 	0,          /* exported pseudo-variables */
 	0,			/* exported transformations */
 	0,          /* extra processes */
+	0,          /* module pre-initialization function */
 	mod_init,   /* module initialization function */
 	0,          /* response function */
 	destroy,    /* destroy function */
@@ -375,7 +377,7 @@ static inline int auth_get_ha1(struct sip_msg *msg, struct username* _username,
 				|| (sval.flags&PV_VAL_EMPTY) || (!(sval.flags&PV_VAL_STR)))
 		{
 			pv_value_destroy(&sval);
-			return 1;
+			return -1;
 		}
 		if(sval.rs.len!= _username->whole.len
 				|| strncasecmp(sval.rs.s, _username->whole.s, sval.rs.len))
@@ -396,7 +398,7 @@ static inline int auth_get_ha1(struct sip_msg *msg, struct username* _username,
 				|| (sval.flags&PV_VAL_EMPTY) || (!(sval.flags&PV_VAL_STR)))
 		{
 			pv_value_destroy(&sval);
-			return 1;
+			return -1;
 		}
 	} else {
 		return 1;
@@ -443,12 +445,11 @@ static inline int pv_authorize(struct sip_msg* msg, gparam_p realm,
 	res = auth_get_ha1(msg, &cred->digest.username, &domain, ha1);
 	if (res < 0) {
 		/* Error */
-		if (sigb.reply(msg, 500, &auth_500_err, NULL) == -1) {
+		if (sigb.reply(msg, 500, &auth_500_err, NULL) == -1)
 			LM_ERR("failed to send 500 reply\n");
-		}
+
 		return ERROR;
-	}
-	if (res > 0) {
+	} else if (res > 0) {
 		/* Username not found */
 		return USER_UNKNOWN;
 	}

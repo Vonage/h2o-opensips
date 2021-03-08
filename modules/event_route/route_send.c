@@ -96,6 +96,8 @@ static union tmp_route_send_t {
 	char buf[sizeof(route_send_t *)];
 } recv_buf;
 
+static pid_t event_route_process_pid = -1;
+
 static route_send_t * route_receive(void)
 {
 	int rc;
@@ -129,6 +131,9 @@ int init_writer(void)
 {
 	int flags;
 
+	if (event_route_process_pid == getpid())
+		return 0;
+
 	if (route_pipe[0] != -1) {
 		close(route_pipe[0]);
 		route_pipe[0] = -1;
@@ -158,6 +163,7 @@ static void route_init_reader(void)
 		close(route_pipe[1]);
 		route_pipe[1] = -1;
 	}
+	event_route_process_pid = getpid();
 }
 
 
@@ -243,21 +249,12 @@ void event_route_handler(int rank)
 	/* init blocking reader */
 	route_init_reader();
 	route_send_t *route_s;
-	struct sip_msg* dummy_req;
+	struct sip_msg* req;
 
-	dummy_req = (struct sip_msg*)pkg_malloc(sizeof(struct sip_msg));
-	if (dummy_req == NULL) {
-		LM_ERR("oom\n");
+	if (init_child(PROC_MODULE) != 0) {
+		LM_ERR("cannot init child process\n");
 		return;
 	}
-	memset(dummy_req, 0, sizeof(struct sip_msg));
-	dummy_req->first_line.type = SIP_REQUEST;
-	dummy_req->first_line.u.request.method.s= "DUMMY";
-	dummy_req->first_line.u.request.method.len= 5;
-	dummy_req->first_line.u.request.uri.s= "sip:user@domain.com";
-	dummy_req->first_line.u.request.uri.len= 19;
-	dummy_req->rcv.src_ip.af = AF_INET;
-	dummy_req->rcv.dst_ip.af = AF_INET;
 
 	/* waiting for commands */
 	for (;;) {
@@ -267,9 +264,16 @@ void event_route_handler(int rank)
 			goto end;
 		}
 
+		req = get_dummy_sip_msg();
+		if(req == NULL) {
+			LM_ERR("cannot create new dummy sip request\n");
+			return;
+		}
+
 		event_name = &route_s->event;
 		parameters = &route_s->params;
-		run_top_route(route_s->a, dummy_req);
+		run_top_route(route_s->a, req);
+		release_dummy_sip_msg(req);
 end:
 		if (route_s)
 			shm_free(route_s);
