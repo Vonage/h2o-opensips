@@ -314,7 +314,7 @@ static int mod_init(void)
 		return -1;
 	}
 
-	sip_workers_no = udp_count_processes() + tcp_count_processes();
+	sip_workers_no = count_child_processes();
 
 	LM_DBG("Children: %d\n", sip_workers_no);
 
@@ -389,7 +389,7 @@ static int child_init(int rank)
 {
 	LM_DBG("init child\n");
 
-	if (rank <= PROC_MAIN)
+	if (rank < 1 )
 		return 0;
 
 	lock_get(index_lock);

@@ -1261,7 +1261,8 @@ static unsigned int prep_reassemble_body_parts( struct sip_msg* msg,
 	unsigned int size;
 	unsigned int len = 0;
 	unsigned int orig_offs;
-	char *hdr;
+	struct hdr_field hf;
+	char *hdr, *it;
 
 	/* set the offset (in the original buffer) at the beginning of the body */
 	orig_offs = msg->body->part_count ? msg->body->body.s-msg->buf : msg->len ;
@@ -1366,29 +1367,41 @@ static unsigned int prep_reassemble_body_parts( struct sip_msg* msg,
 						}
 					}
 				} else {
-					hdr = (char*)pkg_malloc( part->headers.len);
-					if (hdr==NULL) {
-						LM_ERR("failed to allocate new ct hdr\n");
-					} else {
-						memcpy( hdr, part->headers.s, part->headers.len);
-						if (insert_new_lump_before(ct, hdr,
-						part->headers.len, HDR_CONTENTTYPE_T) == NULL) {
-							LM_ERR("failed to create insert lump\n");
-							pkg_free(hdr);
+					/* iterate all the SIP hdrs from this part and keep all
+					 * except the "Content-Length" */
+					it = part->headers.s;
+					while ( it<part->headers.s+part->headers.len ) {
+						memset( &hf, 0, sizeof(struct hdr_field));
+						it = get_hdr_field( it, part->headers.s+part->headers.len, &hf);
+						if (hf.type==HDR_ERROR_T || hf.type==HDR_EOH_T)
+							break;
+						if (hf.type==HDR_CONTENTLENGTH_T)
+							continue;
+						/* add this hdr */
+						hdr = (char*)pkg_malloc( hf.len);
+						if (hdr==NULL) {
+							LM_ERR("failed to allocate new ct hdr\n");
+						} else {
+							memcpy( hdr, hf.name.s, hf.len);
+							if (insert_new_lump_before(ct, hdr,
+							hf.len, HDR_CONTENTTYPE_T) == NULL) {
+								LM_ERR("failed to create insert lump\n");
+								pkg_free(hdr);
+							}
 						}
 					}
 				}
 			}
 		} else
-		/* if it is an 1->1 keeping the part, try to preserve the
-		 * the packing (multi-part or not) of this part */
-		if ( (part->flags & SIP_BODY_PART_FLAG_NEW)==0 &&
-		msg->body->part_count==1 &&
-		msg->body->flags & SIP_BODY_RCV_MULTIPART) {
-			/* preserve the original multi-part packing by preserving
-			 * the before and after padding between part and body */
-			len += msg->body->body.len - part->body.len;
-		}
+			/* if it is an 1->1 keeping the part, try to preserve the
+			 * the packing (multi-part or not) of this part */
+			if ( (part->flags & SIP_BODY_PART_FLAG_NEW)==0 &&
+			msg->body->part_count==1 &&
+			msg->body->flags & SIP_BODY_RCV_MULTIPART) {
+				/* preserve the original multi-part packing by preserving
+				 * the before and after padding between part and body */
+				len += msg->body->body.len - part->body.len;
+			}
 
 	} else if (msg->body->part_count<2) {
 

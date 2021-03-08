@@ -364,7 +364,24 @@ int dlg_replicated_update(bin_packet_t *packet)
 		goto error;
 	}
 
-	bin_skip_str(packet, 8);
+	/* route set */
+	bin_skip_str(packet, 2);
+
+	/* sync caller and callee contact */
+	bin_pop_str(packet, &st);
+	shm_str_sync(&dlg->legs[DLG_CALLER_LEG].contact, &st);
+	bin_pop_str(packet, &st);
+	shm_str_sync(&dlg->legs[callee_idx(dlg)].contact, &st);
+
+	/* from & to URIs set */
+	bin_skip_str(packet, 2);
+	bin_pop_str(packet, &st);
+
+	/* sync SDPs */
+	shm_str_sync(&dlg->legs[DLG_CALLER_LEG].adv_sdp, &st);
+	bin_pop_str(packet, &st);
+	shm_str_sync(&dlg->legs[callee_idx(dlg)].adv_sdp, &st);
+
 	bin_pop_str(packet, &vars);
 	bin_pop_str(packet, &profiles);
 	bin_pop_int(packet, &dlg->user_flags);
@@ -447,7 +464,7 @@ int dlg_replicated_delete(bin_packet_t *packet)
 	}
 
 	destroy_linkers(dlg);
-	remove_dlg_prof_table(dlg, 1, 0);
+	remove_dlg_prof_table(dlg, 0, 0);
 
 	/* simulate BYE received from caller */
 	next_state_dlg(dlg, DLG_EVENT_REQBYE, DLG_DIR_DOWNSTREAM, &old_state,
@@ -711,7 +728,6 @@ init_error:
 	LM_ERR("Failed to replicate updated dialog\n");
 end:
 	dlg_unlock_dlg(dlg);
-	return;
 }
 
 /**
@@ -990,13 +1006,13 @@ int send_shtag_active_info(str *tag_name, int node_id)
 
 	if (node_id) {
 		if (clusterer_api.send_to(&packet, dialog_repl_cluster, node_id) !=
-			CLUSTERER_SEND_SUCCES) {
+			CLUSTERER_SEND_SUCCESS) {
 			bin_free_packet(&packet);
 			return -1;
 		}
 	} else
 		if (clusterer_api.send_all(&packet, dialog_repl_cluster) !=
-			CLUSTERER_SEND_SUCCES) {
+			CLUSTERER_SEND_SUCCESS) {
 			bin_free_packet(&packet);
 			return -1;
 		}
@@ -1053,7 +1069,7 @@ void rcv_cluster_event(enum clusterer_event ev, int node_id)
 
 				dlg_unlock(d_table, &d_table->entries[i]);
 
-				remove_dlg_prof_table(dlg, 0, 0);
+				remove_dlg_prof_table(dlg, 1, 0);
 
 				dlg_lock(d_table, &d_table->entries[i]);
 
@@ -1105,7 +1121,7 @@ void rcv_cluster_event(enum clusterer_event ev, int node_id)
 				ni = shm_malloc(sizeof *ni);
 				if (!ni) {
 					LM_ERR("No more shm memory!\n");
-					return;
+					continue;
 				}
 				ni->node_id = node_id;
 				ni->next = tag->active_msgs_sent;
@@ -1265,9 +1281,20 @@ void receive_prof_repl(bin_packet_t *packet)
 		if (!old_profile || old_name.len != name.len ||
 			memcmp(name.s, old_name.s, name.len) != 0) {
 			old_profile = get_dlg_profile(&name);
-			if (!old_profile)
+			if (!old_profile) {
 				LM_WARN("received unknown profile <%.*s> from node %d\n",
 					name.len, name.s, packet->src_id);
+
+				if (bin_pop_int(packet, &has_value) < 0) {
+					LM_ERR("cannot pop profile's has_value int\n");
+					return;
+				}
+				if (has_value)
+					bin_skip_str(packet, 1);
+				bin_skip_int(packet, 1);
+
+				continue;
+			}
 			old_name = name;
 		}
 		profile = old_profile;

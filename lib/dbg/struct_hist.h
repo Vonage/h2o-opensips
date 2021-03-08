@@ -21,16 +21,15 @@
 #ifndef __STRUCT_HIST_H__
 #define __STRUCT_HIST_H__
 
-#include "../../locking.h"
 #include "../../timer.h"
 
-#include "../list.h"
-
 /**
- * Generic struct debugging support. Especially useful for troubleshooting
- * bugs related to reference counted structures, including:
- *   - mem corruption due to free() operations on lingering references
- *   - too many / too little ref operations
+ * Generic struct debugging support.  Some major use cases:
+ *   - troubleshooting bugs related to reference counted structures, including:
+ *     * mem corruption due to free() operations on lingering references
+ *     * too many / too little ref operations
+ *   - logging and keeping the last N events in memory and only dumping them
+ *     on a certain condition (e.g. occurrence of a bug)
  *
  * How To use:
  *  - before the forking phase, use shl_init() to initialize a global history
@@ -75,40 +74,11 @@ struct struct_hist_action {
 	char log[MAX_SHLOG_SIZE];
 };
 
-#define ACTIONS_SIZE 5
-struct struct_hist {
-	void *obj;
-	char *obj_name;
-	utime_t created;
-	struct struct_hist_list *shlist;
-
-	int ref;
-
-	struct struct_hist_action *actions;
-	int len;
-	int max_len;
-	int flush_offset;
-
-	gen_lock_t wlock;
-	int auto_logging;
-
-	struct list_head list;
-};
+struct struct_hist;
+struct struct_hist_list;
 
 #define FLUSH_LIMIT 2000
 #define flushable(sh) (sh->len == FLUSH_LIMIT)
-
-struct struct_hist_list {
-	char *obj_name;
-
-	struct list_head objects;
-	int len;
-	int win_sz;
-	long long total_obj;
-	int auto_logging;
-
-	gen_lock_t wlock;
-};
 
 #ifndef DBG_STRUCT_HIST
 #define shl_init(...) NULL
@@ -127,12 +97,23 @@ struct struct_hist_list {
  * @obj_name: A name for the structs which will be troubleshooted
  * @window_size: (gliding window) - the max number of retained histories
  * @auto_logging: if true, each struct_hist object will log info as it grows
+ * @init_actions_sz: initial allocation size of each object's actions array
  *
  * WARNING: a "window_size" of 0 (infinite) is essentially a memory leak,
  * use with caution!
  */
-struct struct_hist_list *shl_init(char *obj_name, int window_size,
-			int auto_logging);
+struct struct_hist_list *_shl_init(char *obj_name, int window_size,
+			int auto_logging, int init_actions_sz);
+#define shl_init(nm, wsz, autolog) _shl_init(nm, wsz, autolog, 5)
+
+/**
+ * Flush all contents of a struct hist list to the log.  Useful when collecting
+ * data over time in a rotating log list under high traffic volume conditions
+ * and only flushing the logs once a certain condition hits (e.g. bug occurs).
+ *
+ * @shl: a struct history list
+ */
+void sh_list_flush(struct struct_hist_list *shl);
 
 /**
  * Frees up the global history holder, along with all of its content
@@ -145,8 +126,10 @@ void shl_destroy(struct struct_hist_list *shl);
  * @obj: The corresponding struct address. This value will be embedded into
  *       the history object, to allow look-ups inside gdb
  * @list: global holder where this history will be pushed
+ * @refs: the amount of references to the new object kept by the calling code
  */
-struct struct_hist *sh_push(void *obj, struct struct_hist_list *list);
+struct struct_hist *_sh_push(void *obj, struct struct_hist_list *list, int refs);
+#define sh_push(obj, list) _sh_push(obj, list, 1)
 
 /**
  * Unreference a history struct. Depending on whether it is still in the

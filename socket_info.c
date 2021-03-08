@@ -150,8 +150,10 @@ struct socket_info* new_sock_info(	char* name,
 		si->adv_port_str.len=snprintf(si->adv_port_str.s, 10, "%hu", adv_port);
 		si->adv_port = adv_port;
 	}
-	if ( (si->proto==PROTO_TCP || si->proto==PROTO_TLS) && children) {
-		LM_WARN("number of children per TCP/TLS listener not supported -> ignoring...\n");
+	if (si->proto!=PROTO_UDP && si->proto!=PROTO_SCTP &&
+	        si->proto!=PROTO_HEP_UDP && children) {
+		LM_WARN("number of workers per non UDP-based <%.*s> listener not "
+			"supported -> ignoring...\n", si->name.len, si->name.s);
 	} else {
 		si->children = children;
 	}
@@ -1268,7 +1270,7 @@ int probe_max_sock_buff(int sock,int buff_choice,int buff_max,int buff_increment
 		LM_ERR("getsockopt: %s\n", strerror(errno));
 		return -1;
 	}
-	LM_INFO("using %s buffer of %d kb\n",info, (foptval/1024));
+	LM_DBG("using %s buffer of %d kb\n",info, (foptval/1024));
 
 	return 0;
 }

@@ -52,6 +52,8 @@ Presence Module
               1.6.3. pres_phtable_list
               1.6.4. subs_phtable_list
               1.6.5. pres_expose
+              1.6.6. pres_set_sharing_tag_active
+              1.6.7. pres_list_sharing_tags
 
         1.7. Exported Events
 
@@ -217,8 +219,8 @@ modparam("presence", "fallback2db", 1)
    order to understand th concept of a cluster ID, please see the
    clusterer module.
 
-   For more on presence clustering see the Section 1.2, “Presence
-   clustering” chapter.
+   For more on presence clustering see the Presence Clustering
+   chapter.
 
    Default value is “None”.
 
@@ -235,8 +237,8 @@ modparam("presence", "cluster_id", 2)
    information via the clustering support. A non-zero value means
    enabled.
 
-   For more on presence clustering see the Section 1.2, “Presence
-   clustering” chapter.
+   For more on presence clustering see the Presence Clustering
+   chapter.
 
    Default value is “0” (disabled).
 
@@ -251,8 +253,8 @@ modparam("presence", "cluster_federation_mode", 1)
    by the federated cluster - only presentities advertising one of
    these events will be broadcasted via the cluster.
 
-   For more on presence clustering see the Section 1.2, “Presence
-   clustering” chapter.
+   For more on presence clustering see the Presence Clustering
+   chapter.
 
    Default value is “empty” (meaning all).
 
@@ -271,15 +273,15 @@ ge-summary")
    Use this option if you want to force a certain value ("active"
    or "inactive") from the very beginning.
 
-   For more on presence clustering see the Section 1.2, “Presence
-   clustering” chapter.
+   For more on presence clustering see the Presence Clustering
+   chapter.
 
    Default value is “empty” (none).
 
    Example 1.6. Set cluster_sharing_tags parameter
 ...
-modparam("presence", "cluster_pres_events" ,"vip1=active")
-modparam("presence", "cluster_pres_events" ,"vip2=backup")
+modparam("presence", "cluster_sharing_tags" ,"vip1=active")
+modparam("presence", "cluster_sharing_tags" ,"vip2=backup")
 ...
 
 1.4.7. expires_offset (int)
@@ -594,8 +596,7 @@ modparam("presence", "pres_htable_size", 11)
      * sharing_tag - optional parameter telling the owner tag (for
        the subscription) in clusetering scenarios where the
        subscription data is shared between multiple servers - see
-       the Section 1.2, “Presence clustering” chapter for more
-       details.
+       the Presence Clustering chapter for more details.
 
    Ex:
         if($ru =~ "kphone@opensips.org")
@@ -705,6 +706,35 @@ _empty_line_
 :pres_expose:fifo_reply
 _empty_line_
 
+1.6.6.  pres_set_sharing_tag_active
+
+   Set the given sharing tag to the active state. The information
+   about this change is also broadcasted in the cluster in order
+   to force any other node that may be active on this tag to step
+   down to backup.
+
+   For more details, see the Presence Clustering chapter.
+
+   Name: pres_set_sharing_tag_active
+
+   Parameters: tag - name of the tag to be set active
+
+   MI FIFO Command Format:
+                opensipsctl fifo pres_set_sharing_tag_active vip1
+
+1.6.7.  pres_list_sharing_tags
+
+   Lists all known sharing tags and their states.
+
+   For more details, see the Presence Clustering chapter.
+
+   Name: pres_list_sharing_tags
+
+   Parameters: Command takes no parameters
+
+   MI FIFO Command Format:
+                opensipsctl fifo pres_list_sharing_tags
+
 1.7. Exported Events
 
 1.7.1.  E_PRESENCE_PUBLISH
@@ -736,7 +766,7 @@ _empty_line_
    them can be found in presence-create.sql script in the database
    directories in the opensips/scripts folder. You can also find
    the complete database documentation on the project webpage,
-   http://www.opensips.org/html/docs/db/db-schema-devel.html.
+   https://opensips.org/docs/db/db-schema-devel.html.
 
 Chapter 2. Developer Guide
 
@@ -1037,10 +1067,10 @@ Chapter 3. Contributors
    commits^(2) and lines added/removed^(3)
      Name DevScore Commits Lines ++ Lines --
    1. Anca Vamanu 663 247 24146 12623
-   2. Bogdan-Andrei Iancu (@bogdan-iancu) 117 74 2752 1172
-   3. Razvan Crainea (@razvancrainea) 29 22 384 135
-   4. Ovidiu Sas (@ovidiusas) 27 19 615 167
-   5. Liviu Chircu (@liviuchircu) 25 16 247 372
+   2. Bogdan-Andrei Iancu (@bogdan-iancu) 127 82 2911 1213
+   3. Razvan Crainea (@razvancrainea) 30 23 387 135
+   4. Liviu Chircu (@liviuchircu) 30 20 302 377
+   5. Ovidiu Sas (@ovidiusas) 27 19 615 167
    6. Daniel-Constantin Mierla (@miconda) 24 19 174 165
    7. Henning Westerholt (@henningw) 15 6 340 302
    8. Dan Pascu (@danpascu) 9 7 13 32
@@ -1050,9 +1080,9 @@ Chapter 3. Contributors
    All remaining contributors: Edson Gellert Schubert, Vlad
    Patrascu (@rvlad-patrascu), Vlad Paiu (@vladpaiu), Juha
    Heinanen (@juha-h), Stanislaw Pitucha, Damien Sandras
-   (@dsandras), Kobi Eshun (@ekobi), Dusan Klinec, Angel Marin,
-   Klaus Darilion, Carlos Oliva, Sergio Gutierrez, Kennard White,
-   Elena-Ramona Modroiu, Vasil Kolev, Benny Prijono, James
+   (@dsandras), Kobi Eshun (@ekobi), Dusan Klinec (@ph4r05), Angel
+   Marin, Klaus Darilion, Carlos Oliva, Sergio Gutierrez, Kennard
+   White, Elena-Ramona Modroiu, Vasil Kolev, Benny Prijono, James
    Criscuolo, Vallimamod Abdullah, UnixDev, Denis Bilenko, Julián
    Moreno Patiño, John Riordan, Julien Blache.
 
@@ -1076,15 +1106,15 @@ Chapter 3. Contributors
 
    Table 3.2. Most recently active contributors^(1) to this module
                       Name                   Commit Activity
-   1.  Razvan Crainea (@razvancrainea)     Sep 2011 - Sep 2019
-   2.  Liviu Chircu (@liviuchircu)         Mar 2014 - Jul 2019
-   3.  Bogdan-Andrei Iancu (@bogdan-iancu) Oct 2006 - May 2019
+   1.  Razvan Crainea (@razvancrainea)     Sep 2011 - Aug 2020
+   2.  Liviu Chircu (@liviuchircu)         Mar 2014 - Jan 2020
+   3.  Bogdan-Andrei Iancu (@bogdan-iancu) Oct 2006 - Jan 2020
    4.  Walter Doekes (@wdoekes)            Apr 2010 - Feb 2019
    5.  Vlad Patrascu (@rvlad-patrascu)     May 2017 - Mar 2018
    6.  James Criscuolo                     Mar 2016 - Mar 2016
    7.  Ovidiu Sas (@ovidiusas)             Sep 2010 - Mar 2016
    8.  Julián Moreno Patiño                Feb 2016 - Feb 2016
-   9.  Dusan Klinec                        Dec 2015 - Dec 2015
+   9.  Dusan Klinec (@ph4r05)              Dec 2015 - Dec 2015
    10. Carlos Oliva                        Mar 2015 - Mar 2015
 
    All remaining contributors: Damien Sandras (@dsandras), Vlad
@@ -1103,8 +1133,8 @@ Chapter 4. Documentation
 
 4.1. Contributors
 
-   Last edited by: Liviu Chircu (@liviuchircu), Bogdan-Andrei
-   Iancu (@bogdan-iancu), Vlad Patrascu (@rvlad-patrascu), Razvan
+   Last edited by: Bogdan-Andrei Iancu (@bogdan-iancu), Liviu
+   Chircu (@liviuchircu), Vlad Patrascu (@rvlad-patrascu), Razvan
    Crainea (@razvancrainea), Saúl Ibarra Corretgé (@saghul),
    Ovidiu Sas (@ovidiusas), Anca Vamanu, Kennard White, Angel
    Marin, Kobi Eshun (@ekobi), Klaus Darilion, Henning Westerholt

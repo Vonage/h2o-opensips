@@ -120,6 +120,10 @@ Chapter 1. Admin Guide
      * cachedb_url : the URL of the CacheDB database
      * table : SQL database table name
      * key : SQL database column name of the “key” column
+     * key_type : data type for the SQL "key" column:
+          + string
+          + int
+       If not present, default value is “string”
      * columns : names of the columns to be cached from the SQL
        database, separated by a delimiter configured by
        columns_delimiter.
@@ -330,12 +334,13 @@ Chapter 2. Contributors
    Table 2.1. Top contributors by DevScore^(1), authored
    commits^(2) and lines added/removed^(3)
      Name DevScore Commits Lines ++ Lines --
-   1. Vlad Patrascu (@rvlad-patrascu) 79 32 3463 1045
+   1. Vlad Patrascu (@rvlad-patrascu) 85 37 3553 1065
    2. Liviu Chircu (@liviuchircu) 23 18 166 115
-   3. Razvan Crainea (@razvancrainea) 13 11 20 12
-   4. Bogdan-Andrei Iancu (@bogdan-iancu) 5 3 11 10
+   3. Razvan Crainea (@razvancrainea) 14 12 23 12
+   4. Bogdan-Andrei Iancu (@bogdan-iancu) 6 4 11 18
    5. Ionel Cerghit (@ionel-cerghit) 4 1 50 92
-   6. Ovidiu Sas (@ovidiusas) 3 1 1 1
+   6. Dan Pascu (@danpascu) 3 1 1 1
+   7. Ovidiu Sas (@ovidiusas) 3 1 1 1
 
    (1) DevScore = author_commits + author_lines_added /
    (project_lines_added / project_commits) + author_lines_deleted
@@ -357,12 +362,13 @@ Chapter 2. Contributors
 
    Table 2.2. Most recently active contributors^(1) to this module
                      Name                   Commit Activity
-   1. Liviu Chircu (@liviuchircu)         Mar 2016 - Sep 2019
-   2. Razvan Crainea (@razvancrainea)     Feb 2016 - Sep 2019
-   3. Bogdan-Andrei Iancu (@bogdan-iancu) May 2017 - Aug 2019
-   4. Vlad Patrascu (@rvlad-patrascu)     Aug 2015 - Jul 2019
-   5. Ovidiu Sas (@ovidiusas)             Mar 2017 - Mar 2017
-   6. Ionel Cerghit (@ionel-cerghit)      Dec 2015 - Dec 2015
+   1. Razvan Crainea (@razvancrainea)     Feb 2016 - Jan 2021
+   2. Vlad Patrascu (@rvlad-patrascu)     Aug 2015 - Dec 2020
+   3. Bogdan-Andrei Iancu (@bogdan-iancu) May 2017 - Jun 2020
+   4. Liviu Chircu (@liviuchircu)         Mar 2016 - Sep 2019
+   5. Dan Pascu (@danpascu)               May 2019 - May 2019
+   6. Ovidiu Sas (@ovidiusas)             Mar 2017 - Mar 2017
+   7. Ionel Cerghit (@ionel-cerghit)      Dec 2015 - Dec 2015
 
    (1) including any documentation-related commits, excluding
    merge commits
@@ -371,8 +377,8 @@ Chapter 3. Documentation
 
 3.1. Contributors
 
-   Last edited by: Liviu Chircu (@liviuchircu), Vlad Patrascu
-   (@rvlad-patrascu), Bogdan-Andrei Iancu (@bogdan-iancu).
+   Last edited by: Vlad Patrascu (@rvlad-patrascu), Liviu Chircu
+   (@liviuchircu), Bogdan-Andrei Iancu (@bogdan-iancu).
 
    doc copyrights:
 

@@ -29,34 +29,34 @@
 	<row>
 		<entry>2. </entry>
 		<entry>Bogdan-Andrei Iancu (<ulink url="https://github.com/bogdan-iancu">@bogdan-iancu</ulink>)</entry>
-		<entry align="center">117</entry>
-		<entry align="center">74</entry>
-		<entry align="center">2752</entry>
-		<entry align="center">1172</entry>
+		<entry align="center">127</entry>
+		<entry align="center">82</entry>
+		<entry align="center">2911</entry>
+		<entry align="center">1213</entry>
 	</row>
 	<row>
 		<entry>3. </entry>
 		<entry>Razvan Crainea (<ulink url="https://github.com/razvancrainea">@razvancrainea</ulink>)</entry>
-		<entry align="center">29</entry>
-		<entry align="center">22</entry>
-		<entry align="center">384</entry>
+		<entry align="center">30</entry>
+		<entry align="center">23</entry>
+		<entry align="center">387</entry>
 		<entry align="center">135</entry>
 	</row>
 	<row>
 		<entry>4. </entry>
+		<entry>Liviu Chircu (<ulink url="https://github.com/liviuchircu">@liviuchircu</ulink>)</entry>
+		<entry align="center">30</entry>
+		<entry align="center">20</entry>
+		<entry align="center">302</entry>
+		<entry align="center">377</entry>
+	</row>
+	<row>
+		<entry>5. </entry>
 		<entry>Ovidiu Sas (<ulink url="https://github.com/ovidiusas">@ovidiusas</ulink>)</entry>
 		<entry align="center">27</entry>
 		<entry align="center">19</entry>
 		<entry align="center">615</entry>
 		<entry align="center">167</entry>
-	</row>
-	<row>
-		<entry>5. </entry>
-		<entry>Liviu Chircu (<ulink url="https://github.com/liviuchircu">@liviuchircu</ulink>)</entry>
-		<entry align="center">25</entry>
-		<entry align="center">16</entry>
-		<entry align="center">247</entry>
-		<entry align="center">372</entry>
 	</row>
 	<row>
 		<entry>6. </entry>
@@ -101,7 +101,7 @@
 	</tbody>
 	</tgroup>
 	</table>
-	<para><emphasis role='bold'>All remaining contributors</emphasis>: Edson Gellert Schubert, Vlad Patrascu (<ulink url="https://github.com/rvlad-patrascu">@rvlad-patrascu</ulink>), Vlad Paiu (<ulink url="https://github.com/vladpaiu">@vladpaiu</ulink>), Juha Heinanen (<ulink url="https://github.com/juha-h">@juha-h</ulink>), Stanislaw Pitucha, Damien Sandras (<ulink url="https://github.com/dsandras">@dsandras</ulink>), Kobi Eshun (<ulink url="https://github.com/ekobi">@ekobi</ulink>), Dusan Klinec, Angel Marin, Klaus Darilion, Carlos Oliva, Sergio Gutierrez, Kennard White, Elena-Ramona Modroiu, Vasil Kolev, Benny Prijono, James Criscuolo, Vallimamod Abdullah, UnixDev, Denis Bilenko, Julián Moreno Patiño, John Riordan, Julien Blache.</para>
+	<para><emphasis role='bold'>All remaining contributors</emphasis>: Edson Gellert Schubert, Vlad Patrascu (<ulink url="https://github.com/rvlad-patrascu">@rvlad-patrascu</ulink>), Vlad Paiu (<ulink url="https://github.com/vladpaiu">@vladpaiu</ulink>), Juha Heinanen (<ulink url="https://github.com/juha-h">@juha-h</ulink>), Stanislaw Pitucha, Damien Sandras (<ulink url="https://github.com/dsandras">@dsandras</ulink>), Kobi Eshun (<ulink url="https://github.com/ekobi">@ekobi</ulink>), Dusan Klinec (<ulink url="https://github.com/ph4r05">@ph4r05</ulink>), Angel Marin, Klaus Darilion, Carlos Oliva, Sergio Gutierrez, Kennard White, Elena-Ramona Modroiu, Vasil Kolev, Benny Prijono, James Criscuolo, Vallimamod Abdullah, UnixDev, Denis Bilenko, Julián Moreno Patiño, John Riordan, Julien Blache.</para>
 	<para>
 	    <emphasis>(1) DevScore = author_commits + author_lines_added / (project_lines_added / project_commits) + author_lines_deleted / (project_lines_deleted / project_commits)</emphasis>
 	</para>
@@ -129,17 +129,17 @@
 	<row>
 		<entry>1. </entry>
 		<entry>Razvan Crainea (<ulink url="https://github.com/razvancrainea">@razvancrainea</ulink>)</entry>
-		<entry align="center">Sep 2011 - Sep 2019</entry>
+		<entry align="center">Sep 2011 - Aug 2020</entry>
 	</row>
 	<row>
 		<entry>2. </entry>
 		<entry>Liviu Chircu (<ulink url="https://github.com/liviuchircu">@liviuchircu</ulink>)</entry>
-		<entry align="center">Mar 2014 - Jul 2019</entry>
+		<entry align="center">Mar 2014 - Jan 2020</entry>
 	</row>
 	<row>
 		<entry>3. </entry>
 		<entry>Bogdan-Andrei Iancu (<ulink url="https://github.com/bogdan-iancu">@bogdan-iancu</ulink>)</entry>
-		<entry align="center">Oct 2006 - May 2019</entry>
+		<entry align="center">Oct 2006 - Jan 2020</entry>
 	</row>
 	<row>
 		<entry>4. </entry>
@@ -168,7 +168,7 @@
 	</row>
 	<row>
 		<entry>9. </entry>
-		<entry>Dusan Klinec</entry>
+		<entry>Dusan Klinec (<ulink url="https://github.com/ph4r05">@ph4r05</ulink>)</entry>
 		<entry align="center">Dec 2015 - Dec 2015</entry>
 	</row>
 	<row>
@@ -190,7 +190,7 @@
 	<title>Documentation</title>
 <section id="documentation_contributors" xreflabel="documentation_contributors">
 	<title>Contributors</title>
-	<para><emphasis role='bold'>Last edited by:</emphasis> Liviu Chircu (<ulink url="https://github.com/liviuchircu">@liviuchircu</ulink>), Bogdan-Andrei Iancu (<ulink url="https://github.com/bogdan-iancu">@bogdan-iancu</ulink>), Vlad Patrascu (<ulink url="https://github.com/rvlad-patrascu">@rvlad-patrascu</ulink>), Razvan Crainea (<ulink url="https://github.com/razvancrainea">@razvancrainea</ulink>), Saúl Ibarra Corretgé (<ulink url="https://github.com/saghul">@saghul</ulink>), Ovidiu Sas (<ulink url="https://github.com/ovidiusas">@ovidiusas</ulink>), Anca Vamanu, Kennard White, Angel Marin, Kobi Eshun (<ulink url="https://github.com/ekobi">@ekobi</ulink>), Klaus Darilion, Henning Westerholt (<ulink url="https://github.com/henningw">@henningw</ulink>), Dan Pascu (<ulink url="https://github.com/danpascu">@danpascu</ulink>), Daniel-Constantin Mierla (<ulink url="https://github.com/miconda">@miconda</ulink>), Edson Gellert Schubert, Juha Heinanen (<ulink url="https://github.com/juha-h">@juha-h</ulink>), Elena-Ramona Modroiu.</para>
+	<para><emphasis role='bold'>Last edited by:</emphasis> Bogdan-Andrei Iancu (<ulink url="https://github.com/bogdan-iancu">@bogdan-iancu</ulink>), Liviu Chircu (<ulink url="https://github.com/liviuchircu">@liviuchircu</ulink>), Vlad Patrascu (<ulink url="https://github.com/rvlad-patrascu">@rvlad-patrascu</ulink>), Razvan Crainea (<ulink url="https://github.com/razvancrainea">@razvancrainea</ulink>), Saúl Ibarra Corretgé (<ulink url="https://github.com/saghul">@saghul</ulink>), Ovidiu Sas (<ulink url="https://github.com/ovidiusas">@ovidiusas</ulink>), Anca Vamanu, Kennard White, Angel Marin, Kobi Eshun (<ulink url="https://github.com/ekobi">@ekobi</ulink>), Klaus Darilion, Henning Westerholt (<ulink url="https://github.com/henningw">@henningw</ulink>), Dan Pascu (<ulink url="https://github.com/danpascu">@danpascu</ulink>), Daniel-Constantin Mierla (<ulink url="https://github.com/miconda">@miconda</ulink>), Edson Gellert Schubert, Juha Heinanen (<ulink url="https://github.com/juha-h">@juha-h</ulink>), Elena-Ramona Modroiu.</para>
 </section>
 
 </chapter>

@@ -131,6 +131,7 @@ int b2be_db_insert(b2b_dlg_t* dlg, int type)
 {
 	dlg_leg_t* leg;
 	int cols_no;
+	int i;
 
 	if(b2be_dbf.use_table(b2be_db, &b2be_dbtable)< 0)
 	{
@@ -157,6 +158,16 @@ int b2be_db_insert(b2b_dlg_t* dlg, int type)
 		qvals[11].val.str_val.len = 0;
 	}
 	qvals[12].val.str_val= dlg->param;
+	if (dlg->param.len) {
+		/* if the parameter is not printable, do not insert it in the dabase
+		 * otherwise it will fail and the entire record will be skipped */
+		for (i = 0; i < dlg->param.len; i++)
+			if (!isprint(dlg->param.s[i])) {
+				qvals[12].val.str_val.s = NULL;
+				qvals[12].val.str_val.len = 0;
+				break;
+			}
+	}
 
 	qvals[13].val.int_val = dlg->state;
 	qvals[14].val.int_val = dlg->cseq[0];
@@ -480,6 +491,12 @@ int b2b_entities_restore(void)
 					LM_ERR("Wrong format for b2b key [%.*s]\n", dlg.tag[1].len, dlg.tag[1].s);
 					goto error;
 				}
+
+				if (hash_index >= server_hsize) {
+					LM_ERR("Hash Index [%d] too large! Increase the 'server_hsize'"
+						"parameter!\n", hash_index);
+					goto error;
+				}
 			}
 			else
 			{
@@ -488,6 +505,12 @@ int b2b_entities_restore(void)
 				if(b2b_parse_key(&dlg.callid, &hash_index, &local_index) < 0)
 				{
 					LM_ERR("Wrong format for b2b key [%.*s]\n", dlg.callid.len, dlg.callid.s);
+					goto error;
+				}
+
+				if (hash_index >= client_hsize) {
+					LM_DBG("Hash Index [%d] too large! Increase the 'client_hsize'"
+						"parameter!\n", hash_index);
 					goto error;
 				}
 			}

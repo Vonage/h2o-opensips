@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2018 OpenSIPS Solutions
+ * Copyright (C) 2020 OpenSIPS Solutions
  *
  * This file is part of opensips, a free SIP server.
  *
@@ -18,13 +18,14 @@
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301,USA
  */
 
-#ifndef __CACHEDB_TEST_BACKENDS_H__
-#define __CACHEDB_TEST_BACKENDS_H__
+#ifndef __TEST_MALLOC_H__
+#define __TEST_MALLOC_H__
 
-/* module requirements */
-void init_cachedb_tests(void);
+/* attendant + 7 more */
+#define TEST_MALLOC_PROCS  8
 
-/* test suites */
-void test_cachedb_backends(void);
+/* stress-test the PKG and/or SHM allocator implementations */
+void init_hp_malloc_tests(void);
+void test_hp_malloc(void);
 
-#endif /* __CACHEDB_TEST_BACKENDS_H__ */
+#endif /* __TEST_MALLOC_H__ */

@@ -126,12 +126,12 @@ mongo_con* mongo_new_connection(struct cachedb_id* id)
 
 	snprintf(osips_appname, MONGOC_HANDSHAKE_APPNAME_MAX, "opensips-%d", my_pid());
 
-	LM_DBG("MongoDB conn for [%s]: %s:%s %s:%s |%s|:%u\n", osips_appname,
-	       id->scheme, id->group_name, id->username, id->password, id->host, id->port);
+	LM_DBG("MongoDB conn for [%s]: %s:%s://%s:xxxxxx@%s:%u\n", osips_appname,
+	       id->scheme, id->group_name, id->username, id->host, id->port);
 
 	conn_str = build_mongodb_connect_string(id);
 
-	LM_DBG("cstr: %s\n", conn_str);
+	LM_DBG("cstr: %s\n", _db_url_escape(conn_str));
 
 	con = pkg_malloc(sizeof *con);
 	if (!con) {
@@ -144,7 +144,7 @@ mongo_con* mongo_new_connection(struct cachedb_id* id)
 
 	con->client = mongoc_client_new(conn_str);
 	if (!con->client) {
-		LM_ERR("failed to connect to Mongo (%s)\n", conn_str);
+		LM_ERR("failed to connect to Mongo (%s)\n", _db_url_escape(conn_str));
 		return NULL;
 	}
 
@@ -789,12 +789,11 @@ out_err:
 	return -1;
 }
 
-static char *raw_query_buf;
-static int raw_query_buf_len;
-
 int mongo_con_raw_query(cachedb_con *con, str *qstr, cdb_raw_entry ***reply,
                         int expected_kv_no, int *reply_no)
 {
+	static str raw_query_buf;
+
 	struct json_object *obj = NULL;
 	bson_t doc, rpl;
 	bson_iter_t iter;
@@ -807,23 +806,15 @@ int mongo_con_raw_query(cachedb_con *con, str *qstr, cdb_raw_entry ***reply,
 	LM_DBG("Get operation on namespace %s\n", MONGO_NAMESPACE(con));
 	start_expire_timer(start,mongo_exec_threshold);
 
-	if (qstr->len > raw_query_buf_len) {
-		raw_query_buf = pkg_realloc(raw_query_buf, qstr->len + 1);
-		if (!raw_query_buf) {
-			LM_ERR("oom!\n");
-			return -1;
-		}
-
-		memcpy(raw_query_buf, qstr->s, qstr->len);
-		raw_query_buf[qstr->len] = '\0';
-
-		raw_query_buf_len = qstr->len;
-	} else {
-		memcpy(raw_query_buf, qstr->s, qstr->len);
-		raw_query_buf[qstr->len] = '\0';
+	if (pkg_str_extend(&raw_query_buf, qstr->len + 1)) {
+		LM_ERR("oom!\n");
+		return -1;
 	}
 
-	ret = json_to_bson(raw_query_buf, &doc);
+	memcpy(raw_query_buf.s, qstr->s, qstr->len);
+	raw_query_buf.s[qstr->len] = '\0';
+
+	ret = json_to_bson(raw_query_buf.s, &doc);
 	if (ret < 0) {
 		LM_ERR("Failed to convert [%.*s] to BSON\n", qstr->len, qstr->s);
 		ret = -1;
@@ -928,6 +919,9 @@ int mongo_con_raw_query(cachedb_con *con, str *qstr, cdb_raw_entry ***reply,
 		csz++;
 	} while (bson_iter_next(&iter));
 
+	bson_destroy(&doc);
+	bson_destroy(&rpl);
+
 out:
 	*reply_no = csz;
 	if (csz == 0)
@@ -936,6 +930,9 @@ out:
 	return 1;
 
 out_err:
+	bson_destroy(&doc);
+	bson_destroy(&rpl);
+
 	if (obj)
 		json_object_put(obj);
 
@@ -1008,6 +1005,7 @@ int mongo_con_add(cachedb_con *con, str *attr, int val, int expires, int *new_va
 	}
 
 out:
+	bson_destroy(&reply);
 	bson_destroy(cmd);
 	return ret;
 }
@@ -1025,7 +1023,7 @@ int mongo_con_get_counter(cachedb_con *con, str *attr, int *val)
 	mongoc_cursor_t *cursor;
 	bson_iter_t iter;
 	struct timeval start;
-	int ret = 0;
+	int ret = -2;
 
 	query = bson_new();
 #if MONGOC_CHECK_VERSION(1, 5, 0)
@@ -1061,11 +1059,11 @@ int mongo_con_get_counter(cachedb_con *con, str *attr, int *val)
 			value = bson_iter_value(&iter);
 			switch (value->value_type) {
 			case BSON_TYPE_INT32:
+				ret = 0;
 				*val = value->value.v_int32;
 				break;
 			default:
-				LM_ERR("unsupported type %d for key %.*s!\n", attr->len,
-				       value->value_type, attr->s);
+				LM_ERR("unsupported type %d for key %.*s!\n", value->value_type, attr->len, attr->s);
 				ret = -1;
 				goto out;
 			}
@@ -1207,10 +1205,10 @@ int mongo_db_query_trans(cachedb_con *con, const str *table, const db_key_t *_k,
 	bson_iter_t iter;
 	struct timeval start;
 	int ri, c, old_rows, rows = 0;
-	unsigned int ts, ulen, _;
-	const unsigned char *bin;
+	unsigned int ts, _;
 	mongoc_collection_t *col = NULL;
 	char *strf, *stro;
+	str st;
 
 	*_r = NULL;
 
@@ -1327,7 +1325,7 @@ int mongo_db_query_trans(cachedb_con *con, const str *table, const db_key_t *_k,
 			}
 
 			hex_oid_id = pkg_realloc(hex_oid_id,
-			                         sizeof *hex_oid_id * rows * HEX_OID_SIZE);
+			                         sizeof *hex_oid_id * rows * (HEX_OID_SIZE + 1));
 			if (!hex_oid_id) {
 				LM_ERR("oom\n");
 				goto out_err;
@@ -1367,10 +1365,17 @@ int mongo_db_query_trans(cachedb_con *con, const str *table, const db_key_t *_k,
 						       _c[c]->len, _c[c]->s, VAL_DOUBLE(cur_val));
 						break;
 					case BSON_TYPE_UTF8:
+						st.s = (char *)bson_iter_utf8(&iter, (unsigned int *)&st.len);
+						if (pkg_nt_str_dup(&st, &st) != 0) {
+							LM_ERR("oom\n");
+							goto out_err;
+						}
+
 						VAL_TYPE(cur_val) = DB_STRING;
-						VAL_STRING(cur_val) = bson_iter_utf8(&iter, NULL);
-						LM_DBG("Found string [%.*s]=[%s]\n",
-						       _c[c]->len, _c[c]->s, VAL_STRING(cur_val));
+						VAL_STRING(cur_val) = st.s;
+						VAL_FREE(cur_val) = 1;
+						LM_DBG("Found string [%.*s]=[%.*s]\n",
+						       _c[c]->len, _c[c]->s, st.len, st.s);
 						break;
 					case BSON_TYPE_INT64:
 						VAL_TYPE(cur_val) = DB_BIGINT;
@@ -1386,8 +1391,9 @@ int mongo_db_query_trans(cachedb_con *con, const str *table, const db_key_t *_k,
 						break;
 					case BSON_TYPE_OID:
 						bson_oid_to_string(bson_iter_oid(&iter), hex_oid);
-						p = &hex_oid_id[ri * HEX_OID_SIZE];
+						p = &hex_oid_id[ri * (HEX_OID_SIZE + 1)];
 						memcpy(p, hex_oid, HEX_OID_SIZE);
+						p[HEX_OID_SIZE] = '\0';
 						VAL_TYPE(cur_val) = DB_STRING;
 						VAL_STRING(cur_val) = p;
 						LM_DBG("Found oid [%.*s]=[%s]\n",
@@ -1406,11 +1412,15 @@ int mongo_db_query_trans(cachedb_con *con, const str *table, const db_key_t *_k,
 						LM_DBG("Found timestamp [%u]\n", ts);
 						break;
 					case BSON_TYPE_BINARY:
-						bson_iter_binary(&iter, NULL, &ulen, &bin);
+						bson_iter_binary(&iter, NULL, (unsigned int *)&st.len,
+						                 (const unsigned char **)&st.s);
 						VAL_TYPE(cur_val) = DB_STR;
-						VAL_STR(cur_val).s = (char *)bin;
-						VAL_STR(cur_val).len = (int)ulen;
-						LM_DBG("Found binary data: '%.*s'\n", ulen, bin);
+						if (pkg_nt_str_dup(&VAL_STR(cur_val), &st) != 0) {
+							LM_ERR("oom\n");
+							goto out_err;
+						}
+						VAL_FREE(cur_val) = 1;
+						LM_DBG("Found binary data: '%.*s'\n", st.len, st.s);
 						break;
 					default:
 						LM_WARN("Unsupported type [%d] for [%.*s] - treating as NULL\n",
@@ -1663,7 +1673,7 @@ int mongo_truncate(cachedb_con *con)
 	start_expire_timer(start, mongo_exec_threshold);
 	if (!mongoc_collection_remove(MONGO_COLLECTION(con),
 	                         MONGOC_REMOVE_NONE, &empty_doc, NULL, &error)) {
-		LM_ERR("failed to truncate con %.*s!\n", con->url.len, con->url.s);
+		LM_ERR("failed to truncate collection '%s'!\n", MONGO_COL_STR(con));
 		ret = -1;
 	}
 	stop_expire_timer(start, mongo_exec_threshold, "MongoDB truncate",
@@ -2003,8 +2013,8 @@ int mongo_cdb_dict_to_bson(const cdb_dict_t *dict, bson_t *out_doc)
 		case CDB_INT64:
 			if (!bson_append_int64(out_doc, key.s, key.len,
 			                       pair->val.val.i64)) {
-				LM_ERR("failed to append %.*s: %ld\n", key.len,
-				       key.s, pair->val.val.i64);
+				LM_ERR("failed to append %.*s: %lld\n", key.len,
+				       key.s, (long long)pair->val.val.i64);
 				goto out_err;
 			}
 			break;
@@ -2103,7 +2113,7 @@ int mongo_con_update(cachedb_con *con, const cdb_filter_t *row_filter,
 		case CDB_INT64:
 			if (!bson_append_int64(&set_keys, key.s, key.len,
 			                       pair->val.val.i64)) {
-				LM_ERR("failed to append i64 val: %ld\n", pair->val.val.i64);
+				LM_ERR("failed to append i64 val: %lld\n", (long long)pair->val.val.i64);
 				ret = -1;
 				goto out;
 			}

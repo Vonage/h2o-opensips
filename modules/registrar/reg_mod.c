@@ -115,6 +115,7 @@ char* attr_avp_param = 0;
 unsigned short attr_avp_type = 0;
 int attr_avp_name;
 
+usrloc_api_t ul;
 
 int reg_use_domain = 0;
 /*!< Realm prefix to be removed */
@@ -201,7 +202,7 @@ static param_export_t params[] = {
 	{"realm_prefix",       STR_PARAM, &realm_pref            },
 	{"min_expires",        INT_PARAM, &min_expires           },
 	{"max_expires",        INT_PARAM, &max_expires           },
-	{"received_param",     STR_PARAM, &rcv_param             },
+	{"received_param",     STR_PARAM, &rcv_param.s           },
 	{"received_avp",       STR_PARAM, &rcv_avp_param         },
 	{"max_contacts",       INT_PARAM, &max_contacts          },
 	{"retry_after",        INT_PARAM, &retry_after           },

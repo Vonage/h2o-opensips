@@ -6,9 +6,9 @@
 #
 
 PORTNAME=	opensips
-PORTVERSION=	2.4.6
+PORTVERSION=	2.4.9
 CATEGORIES=	net
-MASTER_SITES=	http://opensips.org/pub/opensips/${PORTVERSION}/src/
+MASTER_SITES=	https://opensips.org/pub/opensips/${PORTVERSION}/src/
 DISTNAME=	${PORTNAME}-${PORTVERSION}-tls_src
 
 MAINTAINER=	jesusr@FreeBSD.org

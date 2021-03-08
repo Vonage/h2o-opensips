@@ -57,8 +57,8 @@
 		OpenSIPS user location cluster, registrar nodes will only publish some
 		light "metadata" entries for any new Addresses-of-Record which are
 		reachable from them. These entries will cause other nodes to also fork
-		additional SIP branches pointing to the above-mentioned registrar upon
-		receiving a call for the above-mentioned Addresses-of-Record.
+		additional SIP branches pointing to the publisher registrar upon
+		receiving calls for its advertised Addresses-of-Record.
 		</para>
 		<para>
 		The <emphasis role='bold'>federation</emphasis> topology is an
@@ -66,9 +66,9 @@
 		<itemizedlist>
 			<listitem>
 			<para>
-			<emphasis role='bold'>IP restrictions</emphasis> - In some cases,
-			calls routed towards registered contacts must necessarily egress
-			through the original registration nodes of these contacts. A
+			<emphasis role='bold'>IP address restrictions</emphasis> - In some
+			cases, calls routed towards registered contacts must necessarily
+			pass through the original registration nodes of these contacts. A
 			classic example of this situation is when an OpenSIPS registrar
 			sitting at the edge of the platform is directly facing a NAT device
 			on the way to the contact. Unless calls are sent out from this
@@ -97,7 +97,7 @@
 		has been so far extended to implement the required NoSQL API endpoints.
 		</para>
 		<para>
-		The <ulink url="http://www.opensips.org/Documentation/Tutorials-Distributed-User-Location-Federation">
+		The <ulink url="https://opensips.org/Documentation/Tutorials-Distributed-User-Location-Federation">
 			<citetitle>federated user location tutorial</citetitle></ulink>
 		contains precise details on how to achieve this setup (including High
 		Availability support).
@@ -142,7 +142,7 @@
 		OpenSIPS release.
 		</para>
 		<para>
-		The <ulink url="http://www.opensips.org/Documentation/Tutorials-Distributed-User-Location-Full-Sharing">
+		The <ulink url="https://opensips.org/Documentation/Tutorials-Distributed-User-Location-Full-Sharing">
 			<citetitle>"full sharing" user location tutorial</citetitle></ulink>
 		contains precise details on how to achieve this setup (including full
 		NoSQL storage support).
@@ -691,15 +691,16 @@ modparam("usrloc", "desc_time_order", 1)
 	<section id="param_timer_interval" xreflabel="timer_interval">
 		<title><varname>timer_interval</varname> (integer)</title>
 		<para>
-		Number of seconds between two timer runs. The module uses timer to
-		delete expired contacts, synchronize with database and other tasks,
-		that need to be run periodically.
+		Number of seconds between two timer runs.  During each run, the module
+		will update/delete dirty/expired contacts from memory and/or mirror
+		these operations to the database, if configured to do so.
 		</para>
 		<warning>
 		<para>
-			In case of crash or restart contacts that are in memory only and
-			haven't been flushed yet will get lost. If you want minimize the
-			risk, use a shorter timer interval.
+		In case of an OpenSIPS shutdown or even a crash, contacts which are in
+		memory only and have not been flushed yet to disk will NOT get lost!
+		OpenSIPS will try its best to do a last-minute sync to DB right before
+		shutting down.
 		</para>
 		</warning>
 		<para>
@@ -864,7 +865,7 @@ modparam("usrloc", "db_mode", 2)
 			<xref linkend="param_cluster_mode"/> and
 			"sync-from-cluster" <xref linkend="param_restart_persistency"/>.
 			This will require the configuration of multiple "seed" nodes in
-			the cluster. Refer to the <ulink url="http://www.opensips.org/Documentation/Tutorials-Distributed-User-Location-Federation">
+			the cluster. Refer to the <ulink url="https://opensips.org/Documentation/Tutorials-Distributed-User-Location-Federation">
 			<citetitle>federated user location tutorial</citetitle></ulink> for more
 			details.
 			</para>
@@ -940,10 +941,9 @@ modparam("usrloc", "working_mode_preset", "full-sharing-cachedb-cluster")
 			</listitem>
 			<listitem>
 				<para><emphasis>"full-sharing"</emphasis> -
-				Full contact data broadcasting (mirroring) to all other
-				OpenSIPS cluster participants. 
-				inside a NoSQL database, so other cluster nodes are able to
-				route SIP traffic through the current node. Consequently, the
+				Broadcast contact updates (full-mesh mirroring) to all other
+				OpenSIPS cluster participants.  Each node will hold the entire
+				user location dataset.  Consequently, the
 				<xref linkend="param_location_cluster"/> parameter is mandatory.
 				</para>
 			</listitem>
@@ -954,7 +954,8 @@ modparam("usrloc", "working_mode_preset", "full-sharing-cachedb-cluster")
 				The cluster layer is still required in order to
 				be able to partition and spread the pinging workload evenly
 				among participating OpenSIPS nodes. Consequently, the
-				<xref linkend="param_location_cluster"/> parameter is mandatory.
+				<xref linkend="param_location_cluster"/> and
+				<xref linkend="param_cachedb_url"/> parameters are mandatory.
 				</para>
 			</listitem>
 			<listitem>
@@ -967,7 +968,7 @@ modparam("usrloc", "working_mode_preset", "full-sharing-cachedb-cluster")
 		</itemizedlist>
 		<para>
 		<emphasis>
-			Default value is <emphasis>none (single instance mode)</emphasis>.
+			Default value is <emphasis>"none" (single instance mode)</emphasis>.
 		</emphasis>
 		</para>
 		<example>
@@ -1486,7 +1487,9 @@ modparam("usrloc", "mi_dump_kv_store", 1)
 		<function moreinfo="none">ul_flush</function>
 		</title>
 		<para>
-		Triggers the flush of USRLOC memory cache into DB.
+		Force a flush of all pending usrloc cache changes to the database.
+		Normally, this routine runs every
+		<xref linkend="param_timer_interval"/> seconds.
 		</para>
 	</section>
 
@@ -1562,14 +1565,14 @@ modparam("usrloc", "mi_dump_kv_store", 1)
 		<function moreinfo="none">ul_sync</function>
 		</title>
 		<para>
-		Synchronizes the contacts from memory with the ones from database.
-		Note that this can not be used when no database is specified or with the
-		DB-Only scheme.
-
+		Empty the location table, then synchronize it with all contacts from
+		memory.  Note that this can not be used when no database is specified
+		or with the DB-Only scheme.
+		</para>
+		<para>
 		Important: make sure that all your contacts are in memory
 		(<emphasis>ul_dump</emphasis> MI function) before executing this
-		command. If the AOR is not specified, the whole table will be
-		synchronized.
+		command.
 		</para>
 		<para>Parameters: </para>
 		<itemizedlist>
@@ -1578,9 +1581,10 @@ modparam("usrloc", "mi_dump_kv_store", 1)
 				resides (Ex: location).
 			</para></listitem>
 			<listitem><para>
-				<emphasis>AOR (optional)</emphasis> - user AOR in username[@domain]
-				format (domain must be supplied only if use_domain option
-				is on).
+				<emphasis>AOR (optional)</emphasis> - only delete/sync this
+				user AOR, not the whole table.  Format: "username[@domain]"
+				(<emphasis>domain</emphasis> is required only if
+				<xref linkend="param_use_domain"/> option is on).
 			</para></listitem>
 		</itemizedlist>
 	</section>

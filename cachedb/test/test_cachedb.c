@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2018 OpenSIPS Solutions
+ * Copyright (C) 2018-2021 OpenSIPS Solutions
  *
  * This file is part of opensips, a free SIP server.
  *
@@ -27,7 +27,55 @@
 #include "../../sr_module.h"
 #include "../../modparam.h"
 
+#define CACHEDB_SKIP_BACKEND_TESTS
+
 extern cachedb_engine* lookup_cachedb(str *name);
+static void test_cachedb_backends(void);
+static void load_cachedb_modules(void);
+static void test_cachedb_url(void);
+
+
+void init_cachedb_tests(void)
+{
+	load_cachedb_modules();
+}
+
+
+void test_cachedb(void)
+{
+	test_cachedb_url();
+	test_cachedb_backends();
+}
+
+
+static void load_cachedb_modules(void)
+{
+#ifdef CACHEDB_SKIP_BACKEND_TESTS
+	return;
+#endif
+
+	if (load_module("cachedb_mongodb.so") != 0) {
+		printf("failed to load mongo\n");
+		exit(-1);
+	}
+
+	if (load_module("cachedb_cassandra.so") != 0) {
+		printf("failed to load cassandra\n");
+		exit(-1);
+	}
+
+	if (set_mod_param_regex("cachedb_mongodb", "cachedb_url", STR_PARAM,
+	    "mongodb://10.0.0.4:27017/OpensipsTests.OpensipsTests") != 0) {
+		printf("failed to set mongo url\n");
+		exit(-1);
+	}
+
+	if (set_mod_param_regex("cachedb_cassandra", "cachedb_url", STR_PARAM,
+	    "cassandra://10.0.0.178/testcass1.osstest1.osscnttest1") != 0) {
+		printf("failed to set cassandra url\n");
+		exit(-1);
+	}
+}
 
 int res_has_kv(const cdb_res_t *res, const cdb_pair_t *pair)
 {
@@ -366,37 +414,55 @@ static void test_cachedb_api(const char *cachedb_name)
 		ok(test_column_ops(&cde->cdb_func, con), "column-oriented tests");
 }
 
-void init_cachedb_tests(void)
+
+static void test_cachedb_backends(void)
 {
-	if (load_module("cachedb_mongodb.so") != 0) {
-		printf("failed to load mongo\n");
-		exit(-1);
-	}
+#ifdef CACHEDB_SKIP_BACKEND_TESTS
+	return;
+#endif
 
-	if (load_module("cachedb_cassandra.so") != 0) {
-		printf("failed to load cassandra\n");
-		exit(-1);
-	}
-
-	if (set_mod_param_regex("cachedb_mongodb", "cachedb_url", STR_PARAM,
-	    "mongodb://10.0.0.4:27017/OpensipsTests.OpensipsTests") != 0) {
-		printf("failed to set mongo url\n");
-		exit(-1);
-	}
-
-	if (set_mod_param_regex("cachedb_cassandra", "cachedb_url", STR_PARAM,
-	    "cassandra://10.0.0.178/testcass1.osstest1.osscnttest1") != 0) {
-		printf("failed to set cassandra url\n");
-		exit(-1);
-	}
-}
-
-void test_cachedb_backends(void)
-{
 	test_cachedb_api("mongodb");
 	test_cachedb_api("cassandra");
 
 	// todo();
 	// skip tests here
 	// end_todo;
+}
+
+
+static void test_cachedb_url(void)
+{
+	struct cachedb_id *db;
+
+	/* invalid URLs */
+	ok(!new_cachedb_id(_str("d:g://@")));
+	ok(!new_cachedb_id(_str("d:g://u:@")));
+	ok(!new_cachedb_id(_str("d:g://u:p@")));
+	ok(!new_cachedb_id(_str("d:g://u:p@h")));
+	ok(!new_cachedb_id(_str("d:g://u:p@h:")));
+
+	db = new_cachedb_id(_str("redis:group1://:devxxxxxx@172.31.180.127:6379"));
+	if (!ok(db != NULL))
+		return;
+	ok(!strcmp(db->scheme, "redis"));
+	ok(!strcmp(db->group_name, "group1"));
+	ok(!strcmp(db->username, ""));
+	ok(!strcmp(db->password, "devxxxxxx"));
+	ok(!strcmp(db->host, "172.31.180.127"));
+	ok(db->port == 6379);
+	ok(!db->database);
+	ok(!db->extra_options);
+
+	db = new_cachedb_id(_str("redis:group1://:devxxxxxx@172.31.180.127:6379/"));
+	if (!ok(db != NULL))
+		return;
+	ok(db->port == 6379);
+	ok(!db->database);
+	ok(!db->extra_options);
+
+	db = new_cachedb_id(_str("redis:group1://:devxxxxxx@172.31.180.127:6379/d?x=1&q=2"));
+	if (!ok(db != NULL))
+		return;
+	ok(!strcmp(db->database, "d"));
+	ok(!strcmp(db->extra_options, "x=1&q=2"));
 }

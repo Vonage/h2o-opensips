@@ -21,10 +21,10 @@
 	<row>
 		<entry>1. </entry>
 		<entry>Bogdan-Andrei Iancu (<ulink url="https://github.com/bogdan-iancu">@bogdan-iancu</ulink>)</entry>
-		<entry align="center">119</entry>
-		<entry align="center">68</entry>
-		<entry align="center">4030</entry>
-		<entry align="center">1021</entry>
+		<entry align="center">123</entry>
+		<entry align="center">71</entry>
+		<entry align="center">4130</entry>
+		<entry align="center">1024</entry>
 	</row>
 	<row>
 		<entry>2. </entry>
@@ -45,10 +45,10 @@
 	<row>
 		<entry>4. </entry>
 		<entry>Liviu Chircu (<ulink url="https://github.com/liviuchircu">@liviuchircu</ulink>)</entry>
-		<entry align="center">17</entry>
-		<entry align="center">10</entry>
-		<entry align="center">161</entry>
-		<entry align="center">239</entry>
+		<entry align="center">23</entry>
+		<entry align="center">14</entry>
+		<entry align="center">266</entry>
+		<entry align="center">297</entry>
 	</row>
 	<row>
 		<entry>5. </entry>
@@ -101,7 +101,7 @@
 	</tbody>
 	</tgroup>
 	</table>
-	<para><emphasis role='bold'>All remaining contributors</emphasis>: Konstantin Bokarius, Dan Pascu (<ulink url="https://github.com/danpascu">@danpascu</ulink>), Dusan Klinec, Jesus Rodrigues, Sergio Gutierrez, Vlad Patrascu (<ulink url="https://github.com/rvlad-patrascu">@rvlad-patrascu</ulink>).</para>
+	<para><emphasis role='bold'>All remaining contributors</emphasis>: Konstantin Bokarius, Dan Pascu (<ulink url="https://github.com/danpascu">@danpascu</ulink>), Dusan Klinec (<ulink url="https://github.com/ph4r05">@ph4r05</ulink>), Jesus Rodrigues, Sergio Gutierrez, Vlad Patrascu (<ulink url="https://github.com/rvlad-patrascu">@rvlad-patrascu</ulink>).</para>
 	<para>
 	    <emphasis>(1) DevScore = author_commits + author_lines_added / (project_lines_added / project_commits) + author_lines_deleted / (project_lines_deleted / project_commits)</emphasis>
 	</para>
@@ -128,18 +128,18 @@
 	<tbody>
 	<row>
 		<entry>1. </entry>
-		<entry>Bogdan-Andrei Iancu (<ulink url="https://github.com/bogdan-iancu">@bogdan-iancu</ulink>)</entry>
-		<entry align="center">Jun 2005 - Sep 2019</entry>
+		<entry>Liviu Chircu (<ulink url="https://github.com/liviuchircu">@liviuchircu</ulink>)</entry>
+		<entry align="center">Mar 2014 - Sep 2020</entry>
 	</row>
 	<row>
 		<entry>2. </entry>
-		<entry>Razvan Crainea (<ulink url="https://github.com/razvancrainea">@razvancrainea</ulink>)</entry>
-		<entry align="center">Aug 2010 - Sep 2019</entry>
+		<entry>Bogdan-Andrei Iancu (<ulink url="https://github.com/bogdan-iancu">@bogdan-iancu</ulink>)</entry>
+		<entry align="center">Jun 2005 - Jun 2020</entry>
 	</row>
 	<row>
 		<entry>3. </entry>
-		<entry>Liviu Chircu (<ulink url="https://github.com/liviuchircu">@liviuchircu</ulink>)</entry>
-		<entry align="center">Mar 2014 - Jun 2018</entry>
+		<entry>Razvan Crainea (<ulink url="https://github.com/razvancrainea">@razvancrainea</ulink>)</entry>
+		<entry align="center">Aug 2010 - Sep 2019</entry>
 	</row>
 	<row>
 		<entry>4. </entry>
@@ -148,7 +148,7 @@
 	</row>
 	<row>
 		<entry>5. </entry>
-		<entry>Dusan Klinec</entry>
+		<entry>Dusan Klinec (<ulink url="https://github.com/ph4r05">@ph4r05</ulink>)</entry>
 		<entry align="center">Dec 2015 - Dec 2015</entry>
 	</row>
 	<row>

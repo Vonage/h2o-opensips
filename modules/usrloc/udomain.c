@@ -202,13 +202,13 @@ int ul_event_init(void)
 
 	ei_c_update_id = evi_publish_event(ei_contact_update_name);
 	if (ei_c_update_id == EVI_ERROR) {
-		LM_ERR("cannot register contact delete event\n");
+		LM_ERR("cannot register contact update event\n");
 		return -1;
 	}
 
 	ei_c_latency_update_id = evi_publish_event(ei_contact_latency_update_name);
-	if (ei_c_update_id == EVI_ERROR) {
-		LM_ERR("cannot register contact delete event\n");
+	if (ei_c_latency_update_id == EVI_ERROR) {
+		LM_ERR("cannot register contact latency update event\n");
 		return -1;
 	}
 
@@ -429,11 +429,8 @@ void free_udomain(udomain_t* _d)
 	int i;
 
 	if (_d->table) {
-		for(i = 0; i < _d->size; i++) {
-			lock_ulslot(_d, i);
+		for(i = 0; i < _d->size; i++)
 			deinit_slot(_d->table + i);
-			unlock_ulslot(_d, i);
-		}
 		shm_free(_d->table);
 	}
 	shm_free(_d);

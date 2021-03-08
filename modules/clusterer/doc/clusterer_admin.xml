@@ -299,10 +299,11 @@ modparam("clusterer", "node_timeout", 10)
         <section id="param_seed_fallback_interval" xreflabel="seed_fallback_interval">
             <title><varname>seed_fallback_interval</varname></title>
             <para>
-                The time in seconds to wait for a suitable donor node before
-                falling back to a "synced" state in case of a "seed" node. If
-                set to <emphasis>0</emphasis> the node is considered as already
-                synced from startup.
+                Only relevant for "seed" nodes.  The time, in seconds, to wait
+                for a suitable donor node before falling back to a "synced"
+                state, following a node restart or an MI cluster sync command.
+                If set to <emphasis>0</emphasis>, the node is considered as
+                already synced from startup.
             </para>
             <para>
 		<emphasis>
@@ -571,7 +572,7 @@ modparam("clusterer", "description_col", "description")
 					The function can return the following values:
 					<itemizedlist>
 						<listitem>
-							<para><emphasis>1</emphasis> - successfuly sent message to destination node or a valid next hop</para>
+							<para><emphasis>1</emphasis> - successfully sent message to destination node or a valid next hop</para>
 						</listitem>
 						<listitem>
 							<para><emphasis>-1</emphasis> - current node is disabled so sending is impossbile</para>
@@ -634,7 +635,7 @@ route[rpl_resume] {
 					The function can return the following values:
 					<itemizedlist>
 						<listitem>
-							<para><emphasis>1</emphasis> - successfuly sent message to destination node or a valid next hop</para>
+							<para><emphasis>1</emphasis> - successfully sent message to destination node or a valid next hop</para>
 						</listitem>
 						<listitem>
 							<para><emphasis>-1</emphasis> - current node is disabled so sending is impossbile</para>
@@ -675,7 +676,7 @@ event_route[E_CLUSTERER_REQ_RECEIVED] {
 					The function can return the following values:
 					<itemizedlist>
 						<listitem>
-							<para><emphasis>1</emphasis> - successfuly sent message to at least one node;</para>
+							<para><emphasis>1</emphasis> - successfully sent message to at least one node;</para>
 						</listitem>
 						<listitem>
 							<para><emphasis>-1</emphasis> - current node is disabled so sending is impossbile;</para>
@@ -706,14 +707,14 @@ cluster_broadcast_req("$var(cl_id)", "$var(share_data)");
 
 			<section id="func_cluster_check_addr" xreflabel="cluster_check_addr()">
 				<title>
-				<function moreinfo="none">cluster_check_addr(cluster_id, ip, addr_type)</function>
+				<function moreinfo="none">cluster_check_addr(cluster_id, ip[, addr_type])</function>
 				</title>
 				<para>
 					This function checks whether the given IP address belongs
 					to one of the nodes in the cluster.
 				</para>
 				<para>The <emphasis>addr_type</emphasis> parameter can be set
-				to in order to select the address of the node that the comparison
+				in order to select the address of the node that the comparison
 				is made against, with the possible values of:</para>
 				<itemizedlist>
 					<listitem>
@@ -941,7 +942,7 @@ Cluster:: 2
 			Lists the registered capabilities and their states.
 		</para>
 		<para>
-		Name: <emphasis>clusterer_list</emphasis>
+		Name: <emphasis>clusterer_list_cap</emphasis>
 		</para>
 		<para>Parameters:<emphasis>none</emphasis> </para>
 		<para>
@@ -954,7 +955,7 @@ Cluster:: 2
 		<example>
 		<title><function>clusterer_list_cap</function> usage</title>
 		<programlisting format="linespecific">
-$ ./opensipsctl fifo clusterer_list
+$ ./opensipsctl fifo clusterer_list_cap
 Cluster:: 1
 	Capability:: dialog-dlg-repl State=Ok
 	Capability:: usrloc-contact-repl State=not synced

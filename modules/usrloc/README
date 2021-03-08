@@ -231,19 +231,19 @@ Chapter 1. Admin Guide
    only publish some light "metadata" entries for any new
    Addresses-of-Record which are reachable from them. These
    entries will cause other nodes to also fork additional SIP
-   branches pointing to the above-mentioned registrar upon
-   receiving a call for the above-mentioned Addresses-of-Record.
+   branches pointing to the publisher registrar upon receiving
+   calls for its advertised Addresses-of-Record.
 
    The federation topology is an optimized solution for the
    following core problems:
-     * IP restrictions - In some cases, calls routed towards
-       registered contacts must necessarily egress through the
-       original registration nodes of these contacts. A classic
-       example of this situation is when an OpenSIPS registrar
-       sitting at the edge of the platform is directly facing a
-       NAT device on the way to the contact. Unless calls are sent
-       out from this exact registrar, they will not be able to
-       traverse the NAT device and reach the contact.
+     * IP address restrictions - In some cases, calls routed
+       towards registered contacts must necessarily pass through
+       the original registration nodes of these contacts. A
+       classic example of this situation is when an OpenSIPS
+       registrar sitting at the edge of the platform is directly
+       facing a NAT device on the way to the contact. Unless calls
+       are sent out from this exact registrar, they will not be
+       able to traverse the NAT device and reach the contact.
      * horizontal scalability - Avoiding global
        replication/contact broadcasting within the cluster not
        only dramatically improves contact storage performance, but
@@ -614,15 +614,17 @@ modparam("usrloc", "desc_time_order", 1)
 
 1.5.22. timer_interval (integer)
 
-   Number of seconds between two timer runs. The module uses timer
-   to delete expired contacts, synchronize with database and other
-   tasks, that need to be run periodically.
+   Number of seconds between two timer runs. During each run, the
+   module will update/delete dirty/expired contacts from memory
+   and/or mirror these operations to the database, if configured
+   to do so.
 
 Warning
 
-   In case of crash or restart contacts that are in memory only
-   and haven't been flushed yet will get lost. If you want
-   minimize the risk, use a shorter timer interval.
+   In case of an OpenSIPS shutdown or even a crash, contacts which
+   are in memory only and have not been flushed yet to disk will
+   NOT get lost! OpenSIPS will try its best to do a last-minute
+   sync to DB right before shutting down.
 
    Default value is 60.
 
@@ -754,21 +756,21 @@ modparam("usrloc", "working_mode_preset", "full-sharing-cachedb-cluster"
        cluster nodes can fork SIP traffic over to the current
        node. Consequently, the location_cluster and cachedb_url
        parameters are mandatory.
-     * "full-sharing" - Full contact data broadcasting (mirroring)
-       to all other OpenSIPS cluster participants. inside a NoSQL
-       database, so other cluster nodes are able to route SIP
-       traffic through the current node. Consequently, the
-       location_cluster parameter is mandatory.
+     * "full-sharing" - Broadcast contact updates (full-mesh
+       mirroring) to all other OpenSIPS cluster participants. Each
+       node will hold the entire user location dataset.
+       Consequently, the location_cluster parameter is mandatory.
      * "full-sharing-cachedb" - Full contact data management
        through the use of a NoSQL database (somewhat resembling
        the "sql-only" preset). The cluster layer is still required
        in order to be able to partition and spread the pinging
        workload evenly among participating OpenSIPS nodes.
-       Consequently, the location_cluster parameter is mandatory.
+       Consequently, the location_cluster and cachedb_url
+       parameters are mandatory.
      * "sql-only" - Multiple OpenSIPS boxes using a common db_url
        without necessarily being aware of each other.
 
-   Default value is none (single instance mode).
+   Default value is "none" (single instance mode).
 
    Example 1.27. Set cluster_mode parameter
 ...
@@ -1075,7 +1077,9 @@ modparam("usrloc", "mi_dump_kv_store", 1)
 
 1.7.4.  ul_flush
 
-   Triggers the flush of USRLOC memory cache into DB.
+   Force a flush of all pending usrloc cache changes to the
+   database. Normally, this routine runs every timer_interval
+   seconds.
 
 1.7.5.  ul_add
 
@@ -1105,17 +1109,18 @@ modparam("usrloc", "mi_dump_kv_store", 1)
 
 1.7.7.  ul_sync
 
-   Synchronizes the contacts from memory with the ones from
-   database. Note that this can not be used when no database is
-   specified or with the DB-Only scheme. Important: make sure that
-   all your contacts are in memory (ul_dump MI function) before
-   executing this command. If the AOR is not specified, the whole
-   table will be synchronized.
+   Empty the location table, then synchronize it with all contacts
+   from memory. Note that this can not be used when no database is
+   specified or with the DB-Only scheme.
+
+   Important: make sure that all your contacts are in memory
+   (ul_dump MI function) before executing this command.
 
    Parameters:
      * table name - table where the AOR resides (Ex: location).
-     * AOR (optional) - user AOR in username[@domain] format
-       (domain must be supplied only if use_domain option is on).
+     * AOR (optional) - only delete/sync this user AOR, not the
+       whole table. Format: "username[@domain]" (domain is
+       required only if use_domain option is on).
 
 1.7.8.  ul_cluster_sync
 
@@ -1474,8 +1479,8 @@ Chapter 3. Contributors
    commits^(2) and lines added/removed^(3)
      Name DevScore Commits Lines ++ Lines --
    1. Jan Janak (@janakj) 421 117 15689 10095
-   2. Bogdan-Andrei Iancu (@bogdan-iancu) 232 137 3962 3496
-   3. Liviu Chircu (@liviuchircu) 214 132 5892 1916
+   2. Bogdan-Andrei Iancu (@bogdan-iancu) 236 140 3985 3536
+   3. Liviu Chircu (@liviuchircu) 223 141 5953 1955
    4. Ionut Ionita (@ionutrazvanionita) 41 24 1099 413
    5. Daniel-Constantin Mierla (@miconda) 40 29 544 308
    6. Jiri Kuthan (@jiriatipteldotorg) 36 25 975 120
@@ -1487,14 +1492,15 @@ Chapter 3. Contributors
    All remaining contributors: Vlad Paiu (@vladpaiu), Nils
    Ohlmeier, Eseanu Marius Cristian (@eseanucristian), Ovidiu Sas
    (@ovidiusas), Ionel Cerghit (@ionel-cerghit), Maksym Sobolyev
-   (@sobomax), Andrei Dragus, Dusan Klinec, Andrei Datcu
-   (@andrei-datcu), Juha Heinanen (@juha-h), Anca Vamanu, Marcus
-   Hunger, Jamey Hicks, Andreas Granig, Shlomi Gutman, @jalung,
-   Jeffrey Magder, Phil D'Amore, Alessio Garzi, Norman Brandinger
-   (@NormB), David Sanders, Walter Doekes (@wdoekes), Konstantin
-   Bokarius, Klaus Darilion, Iouri Kharon, Aron Podrigal (@ar45),
-   Matthew M. Boedicker, UnixDev, Edson Gellert Schubert, Alessio
-   Garzi, Elena-Ramona Modroiu, Stephane Alnet.
+   (@sobomax), Andrei Dragus, Walter Doekes (@wdoekes), Alessio
+   Garzi (@Ozzyboshi), Zero King (@l2dy), Dusan Klinec (@ph4r05),
+   Andrei Datcu (@andrei-datcu), Juha Heinanen (@juha-h), Anca
+   Vamanu, Marcus Hunger, Jamey Hicks, Andreas Granig, Shlomi
+   Gutman, @jalung, Jeffrey Magder, Phil D'Amore, Norman
+   Brandinger (@NormB), David Sanders, Konstantin Bokarius, Peter
+   Lemenkov (@lemenkov), Klaus Darilion, Iouri Kharon, Aron
+   Podrigal (@ar45), Matthew M. Boedicker, UnixDev, Edson Gellert
+   Schubert, Elena-Ramona Modroiu, Stephane Alnet.
 
    (1) DevScore = author_commits + author_lines_added /
    (project_lines_added / project_commits) + author_lines_deleted
@@ -1516,30 +1522,30 @@ Chapter 3. Contributors
 
    Table 3.2. Most recently active contributors^(1) to this module
                       Name                   Commit Activity
-   1.  Bogdan-Andrei Iancu (@bogdan-iancu) Mar 2002 - Sep 2019
-   2.  Liviu Chircu (@liviuchircu)         Jan 2013 - Sep 2019
-   3.  Razvan Crainea (@razvancrainea)     Jul 2011 - Sep 2019
-   4.  Aron Podrigal (@ar45)               Aug 2019 - Aug 2019
-   5.  Alessio Garzi                       Aug 2019 - Aug 2019
-   6.  Alessio Garzi                       Aug 2019 - Aug 2019
-   7.  Walter Doekes (@wdoekes)            Apr 2019 - Apr 2019
-   8.  Vlad Patrascu (@rvlad-patrascu)     Jul 2016 - Aug 2018
-   9.  Shlomi Gutman                       Mar 2018 - Mar 2018
-   10. @jalung                             Aug 2017 - Aug 2017
+   1.  Liviu Chircu (@liviuchircu)         Jan 2013 - Feb 2021
+   2.  Walter Doekes (@wdoekes)            Apr 2019 - Sep 2020
+   3.  Bogdan-Andrei Iancu (@bogdan-iancu) Mar 2002 - Jun 2020
+   4.  Zero King (@l2dy)                   Mar 2020 - Mar 2020
+   5.  Peter Lemenkov (@lemenkov)          Feb 2020 - Feb 2020
+   6.  Razvan Crainea (@razvancrainea)     Jul 2011 - Sep 2019
+   7.  Aron Podrigal (@ar45)               Aug 2019 - Aug 2019
+   8.  Alessio Garzi (@Ozzyboshi)          Aug 2019 - Aug 2019
+   9.  Vlad Patrascu (@rvlad-patrascu)     Jul 2016 - Aug 2018
+   10. Shlomi Gutman                       Mar 2018 - Mar 2018
 
-   All remaining contributors: Vlad Paiu (@vladpaiu), Ionut Ionita
-   (@ionutrazvanionita), Ionel Cerghit (@ionel-cerghit), Ovidiu
-   Sas (@ovidiusas), Dusan Klinec, Eseanu Marius Cristian
-   (@eseanucristian), David Sanders, Andrei Datcu (@andrei-datcu),
-   Stephane Alnet, Andrei Dragus, Phil D'Amore, UnixDev,
-   Daniel-Constantin Mierla (@miconda), Henning Westerholt
-   (@henningw), Iouri Kharon, Konstantin Bokarius, Edson Gellert
-   Schubert, Anca Vamanu, Matthew M. Boedicker, Marcus Hunger,
-   Elena-Ramona Modroiu, Jeffrey Magder, Norman Brandinger
-   (@NormB), Andreas Granig, Juha Heinanen (@juha-h), Klaus
-   Darilion, Jan Janak (@janakj), Andrei Pelinescu-Onciul, Jiri
-   Kuthan (@jiriatipteldotorg), Maksym Sobolyev (@sobomax), Jamey
-   Hicks, Nils Ohlmeier.
+   All remaining contributors: @jalung, Vlad Paiu (@vladpaiu),
+   Ionut Ionita (@ionutrazvanionita), Ionel Cerghit
+   (@ionel-cerghit), Ovidiu Sas (@ovidiusas), Dusan Klinec
+   (@ph4r05), Eseanu Marius Cristian (@eseanucristian), David
+   Sanders, Andrei Datcu (@andrei-datcu), Stephane Alnet, Andrei
+   Dragus, Phil D'Amore, UnixDev, Daniel-Constantin Mierla
+   (@miconda), Henning Westerholt (@henningw), Iouri Kharon,
+   Konstantin Bokarius, Edson Gellert Schubert, Anca Vamanu,
+   Matthew M. Boedicker, Marcus Hunger, Elena-Ramona Modroiu,
+   Jeffrey Magder, Norman Brandinger (@NormB), Andreas Granig,
+   Juha Heinanen (@juha-h), Klaus Darilion, Jan Janak (@janakj),
+   Andrei Pelinescu-Onciul, Jiri Kuthan (@jiriatipteldotorg),
+   Maksym Sobolyev (@sobomax), Jamey Hicks, Nils Ohlmeier.
 
    (1) including any documentation-related commits, excluding
    merge commits
@@ -1548,15 +1554,15 @@ Chapter 4. Documentation
 
 4.1. Contributors
 
-   Last edited by: Liviu Chircu (@liviuchircu), Vlad Patrascu
-   (@rvlad-patrascu), Bogdan-Andrei Iancu (@bogdan-iancu), Razvan
-   Crainea (@razvancrainea), Ionut Ionita (@ionutrazvanionita),
-   Eseanu Marius Cristian (@eseanucristian), Ovidiu Sas
-   (@ovidiusas), Andrei Datcu (@andrei-datcu), Daniel-Constantin
-   Mierla (@miconda), Konstantin Bokarius, Edson Gellert Schubert,
-   Henning Westerholt (@henningw), Marcus Hunger, Elena-Ramona
-   Modroiu, Juha Heinanen (@juha-h), Jan Janak (@janakj), Maksym
-   Sobolyev (@sobomax), Nils Ohlmeier.
+   Last edited by: Liviu Chircu (@liviuchircu), Zero King (@l2dy),
+   Vlad Patrascu (@rvlad-patrascu), Bogdan-Andrei Iancu
+   (@bogdan-iancu), Razvan Crainea (@razvancrainea), Ionut Ionita
+   (@ionutrazvanionita), Eseanu Marius Cristian (@eseanucristian),
+   Ovidiu Sas (@ovidiusas), Andrei Datcu (@andrei-datcu),
+   Daniel-Constantin Mierla (@miconda), Konstantin Bokarius, Edson
+   Gellert Schubert, Henning Westerholt (@henningw), Marcus
+   Hunger, Elena-Ramona Modroiu, Juha Heinanen (@juha-h), Jan
+   Janak (@janakj), Maksym Sobolyev (@sobomax), Nils Ohlmeier.
 
    doc copyrights:
 

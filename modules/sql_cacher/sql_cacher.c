@@ -128,6 +128,7 @@ static int parse_cache_entry(unsigned int type, void *val)
 	int col_idx;
 	int rc = -1;
 	int i;
+	int len;
 	str parse_str_copy, parse_str;
 
 	if(!entry_list){
@@ -153,6 +154,7 @@ static int parse_cache_entry(unsigned int type, void *val)
 		}
 		new_entry->id.s = NULL;
 		new_entry->columns = NULL;
+		new_entry->key_type = DB_STR;
 		new_entry->nr_columns = 0;
 		new_entry->on_demand = 0;
 		new_entry->expire = DEFAULT_ON_DEMAND_EXPIRE;
@@ -247,13 +249,54 @@ static int parse_cache_entry(unsigned int type, void *val)
 			goto parse_err;
 		}
 
-		/* parse the required column names if present */
+		/* parse the key type if present */
 		p1 = tmp + 1;
 		p2 = memchr(p1, '=', parse_str.len - (p1 - parse_str.s));
 		if (!p2) {
 			LM_ERR("expected: '='\n");
 			goto parse_err;
 		}
+		if (!memcmp(p1, KEY_TYPE_STR, KEY_TYPE_STR_LEN)) {
+			if (*(p1+KEY_TYPE_STR_LEN) != '=') { \
+				LM_ERR("expected: '=' after: %.*s\n", KEY_TYPE_STR_LEN, KEY_TYPE_STR);
+				goto parse_err;
+			}
+
+
+			tmp = memchr(p2 + 1, spec_delimiter.s[0],
+						parse_str.len - (p2 - parse_str.s));
+			if (!tmp)
+				len = parse_str.len - (p2 - parse_str.s + 1);
+			else
+				len = tmp - p2 - 1;
+
+			if (len <= 0) {
+				LM_ERR("expected value of: %.*s\n", KEY_TYPE_STR_LEN, KEY_TYPE_STR);
+				goto parse_err;
+			}
+
+			if (len == TYPE_STR_LEN && !memcmp(p2+1, TYPE_STR_STR, len))
+				new_entry->key_type = DB_STR;
+			else if (len == TYPE_INT_LEN && !memcmp(p2+1, TYPE_INT_STR, len))
+				new_entry->key_type = DB_INT;
+			else {
+				LM_ERR("Unsupported key type: %.*s\n", len, p2+1);
+				goto parse_err;
+			}
+
+			if (!tmp) /* delimiter not found, reached the end of the string to parse */
+				goto end_parsing;
+			else {
+				p1 = tmp + 1;
+				p2 = memchr(p1, '=', parse_str.len - (p1 - parse_str.s));
+				if (!p2) {
+					LM_ERR("expected: '='\n");
+					goto parse_err;
+				}
+			}
+		}
+
+		/* parse the required column names if present */
 		if (!memcmp(p1, COLUMNS_STR, COLUMNS_STR_LEN)) {
 			if (*(p1+COLUMNS_STR_LEN) != '=') { \
 				LM_ERR("expected: '=' after: %.*s\n", COLUMNS_STR_LEN, COLUMNS_STR);
@@ -261,7 +304,7 @@ static int parse_cache_entry(unsigned int type, void *val)
 			}
 			col_idx = 0;
 			tmp = memchr(p2 + 1, spec_delimiter.s[0],
-						parse_str.len - (p2 - parse_str.s));
+						parse_str.len - (p2 - parse_str.s + 1));
 			/* just count how many columns there are */
 			new_entry->nr_columns = 1;
 			c_tmp1 = memchr(p2 + 1, columns_delimiter.s[0],
@@ -273,7 +316,7 @@ static int parse_cache_entry(unsigned int type, void *val)
 			}
 
 			if (new_entry->nr_columns > sizeof(long long) * 8) {
-				LM_WARN("Too many columns, maximum number is %lu\n", sizeof(long long) * 8);
+				LM_WARN("Too many columns, maximum number is %zu\n", sizeof(long long) * 8);
 				goto parse_err;
 			}
 			/* allocate array of columns and actually parse */
@@ -300,7 +343,7 @@ static int parse_cache_entry(unsigned int type, void *val)
 
 			new_entry->columns[col_idx] = shm_malloc(sizeof(str));
 			if (!tmp)
-				(*new_entry->columns[col_idx]).len = parse_str.len - (p2 - c_tmp1 + 1);
+				(*new_entry->columns[col_idx]).len = parse_str.len - (c_tmp1 - parse_str.s);
 			else
 				(*new_entry->columns[col_idx]).len = tmp - c_tmp1;
 
@@ -704,8 +747,11 @@ static db_handlers_t *db_init_test_conn(cache_entry_t *c_entry)
 	}
 
 	VAL_NULL(&query_key_val) = 0;
-	VAL_TYPE(&query_key_val) = DB_STR;
-	VAL_STR(&query_key_val) = test_query_key_str;
+	VAL_TYPE(&query_key_val) = c_entry->key_type;
+	if (c_entry->key_type == DB_STR)
+		VAL_STR(&query_key_val) = test_query_key_str;
+	else
+		VAL_INT(&query_key_val) = TEST_QUERY_INT;
 
 	query_key_col = &c_entry->key;
 
@@ -894,9 +940,15 @@ static int load_key(cache_entry_t *c_entry, db_handlers_t *db_hdls, str key,
 	memcpy(src_key.s + c_entry->id.len, key.s, key.len);
 
 	key_col = &(c_entry->key);
+
 	VAL_NULL(&key_val) = 0;
-	VAL_TYPE(&key_val) = DB_STR;
-	VAL_STR(&key_val) = key;
+	VAL_TYPE(&key_val) = c_entry->key_type;
+	if (c_entry->key_type == DB_STR)
+		VAL_STR(&key_val) = key;
+	else if (str2sint(&key, &VAL_INT(&key_val)) < 0) {
+		LM_ERR("Failed to convert key value to integer\n");
+		goto out_error;
+	}
 
 	if (db_hdls->db_funcs.use_table(db_hdls->db_con, &c_entry->table) < 0) {
 		LM_ERR("Invalid table name: %.*s\n", c_entry->table.len, c_entry->table.s);
@@ -1139,7 +1191,7 @@ static void cache_init_load(int sender, void *param)
 
 static int mod_init(void)
 {
-	cache_entry_t *c_entry, *c_prev = NULL, *c_tmp;
+	cache_entry_t *c_entry;
 	db_handlers_t *db_hdls;
 	char use_timer = 0;
 
@@ -1182,14 +1234,7 @@ static int mod_init(void)
 	while (c_entry) {
 		if ((db_hdls = db_init_test_conn(c_entry)) == NULL) {
 			LM_ERR("Failed to validate db conns for cache entry\n");
-			if (c_prev)
-				c_prev->next = c_entry->next;
-			else
-				*entry_list = c_entry->next;
-			c_tmp = c_entry;
-			c_entry = c_entry->next;
-			free_c_entry(c_tmp);
-			continue;
+			return -1;
 		}
 
 		if (!c_entry->on_demand) {
@@ -1209,7 +1254,6 @@ static int mod_init(void)
 		db_hdls->next = db_hdls_list;
 		db_hdls_list = db_hdls;
 
-		c_prev = c_entry;
 		c_entry = c_entry->next;
 	}
 
@@ -1472,6 +1516,7 @@ static int on_demand_load(pv_name_fix_t *pv_name, str *str_res, int *int_res,
 		}
 		if (cdb_res.len == 0 || !cdb_res.s) {
 			LM_ERR("Cache fetch result should not be empty\n");
+			pkg_free(cdb_res.s);
 			return -1;
 		}
 
@@ -1683,7 +1728,7 @@ int pv_parse_name(pv_spec_p sp, str *in)
 	return 0;
 }
 
-static str valbuff;
+static str valbuff[PV_VAL_BUF_NO];
 int pv_get_sql_cached_value(struct sip_msg *msg,  pv_param_t *param, pv_value_t *res)
 {
 	pv_name_fix_t *pv_name;
@@ -1692,6 +1737,7 @@ int pv_get_sql_cached_value(struct sip_msg *msg,  pv_param_t *param, pv_value_t 
 	int rc, rc2, int_res = 0, l = 0;
 	char *ch = NULL;
 	str str_res = {NULL, 0}, cdb_res = {NULL, 0};
+	static int buf_itr = 0;
 	int entry_rld_vers, free_str_res = 0;
 
 	if (!param || param->pvn.type != PV_NAME_PVAR ||
@@ -1750,6 +1796,7 @@ int pv_get_sql_cached_value(struct sip_msg *msg,  pv_param_t *param, pv_value_t 
 			if (cdb_res.len == 0 || !cdb_res.s) {
 				LM_ERR("Cache fetch result should not be empty\n");
 				lock_stop_read(pv_name->c_entry->ref_lock);
+				pkg_free(cdb_res.s);
 				return pv_get_null(msg, param, res);
 			}
 
@@ -1784,6 +1831,7 @@ int pv_get_sql_cached_value(struct sip_msg *msg,  pv_param_t *param, pv_value_t 
 		} else {
 			if (cdb_res.len == 0 || !cdb_res.s) {
 				LM_DBG("key: %.*s not found in SQL db\n", pv_name->key.len, pv_name->key.s);
+				pkg_free(cdb_res.s);
 				return pv_get_null(msg, param, res);
 			}
 
@@ -1812,21 +1860,23 @@ int pv_get_sql_cached_value(struct sip_msg *msg,  pv_param_t *param, pv_value_t 
 	}
 
 	if (is_str_column(pv_name)) {
-		if (pkg_str_extend(&valbuff, str_res.len) != 0) {
+		if (pkg_str_extend(&valbuff[buf_itr], str_res.len) != 0) {
 			LM_ERR("failed to alloc buffer\n");
 			if (free_str_res)
 				pkg_free(str_res.s);
 			goto out_free_null;
 		}
 
-		memcpy(valbuff.s, str_res.s, str_res.len);
+		memcpy(valbuff[buf_itr].s, str_res.s, str_res.len);
 
 		if (free_str_res)
 			pkg_free(str_res.s);
 
 		res->flags = PV_VAL_STR;
-		res->rs.s = valbuff.s;
+		res->rs.s = valbuff[buf_itr].s;
 		res->rs.len = str_res.len;
+
+		buf_itr = (buf_itr + 1) % PV_VAL_BUF_NO;
 	} else {
 		res->ri = int_res;
 		ch = int2str(int_res, &l);
@@ -1865,16 +1915,8 @@ static void free_c_entry(cache_entry_t *c)
 
 static void destroy(void)
 {
-	db_handlers_t *db_hdls;
 	struct queried_key *q_it, *q_tmp;
 	cache_entry_t *c_it, *c_tmp;
-
-	for(db_hdls = db_hdls_list; db_hdls; db_hdls = db_hdls->next) {
-		if (db_hdls->cdbcon)
-			db_hdls->cdbf.destroy(db_hdls->cdbcon);
-		if (db_hdls->db_con)
-			db_hdls->db_funcs.close(db_hdls->db_con);
-	}
 
 	q_it = *queries_in_progress;
 	while (q_it) {

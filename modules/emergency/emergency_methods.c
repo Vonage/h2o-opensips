@@ -50,7 +50,28 @@ static void mod_destroy(void);
 struct dlg_binds dlgb;
 struct rr_binds rr_api;
 
+struct tm_binds eme_tm;
+
+str db_url;
+str *db_table = NULL;
+db_func_t db_funcs;
+db_con_t *db_con = NULL;
+
+struct esrn_routing **db_esrn_esgwri = NULL;
+struct service_provider **db_service_provider = NULL;
+
 str callid_aux;
+char* url_vpc;
+
+int emet_size = 0;
+int subst_size = 0;
+
+char *empty = NULL;
+
+char* mandatory_parm = NULL;
+
+struct call_htable* call_htable = NULL;
+struct subs_htable* subs_htable = NULL;
 
 /*
  * Exported functions
@@ -72,9 +93,9 @@ static param_export_t params[] = {
 	{ "emergency_codes", STR_PARAM | USE_FUNC_PARAM, (void *) &set_codes},
 	{ "timer_interval", INT_PARAM, &timer_interval},
 	{ "db_url", STR_PARAM, &db_url.s},
-	{ "db_table_routing", STR_PARAM, &table_name},
-	{ "db_table_report", STR_PARAM, &table_report},
-	{ "db_table_provider", STR_PARAM, &table_provider},
+	{ "db_table_routing", STR_PARAM, &table_name.s},
+	{ "db_table_report", STR_PARAM, &table_report.s},
+	{ "db_table_provider", STR_PARAM, &table_provider.s},
 	{ "url_vpc", STR_PARAM, &url_vpc},
 	{ "contingency_hostname", STR_PARAM, &contingency_hostname},
 	{ "emergency_call_server", STR_PARAM, &call_server_hostname},
@@ -197,6 +218,10 @@ void destroy_codes(struct code_number *codes){
 static int mod_init(void) {
 
 	LM_DBG("Initializing module\n");
+
+	table_name.len = strlen(table_name.s);
+	table_report.len = strlen(table_report.s);
+	table_provider.len = strlen(table_provider.s);
 
 	// checks for mandatory fields
 	mandatory_parm = shm_malloc(2);
@@ -344,7 +369,7 @@ static int mod_init(void) {
 static int child_init(int rank) {
 	LM_DBG("Initializing child\n");
 
-	if (db_url.s && rank>PROC_MAIN) {
+	if (db_url.s && rank>=1) {
 		/* open a test connection */
 
 		if ((db_con = db_funcs.init(&db_url)) == 0) {
@@ -370,9 +395,6 @@ static int child_init(int rank) {
  */
 static void mod_destroy(void) {
 	curl_global_cleanup();
-
-	if (db_con != NULL && db_funcs.close != 0)
-		db_funcs.close(db_con);
 
 	if(ref_lock){
 		lock_destroy_rw( ref_lock );

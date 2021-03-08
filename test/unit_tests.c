@@ -22,8 +22,9 @@
 
 #include <tap.h>
 
-#include "../cachedb/test/test_backends.h"
+#include "../cachedb/test/test_cachedb.h"
 #include "../lib/test/test_csv.h"
+#include "../mem/test/test_hp_malloc.h"
 
 #include "../lib/list.h"
 #include "../dprint.h"
@@ -31,11 +32,13 @@
 
 void init_unit_tests(void) {
 	set_mpath("modules/");
-	//init_cachedb_tests();
+	init_cachedb_tests();
+	//init_hp_malloc_tests();
 }
 
 int run_unit_tests(void) {
-	//test_cachedb_backends();
+	test_cachedb();
 	test_lib_csv();
+	//test_hp_malloc();
 	done_testing();
 }

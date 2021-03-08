@@ -342,6 +342,7 @@ struct module_exports exports = {
  */
 static int mod_init(void)
 {
+	unsigned int db_caps;
 	int idx;
 
 	LM_DBG("initializing\n");
@@ -402,7 +403,7 @@ static int mod_init(void)
 
 	if (cluster_mode != CM_NONE || rr_persist == RRP_LOAD_FROM_SQL) {
 		cid_keys = pkg_malloc(max_contact_delete *
-				(sizeof(db_key_t) * sizeof(db_val_t)));
+				(sizeof(db_key_t) + sizeof(db_val_t)));
 		if (cid_keys == NULL) {
 			LM_ERR("no more pkg memory\n");
 			return -1;
@@ -451,7 +452,10 @@ static int mod_init(void)
 			LM_ERR("failed to bind database module\n");
 			return -1;
 		}
-		if (!DB_CAPABILITY(ul_dbf, DB_CAP_ALL)) {
+		db_caps = DB_CAP_ALL;
+		if (cluster_mode == CM_SQL_ONLY)
+			db_caps |= DB_CAP_RAW_QUERY;
+		if (!DB_CAPABILITY(ul_dbf, db_caps)) {
 			LM_ERR("database module does not implement all functions"
 					" needed by the module\n");
 			return -1;
@@ -556,8 +560,8 @@ static int child_init(int _rank)
 	if (!have_db_conns())
 		return 0;
 
-	/* we need connection from SIP workers and MAIN procs */
-	if (_rank < PROC_MAIN )
+	/* we need connection from SIP workers only */
+	if (_rank < 1 )
 		return 0;
 
 	ul_dbh = ul_dbf.init(&db_url); /* Get a new database connection */
@@ -605,19 +609,24 @@ static int mi_child_init(void)
 static void destroy(void)
 {
 	/* we need to sync DB in order to flush the cache */
-	if (ul_dbh) {
-		ul_unlock_locks();
-		if (sync_lock)
-			lock_start_read(sync_lock);
-		if (synchronize_all_udomains() != 0) {
-			LM_ERR("flushing cache failed\n");
+	if (have_db_conns() && ul_dbf.init) {
+		ul_dbh = ul_dbf.init(&db_url); /* Get a new database connection */
+		if (!ul_dbh) {
+			LM_ERR("failed to connect to database\n");
+	} else {
+			ul_unlock_locks();
+			if (sync_lock)
+				lock_start_read(sync_lock);
+			if (synchronize_all_udomains() != 0) {
+				LM_ERR("flushing cache failed\n");
+			}
+			if (sync_lock) {
+				lock_stop_read(sync_lock);
+				lock_destroy_rw(sync_lock);
+				sync_lock = 0;
+			}
+			ul_dbf.close(ul_dbh);
 		}
-		if (sync_lock) {
-			lock_stop_read(sync_lock);
-			lock_destroy_rw(sync_lock);
-			sync_lock = 0;
-		}
-		ul_dbf.close(ul_dbh);
 	}
 
 	if (cdbc)

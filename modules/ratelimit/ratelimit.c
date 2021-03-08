@@ -55,7 +55,7 @@ gen_lock_t * rl_lock;
 static double * rl_load_value;     /* actual load, used by PIPE_ALGO_FEEDBACK */
 static double * pid_kp, * pid_ki, * pid_kd, * pid_setpoint; /* PID tuning params */
 static int * drop_rate;         /* updated by PIPE_ALGO_FEEDBACK */
-static int *rl_feedback_limit;
+int *rl_feedback_limit;
 
 int * rl_network_load;	/* network load */
 int * rl_network_count;	/* flag for counting network algo users */
@@ -450,9 +450,6 @@ void mod_destroy(void)
 	RL_SHM_FREE(pid_setpoint);
 	RL_SHM_FREE(drop_rate);
 	RL_SHM_FREE(rl_feedback_limit);
-
-	if (db_url.s && db_url.len)
-		destroy_cachedb();
 }
 
 
@@ -473,7 +470,7 @@ int hash[100] = {18, 50, 51, 39, 49, 68, 8, 78, 61, 75, 53, 32, 45, 77, 31,
  * @param update whether or not to inc call number
  * @return number of calls in the window
  */
-static inline int hist_check(rl_pipe_t *pipe, int update)
+static inline unsigned hist_update(rl_pipe_t *pipe, int update)
 {
 	#define U2MILI(__usec__) (__usec__/1000)
 	#define S2MILI(__sec__)  (__sec__ *1000)
@@ -483,9 +480,6 @@ static inline int hist_check(rl_pipe_t *pipe, int update)
 	unsigned long long now_time, start_time;
 
 	struct timeval tv;
-
-	pipe->counter = 0;
-	pipe->counter = rl_get_all_counters(pipe);
 
 	gettimeofday(&tv, NULL);
 	now_time = S2MILI(tv.tv_sec) + U2MILI(tv.tv_usec);
@@ -533,11 +527,12 @@ static inline int hist_check(rl_pipe_t *pipe, int update)
 		pipe->rwin.window[pipe->rwin.start_index] += update;
 	}
 
+	pipe->counter = 0;
 	/* count the total number of calls in the window */
 	for (i=0; i < pipe->rwin.window_size; i++)
 		pipe->counter += pipe->rwin.window[i];
 
-	return pipe->counter > pipe->limit ? -1 : 1;
+	return rl_get_all_counters(pipe);
 
 	#undef U2MILI
 	#undef S2MILI
@@ -546,9 +541,7 @@ static inline int hist_check(rl_pipe_t *pipe, int update)
 int hist_get_count(rl_pipe_t *pipe)
 {
 	/* do a NOP to validate the interval, then return the unchanged counter */
-	hist_check(pipe, 0);
-
-	return pipe->counter;
+	return hist_update(pipe, 0);
 }
 
 void hist_set_count(rl_pipe_t *pipe, long int value)
@@ -559,7 +552,7 @@ void hist_set_count(rl_pipe_t *pipe, long int value)
 				pipe->rwin.window_size * sizeof(long int));
 		pipe->rwin.start_time.tv_sec = 0; /* force init */
 	} else
-		hist_check(pipe, value);
+		hist_update(pipe, value);
 }
 
 
@@ -570,7 +563,12 @@ void hist_set_count(rl_pipe_t *pipe, long int value)
  */
 int rl_pipe_check(rl_pipe_t *pipe)
 {
-	unsigned counter = rl_get_all_counters(pipe);
+	unsigned counter;
+
+	if (pipe->algo == PIPE_ALGO_HISTORY)
+		return (hist_update(pipe, 1) > pipe->limit ? -1 : 1);
+
+	counter = rl_get_all_counters(pipe);
 
 	switch (pipe->algo) {
 		case PIPE_ALGO_NOP:
@@ -582,13 +580,11 @@ int rl_pipe_check(rl_pipe_t *pipe)
 		case PIPE_ALGO_RED:
 			if (!pipe->load)
 				return 1;
-			return counter % pipe->load ? -1 : 1;
+			return (counter % pipe->load ? -1 : 1);
 		case PIPE_ALGO_NETWORK:
-			return pipe->load;
+			return (pipe->load ? pipe->load : 1);
 		case PIPE_ALGO_FEEDBACK:
 			return (hash[counter % 100] < *drop_rate) ? -1 : 1;
-		case PIPE_ALGO_HISTORY:
-			return hist_check(pipe, 1);
 		default:
 			LM_ERR("ratelimit algorithm %d not implemented\n", pipe->algo);
 	}

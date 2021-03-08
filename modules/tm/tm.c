@@ -707,6 +707,7 @@ int load_tm( struct tm_binds *tmb)
 	/* reply functions */
 	tmb->t_reply = (treply_f)w_t_reply;
 	tmb->t_reply_with_body = t_reply_with_body;
+	tmb->t_gen_totag = t_gen_totag;
 
 	/* transaction location/status functions */
 	tmb->t_newtran = w_t_newtran;
@@ -1744,8 +1745,7 @@ static int pv_get_tm_reply_code(struct sip_msg *msg, pv_param_t *param,
 		return -1;
 
 	/* first get the transaction */
-	if (t_check( msg , 0 )==-1) return -1;
-	if ( (t=get_t())==0) {
+	if (!(t = get_t()) || t == T_UNDEFINED) {
 		/* no T */
 		code = 0;
 	} else {
@@ -1792,8 +1792,7 @@ static int pv_get_tm_ruri(struct sip_msg *msg, pv_param_t *param,
 		return -1;
 
 	/* first get the transaction */
-	if (t_check( msg , 0 )==-1) return -1;
-	if ( (t=get_t())==0) {
+	if (!(t = get_t()) || t == T_UNDEFINED) {
 		/* no T */
 		if (msg!=NULL&&msg!=FAKED_REPLY && msg->first_line.type==SIP_REQUEST){
 			res->rs = *GET_RURI(msg);

@@ -561,7 +561,7 @@ int lb_route(struct sip_msg *req, int group, struct lb_res_str_list *rl,
 	if(
 		/* we should reuse previous resources list */
 		reuse ||
-		/* we have 'last_dst', i.e. previous iteration was successfull and
+		/* we have 'last_dst', i.e. previous iteration was successful and
 		 * we need to clean it up */
 		(last_dst != NULL)
 	) {
@@ -898,7 +898,7 @@ int lb_route(struct sip_msg *req, int group, struct lb_res_str_list *rl,
 	/* add new resources */
 	for( i=0 ; i<res_cur_n ; i++ ) {
 		res_val.s = res_cur[i]->name;
-		if( add_avp(AVP_VAL_STR, res_avp_name, res_val) != 0 )
+		if( add_avp_last(AVP_VAL_STR, res_avp_name, res_val) != 0 )
 			LM_ERR("failed to add RES AVP\n");
 	}
 

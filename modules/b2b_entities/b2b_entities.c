@@ -70,6 +70,8 @@ static int b2b_update_period = 100;
 int uac_auth_loaded;
 str b2b_key_prefix = str_init("B2B");
 int b2be_db_mode = WRITE_BACK;
+b2b_table server_htable = NULL;
+b2b_table client_htable = NULL;
 
 #define DB_COLS_NO  26
 
@@ -201,9 +203,12 @@ static int mod_init(void)
 		return -1;
 	}
 	memset(&b2be_dbf, 0, sizeof(db_func_t));
+
+	if(b2be_db_mode)
+		init_db_url(db_url, 1);
+
 	if(b2be_db_mode && db_url.s)
 	{
-		db_url.len = strlen(db_url.s);
 		b2be_dbtable.len = strlen(b2be_dbtable.s);
 
 		/* binding to database module  */
@@ -349,10 +354,14 @@ static int child_init(int rank)
 /** Module destroy function */
 static void mod_destroy(void)
 {
-	if(b2be_db ) {
-		if(b2be_db_mode==WRITE_BACK)
+	if (b2be_dbf.init && b2be_db_mode==WRITE_BACK) {
+		b2be_db = b2be_dbf.init(&db_url);
+		if(!b2be_db) {
+			LM_ERR("connecting to database failed, unable to flush\n");
+		} else {
 			b2b_entities_dump(1);
-		b2be_dbf.close(b2be_db);
+			b2be_dbf.close(b2be_db);
+		}
 	}
 	destroy_b2b_htables();
 }
@@ -528,9 +537,12 @@ static inline int mi_print_b2be_dlg(struct mi_node *rpl, b2b_table htable, unsig
 			p = int2str((unsigned long)(dlg->id), &len);
 			node = add_mi_node_child(rpl, MI_DUP_VALUE, "dlg", 3, p, len);
 			if(node == NULL) goto error;
-			attr = add_mi_attr(node, MI_DUP_VALUE, "param", 5,
-					dlg->param.s, dlg->param.len);
-			if(attr == NULL) goto error;
+			/* check if param is printable */
+			if (str_check_token(&dlg->param)) {
+				attr = add_mi_attr(node, MI_DUP_VALUE, "param", 5,
+						dlg->param.s, dlg->param.len);
+				if(attr == NULL) goto error;
+			}
 			p = int2str((unsigned long)(dlg->state), &len);
 			attr = add_mi_attr(node, MI_DUP_VALUE, "state", 5, p, len);
 			if(attr == NULL) goto error;

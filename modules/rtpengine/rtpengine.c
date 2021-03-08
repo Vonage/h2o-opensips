@@ -1068,14 +1068,15 @@ mod_init(void)
 
 	rtpe_no = (unsigned int*)shm_malloc(sizeof(unsigned int));
 	list_version = (unsigned int*)shm_malloc(sizeof(unsigned int));
-	*rtpe_no = 0;
-	*list_version = 0;
-	my_version = 0;
 
 	if(!rtpe_no || !list_version) {
 		LM_ERR("No more shared memory\n");
 		return -1;
 	}
+
+	*rtpe_no = 0;
+	*list_version = 0;
+	my_version = 0;
 
 	if (!(rtpe_set_list = (struct rtpe_set_head **)
 		shm_malloc(sizeof(struct rtpe_set_head *)))) {
@@ -1319,13 +1320,12 @@ static int connect_rtpengines(void)
 static int
 child_init(int rank)
 {
+	mypid = getpid();
 
 	if(*rtpe_set_list==NULL )
 		return 0;
 
 	/* Iterate known RTP proxies - create sockets */
-	mypid = getpid();
-
 	return connect_rtpengines();
 }
 
@@ -1515,10 +1515,17 @@ static int parse_flags(struct ng_flags_parse *ng_flags, struct sip_msg *msg,
 				continue;
 
 			case 8:
-				if (str_eq(&key, "internal"))
-					iniface = key;
-				else if (str_eq(&key, "external"))
-					outiface = key;
+				if (str_eq(&key, "internal")) {
+					if (iniface.s)
+						outiface = key;
+					else
+						iniface = key;
+				} else if (str_eq(&key, "external")) {
+					if (iniface.s)
+						outiface = key;
+					else
+						iniface = key;
+				}
 				else if (str_eq(&key, "RTP/AVPF"))
 					ng_flags->transport = 0x102;
 				else if (str_eq(&key, "RTP/SAVP"))
@@ -1999,14 +2006,17 @@ error:
 			(_fd) = -1; \
 		} \
 	} while (0)
+#define RTPENGINE_BUF_SIZE 0x10000
+#define OSIP_IOV_MAX 1024
 
 static char *
 send_rtpe_command(struct rtpe_node *node, bencode_item_t *dict, int *outlen)
 {
 	struct sockaddr_un addr;
 	int fd, len, i, vcnt;
+	int max_vcnt=OSIP_IOV_MAX;
 	char *cp;
-	static char buf[0x10000];
+	static char buf[RTPENGINE_BUF_SIZE];
 	struct pollfd fds[1];
 	struct iovec *v;
 
@@ -2014,6 +2024,32 @@ send_rtpe_command(struct rtpe_node *node, bencode_item_t *dict, int *outlen)
 	if (!v) {
 		LM_ERR("error converting bencode to iovec\n");
 		return NULL;
+	}
+#ifdef IOV_MAX
+	if (IOV_MAX < OSIP_IOV_MAX)
+		max_vcnt = IOV_MAX;
+#endif
+
+	if (vcnt > max_vcnt) {
+		int i, vec_len = 0;
+		/* use buf if possible :) */
+		for (i = max_vcnt - 1; i < vcnt; i++)
+			vec_len += v[i].iov_len;
+		/* use buf, error otherwise */
+		if (vec_len > RTPENGINE_BUF_SIZE) {
+			LM_ERR("Command too big %d - max %d\n", vec_len, RTPENGINE_BUF_SIZE);
+			return NULL;
+		}
+		cp = buf;
+		for (i = max_vcnt - 1; i < vcnt; i++) {
+			memcpy(cp, v[i].iov_base, v[i].iov_len);
+			cp += v[i].iov_len;
+		}
+		i = max_vcnt - 1;
+		v[i].iov_len = vec_len;
+		v[i].iov_base = buf;
+		/* finally solve the problem */
+		vcnt = max_vcnt;
 	}
 
 	len = 0;
@@ -2039,12 +2075,12 @@ send_rtpe_command(struct rtpe_node *node, bencode_item_t *dict, int *outlen)
 		}
 
 		do {
-			len = writev(fd, v + 1, vcnt);
+			len = writev(fd, v + 1, vcnt - 1);
 		} while (len == -1 && errno == EINTR);
 		if (len <= 0) {
 			close(fd);
-			LM_ERR("can't send command to a RTP proxy (%d:%s)\n",
-					errno, strerror(errno));
+			LM_ERR("can't send (#%d iovec buffers) command to a RTP proxy (%d:%s)\n",
+					vcnt - 1, errno, strerror(errno));
 			goto badproxy;
 		}
 		do {
@@ -2085,11 +2121,11 @@ send_rtpe_command(struct rtpe_node *node, bencode_item_t *dict, int *outlen)
 				goto badproxy;
 			}
 			do {
-				len = writev(rtpe_socks[node->idx], v, vcnt + 1);
+				len = writev(rtpe_socks[node->idx], v, vcnt);
 			} while (len == -1 && (errno == EINTR || errno == ENOBUFS || errno == EMSGSIZE));
 			if (len <= 0) {
-				LM_ERR("can't send command to a RTP proxy (%d:%s)\n",
-						errno, strerror(errno));
+				LM_ERR("can't send (#%d iovec buffers) command to a RTP proxy (%d:%s)\n",
+						vcnt, errno, strerror(errno));
 				RTPE_IO_ERROR_CLOSE(rtpe_socks[node->idx]);
 				continue;
 			}
@@ -2364,6 +2400,8 @@ rtpengine_manage(struct sip_msg *msg, const char *flags, pv_spec_t *spvar, pv_sp
 {
 	int method;
 	int nosdp;
+	int op = OP_ANSWER;
+	struct cell *t;
 
 	if(msg->cseq==NULL && ((parse_headers(msg, HDR_CSEQ_F, 0)==-1)
 				|| (msg->cseq==NULL)))
@@ -2375,7 +2413,7 @@ rtpengine_manage(struct sip_msg *msg, const char *flags, pv_spec_t *spvar, pv_sp
 	method = get_cseq(msg)->method_id;
 
 	if(!(method==METHOD_INVITE || method==METHOD_ACK || method==METHOD_CANCEL
-				|| method==METHOD_BYE || method==METHOD_UPDATE))
+				|| method==METHOD_BYE || method==METHOD_UPDATE || method==METHOD_PRACK))
 		return -1;
 
 	if(method==METHOD_CANCEL || method==METHOD_BYE)
@@ -2387,14 +2425,25 @@ rtpengine_manage(struct sip_msg *msg, const char *flags, pv_spec_t *spvar, pv_sp
 		nosdp = parse_sdp(msg)?0:1;
 
 	if(msg->first_line.type == SIP_REQUEST) {
-		if(method==METHOD_ACK && nosdp==0)
-			return rtpengine_offer_answer(msg, flags, spvar, bpvar, OP_ANSWER);
-		if(method==METHOD_UPDATE && nosdp==0)
-			return rtpengine_offer_answer(msg, flags, spvar, bpvar, OP_OFFER);
-		if(method==METHOD_INVITE && nosdp==0) {
-			if(route_type==FAILURE_ROUTE)
-				return rtpengine_delete(msg, flags, spvar);
-			return rtpengine_offer_answer(msg, flags, spvar, bpvar, OP_OFFER);
+		if(nosdp==0) {
+			switch (method) {
+				case METHOD_ACK:
+				case METHOD_PRACK:
+					op = OP_ANSWER;
+					break;
+				case METHOD_INVITE:
+					if(route_type==FAILURE_ROUTE)
+						return rtpengine_delete(msg, flags, spvar);
+					/* fall through */
+				case METHOD_UPDATE:
+					op = OP_OFFER;
+					break;
+				default:
+					return -1;
+			}
+			return rtpengine_offer_answer(msg, flags, spvar, bpvar, op);
+		} else if (method==METHOD_INVITE) {
+			msg->msg_flags |= FL_BODY_NO_SDP;
 		}
 	} else if(msg->first_line.type == SIP_REPLY) {
 		if(msg->first_line.u.reply.statuscode>=300)
@@ -2402,10 +2451,13 @@ rtpengine_manage(struct sip_msg *msg, const char *flags, pv_spec_t *spvar, pv_sp
 		if(nosdp==0) {
 			if(method==METHOD_UPDATE)
 				return rtpengine_offer_answer(msg, flags, spvar, bpvar, OP_ANSWER);
-			if(tmb.t_gett==NULL || tmb.t_gett()==NULL
-					|| tmb.t_gett()==T_UNDEFINED)
-				return rtpengine_offer_answer(msg, flags, spvar, bpvar, OP_ANSWER);
-			return rtpengine_offer_answer(msg, flags, spvar, bpvar, OP_OFFER);
+			if (tmb.t_gett != NULL) {
+				t = tmb.t_gett();
+				if(t && t != T_UNDEFINED && t->uas.request->msg_flags & FL_BODY_NO_SDP)
+					op = OP_OFFER;
+			}
+			/* op defaults to OP_ANSWER */
+			return rtpengine_offer_answer(msg, flags, spvar, bpvar, op);
 		}
 	}
 	return -1;
@@ -2453,7 +2505,8 @@ rtpengine_answer_f(struct sip_msg *msg, gparam_p str1, pv_spec_t *spvar, pv_spec
 	    return -1;
 
 	if (msg->first_line.type == SIP_REQUEST)
-		if (msg->first_line.u.request.method_value != METHOD_ACK)
+		if (msg->first_line.u.request.method_value != METHOD_ACK &&
+				msg->first_line.u.request.method_value != METHOD_PRACK)
 			return -1;
 
 	flags.s = NULL;

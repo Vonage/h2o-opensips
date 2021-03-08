@@ -319,6 +319,10 @@ static struct {
 	{.s = "rtp/avpf",  .len = 8, .is_rtp = 1},
 	{.s = "rtp/savp",  .len = 8, .is_rtp = 1},
 	{.s = "rtp/savpf", .len = 9, .is_rtp = 1},
+	{.s = "dccp/tls/rtp/savp", .len = 17, .is_rtp = 1},
+	{.s = "dccp/tls/rtp/savpf", .len = 18, .is_rtp = 1},
+	{.s = "udp/tls/rtp/savp", .len = 16, .is_rtp = 1},
+	{.s = "udp/tls/rtp/savpf", .len = 17, .is_rtp = 1},
 	{.s = "udp/bfcp",  .len = 8, .is_rtp = 0},
 	{.s = NULL,        .len = 0, .is_rtp = 0}
 };
@@ -1517,7 +1521,7 @@ static int
 child_init(int rank)
 {
 	/* we need DB conn in the worker processes only */
-	if (rank<=PROC_MAIN)
+	if (rank<1)
 		return 0;
 
 	if(*rtpp_set_list==NULL )
@@ -1806,8 +1810,9 @@ extract_mediainfo(str *body, str *mediaport, str *payload_types)
 		payload_types->s = cp;
 		return 0;
 	}
+	LM_INFO("unsupported ptype [%.*s]\n", ptype.len, ptype.s);
 	/* Unproxyable protocol type. Generally it isn't error. */
-	return -1;
+	return 1;
 }
 
 static int alter_rtcp(struct sip_msg *msg,str * body1, str *newip, int newpf ,str* newport,
@@ -2180,23 +2185,29 @@ error:
 
 
 #define RTPPROXY_BUF_SIZE 256
+#define OSIP_IOV_MAX 1024
 
 char *
 send_rtpp_command(struct rtpp_node *node, struct iovec *v, int vcnt)
 {
 	struct sockaddr_un addr;
 	int fd, len, i;
+	int max_vcnt=OSIP_IOV_MAX;
 	char *cp;
 	static char buf[RTPPROXY_BUF_SIZE];
 	struct pollfd fds[1];
 
 
 #ifdef IOV_MAX
-	/* normalize vcntl to IOV_MAX, as on some systems this limit is very low (16 on Solaris) */
-	if (vcnt > IOV_MAX) {
+	if (IOV_MAX < OSIP_IOV_MAX)
+		max_vcnt = IOV_MAX;
+#endif
+
+	/* normalize vcntl to max_vcnt, as on some systems this limit is very low (16 on Solaris) */
+	if (vcnt > max_vcnt) {
 		int i, vec_len = 0;
 		/* use buf if possible :) */
-		for (i = IOV_MAX - 1; i < vcnt; i++)
+		for (i = max_vcnt - 1; i < vcnt; i++)
 			vec_len += v[i].iov_len;
 		/* use buf, error otherwise */
 		if (vec_len > RTPPROXY_BUF_SIZE) {
@@ -2204,18 +2215,17 @@ send_rtpp_command(struct rtpp_node *node, struct iovec *v, int vcnt)
 			return NULL;
 		}
 		cp = buf;
-		for (i = IOV_MAX - 1; i < vcnt; i++) {
+		for (i = max_vcnt - 1; i < vcnt; i++) {
 			memcpy(cp, v[i].iov_base, v[i].iov_len);
 			cp += v[i].iov_len;
 		}
-		i = IOV_MAX - 1;
+		i = max_vcnt - 1;
 		v[i].iov_len = vec_len;
 		v[i].iov_base = buf;
 		/* finally solve the problem */
-		vcnt = IOV_MAX;
+		vcnt = max_vcnt;
 
 	}
-#endif
 
 	len = 0;
 	cp = buf;
@@ -2247,8 +2257,8 @@ send_rtpp_command(struct rtpp_node *node, struct iovec *v, int vcnt)
 		} while (len == -1 && errno == EINTR);
 		if (len <= 0) {
 			close(fd);
-			LM_ERR("can't send command to a RTP proxy (%d:%s)\n",
-					errno, strerror(errno));
+			LM_ERR("can't send (#%d iovec buffers) command to a RTP proxy (%d:%s)\n",
+					vcnt - 1, errno, strerror(errno));
 			goto badproxy;
 		}
 		do {
@@ -2286,8 +2296,8 @@ send_rtpp_command(struct rtpp_node *node, struct iovec *v, int vcnt)
 				len = writev(rtpp_socks[node->idx], v, vcnt);
 			} while (len == -1 && (errno == EINTR || errno == ENOBUFS));
 			if (len <= 0) {
-				LM_ERR("can't send command to a RTP proxy (%d:%s)\n",
-						errno, strerror(errno));
+				LM_ERR("can't send (#%d iovec buffers) command to a RTP proxy (%d:%s)\n",
+						vcnt, errno, strerror(errno));
 				goto badproxy;
 			}
 			while ((poll(fds, 1, rtpproxy_tout) == 1) &&
@@ -3786,9 +3796,14 @@ int force_rtp_proxy_body(struct sip_msg* msg, struct force_rtpp_args *args,
 			}
 			tmpstr1.s = m1p;
 			tmpstr1.len = m2p - m1p;
-			if (extract_mediainfo(&tmpstr1, &oldport, &payload_types) == -1) {
-				LM_ERR("can't extract media port from the message\n");
-				goto error;
+			switch (extract_mediainfo(&tmpstr1, &oldport, &payload_types)) {
+				case -1:
+					LM_ERR("can't extract media port from the message\n");
+					goto error;
+				case 0:
+					break;
+				case 1:
+					continue;
 			}
 			++medianum;
 
@@ -4183,7 +4198,7 @@ static int rtpp_init_extra_stats(void)
 			len += 1 /* ' ' */ + strlen(rtpp_stats[stat]);
 		rtpp_stats_chunks[chunk].iov_base = pkg_malloc(len);
 		if (!rtpp_stats_chunks) {
-			LM_WARN("cannot allocate %d chunk. Only %d stats out of %ld "
+			LM_WARN("cannot allocate %d chunk. Only %d stats out of %zu "
 					"can be used!\n", chunk, chunk * RTPP_QUERY_ONCE_STATS_NO,
 					RTPP_QUERY_STATS_SIZE);
 			goto error;
@@ -4196,8 +4211,8 @@ static int rtpp_init_extra_stats(void)
 			p += len;
 		}
 		rtpp_stats_chunks[chunk].iov_len = p - (char *)rtpp_stats_chunks[chunk].iov_base;
-		LM_INFO("%d %ld [%.*s]\n", chunk, rtpp_stats_chunks[chunk].iov_len,
-				(int)rtpp_stats_chunks[chunk].iov_len, (char *)rtpp_stats_chunks[chunk].iov_base);
+		LM_INFO("%d %zu [%.*s]\n", chunk, rtpp_stats_chunks[chunk].iov_len,
+				(unsigned)rtpp_stats_chunks[chunk].iov_len, (char *)rtpp_stats_chunks[chunk].iov_base);
 	}
 	return 0;
 

@@ -22,6 +22,7 @@
  * 2013-02-28: Created (Liviu)
  */
 
+#define _GNU_SOURCE
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -39,6 +40,8 @@
 #include "../tls_mgm/api.h"
 
 #include "rest_methods.h"
+#include "../../ssl_init_tweaks.h"
+#include "../../pt.h"
 
 /*
  * Module parameters
@@ -60,6 +63,8 @@ int _async_resume_retr_itv = 100; /* us */
 /* libcurl enables these by default */
 int ssl_verifypeer = 1;
 int ssl_verifyhost = 1;
+
+int enable_expect_100;
 
 struct tls_mgm_binds tls_api;
 
@@ -161,6 +166,7 @@ static param_export_t params[] = {
 	{ "ssl_capath",			STR_PARAM, &ssl_capath			},
 	{ "ssl_verifypeer",		INT_PARAM, &ssl_verifypeer		},
 	{ "ssl_verifyhost",		INT_PARAM, &ssl_verifyhost		},
+	{ "enable_expect_100",	INT_PARAM, &enable_expect_100	},
 	{ 0, 0, 0 }
 };
 
@@ -230,6 +236,13 @@ static int mod_init(void)
 			       "Is the tls_mgm module loaded?\n");
 			return -1;
 		}
+	}
+
+	/* we need to initialize the curl library now, otherwise, if we do it in
+	 * child_init(), in curl_easy_init(), the init handler will be run multiple times in parallel */
+	if (curl_global_init(CURL_GLOBAL_ALL) != CURLE_OK) {
+		LM_ERR("could not initialize curl!\n");
+		return -1;
 	}
 
 	LM_INFO("Module initialized!\n");

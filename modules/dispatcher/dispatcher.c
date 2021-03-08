@@ -109,18 +109,21 @@ typedef struct _ds_db_head
 
 ds_db_head_t default_db_head = {
 	str_init(DS_DEFAULT_PARTITION_NAME),
-	{NULL, 0},
-	{NULL, 0},
+	{NULL, -1},
+	{NULL, -1},
 
 
-	{NULL, 0},
-	{NULL, 0},
-	{NULL, 0},
-	{NULL, 0},
-	{NULL, 0},
+	{NULL, -1},
+	{NULL, -1},
+	{NULL, -1},
+	{NULL, -1},
+	{NULL, -1},
 	NULL
 };
 ds_db_head_t *ds_db_heads = NULL;
+
+/* may be used to avoid the undesired loading of the standard table */
+str df_part_override;
 
 typedef struct {
 	str name;
@@ -497,14 +500,16 @@ static int set_partition_arguments(unsigned int type, void *val)
 	static const char end_pair_delim = ';';
 	static const char eq_val_delim = '=';
 	static const str blacklist_param = str_init("ds_define_blacklist");
-	unsigned int i;
+	unsigned int i, fixed_end = 0;
 
 	str raw_line = {(char*)val, strlen(val)};
 	str arg, value;
 	ds_db_head_t *head = NULL;
 
-	if (raw_line.s[raw_line.len - 1] != end_pair_delim)
+	if (raw_line.s[raw_line.len - 1] != end_pair_delim) {
 		raw_line.s[raw_line.len++] = end_pair_delim;
+		fixed_end = 1;
+	}
 
 	if (parse_partition_argument(&raw_line, &head) != 0)
 		return -1;
@@ -512,6 +517,17 @@ static int set_partition_arguments(unsigned int type, void *val)
 	char *first_pos = raw_line.s; /* just for error messages */
 	char *end_pair_pos = q_memchr(raw_line.s, end_pair_delim, raw_line.len);
 	char *eq_pos = q_memchr(raw_line.s, eq_val_delim, raw_line.len);
+
+	if ((!end_pair_pos || !eq_pos) && head == &default_db_head) {
+		if (fixed_end)
+			raw_line.len--;
+		df_part_override = raw_line;
+		trim(&df_part_override);
+		if (!ZSTR(df_part_override))
+			return 0;
+
+		memset(&df_part_override, 0, sizeof df_part_override);
+	}
 
 	while (end_pair_pos != NULL && eq_pos != NULL) {
 
@@ -566,7 +582,11 @@ static int partition_init(ds_db_head_t *db_head, ds_partition_t *partition)
 	}
 
 	memset(partition, 0, sizeof(ds_partition_t));
+
 	partition->name = db_head->partition_name;
+	if (str_match(&partition->name, &df_part_override))
+		default_partition = partition;
+
 	partition->table_name = db_head->table_name;
 	partition->db_url = db_head->db_url;
 	partition->db_handle = pkg_malloc(sizeof(struct db_con_t *));
@@ -667,9 +687,7 @@ static int inherit_from_default_head(ds_db_head_t *head)
 
 		if (p_param->len == 0 && def_param->len > 0) {
 			/* Parameter not specified for function */
-			if (strstr(partition_params[i].name.s, "avp")
-				&& def_param->len > 0) {
-
+			if (strstr(partition_params[i].name.s, "avp"))  {
 				char *avp_end = q_memrchr(def_param->s, ')', def_param->len);
 				if (avp_end == NULL) {
 					LM_ERR ("wrong avp name %.*s\n", def_param->len,
@@ -692,9 +710,13 @@ static int inherit_from_default_head(ds_db_head_t *head)
 						head->partition_name.len);
 				memcpy(p_param->s + fix_len + 1 + head->partition_name.len,
 						def_param->s + fix_len, rem_len);
-			}
-			else
+
+				LM_DBG("built implicit AVP spec '%.*s' for part '%.*s'\n",
+				       p_param->len, p_param->s, head->partition_name.len,
+				       head->partition_name.s);
+			} else {
 				memcpy(p_param, def_param, sizeof(str));
+			}
 		}
 	}
 	return 0;
@@ -708,7 +730,7 @@ void set_default_head_values(ds_db_head_t *head)
 		str *p_val = partition_params[i].getter_func(head);
 		if (p_val->s == NULL)
 			*p_val = partition_params[i].default_value;
-		else
+		else if (p_val->len == -1)
 			p_val->len = strlen(p_val -> s);
 	}
 }
@@ -730,8 +752,10 @@ static inline int check_if_default_head_is_ok(void)
  */
 static int mod_init(void)
 {
+	ds_db_head_t *aux;
 
 	LM_DBG("initializing ...\n");
+	init_db_url(default_db_head.db_url, 1 /* can be null */);
 
 	if (check_if_default_head_is_ok()) {
 		default_db_head.next = ds_db_heads;
@@ -791,6 +815,9 @@ static int mod_init(void)
 	/* Creating partitions from head */
 	ds_db_head_t *head_it = ds_db_heads;
 	while (head_it){
+		if (df_part_override.s && head_it == &default_db_head)
+			goto next_part;
+
 		if (inherit_from_default_head(head_it) != 0)
 			return -1;
 
@@ -819,15 +846,22 @@ static int mod_init(void)
 
 		/* close DB connection */
 		ds_disconnect_db(partition);
-		ds_db_head_t *aux = head_it;
 
 		/* We keep track of corespondig default parition */
 		if (head_it == &default_db_head)
 			default_partition = partition;
 
+next_part:
+		aux = head_it;
 		head_it = head_it->next;
 		if (aux != &default_db_head)
 			pkg_free(aux);
+	}
+
+	if (df_part_override.s && !default_partition) {
+		LM_ERR("partition '%.*s' is not defined\n",
+		       df_part_override.len, df_part_override.s);
+		return -1;
 	}
 
 	/* Only, if the Probing-Timer is enabled the TM-API needs to be loaded: */
@@ -914,11 +948,10 @@ static int mod_init(void)
 #include "../../pt.h"
 static int ds_child_init(int rank)
 {
-	/* we need DB connection from the worker procs (for the flushing)
-	 * and from the main proc (for final flush on shutdown) */
-	if ( rank>=PROC_MAIN ) {
+	ds_partition_t *partition_it;
 
-		ds_partition_t *partition_it;
+	/* we need DB connection from the worker procs (for the flushing) */
+	if ( rank>=1 ) {
 
 		for (partition_it = partitions; partition_it;
 				partition_it = partition_it->next){
@@ -955,13 +988,22 @@ static int mi_child_init(void)
  */
 static void destroy(void)
 {
+	ds_partition_t *part_it = partitions, *aux;
+
 	LM_DBG("destroying module ...\n");
 
 	/* flush the state of the destinations */
-	if (ds_persistent_state)
-		ds_flusher_routine(0, NULL);
+	if (ds_persistent_state) {
+		/* open the DB conns*/
+		for (part_it = partitions; part_it; part_it = part_it->next) {
+			if (part_it->db_url.s)
+				if (ds_connect_db(part_it) != 0) {
+					LM_ERR("failed to do DB connect\n");
+				}
+		}
 
-	ds_partition_t *part_it = partitions, *aux;
+		ds_flusher_routine(0, NULL);
+	}
 
 	while (part_it) {
 		ds_destroy_data(part_it);

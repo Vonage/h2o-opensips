@@ -173,7 +173,7 @@ static param_export_t params[]={
 	{ "enable_sphere_check",    INT_PARAM, &sphere_enable},
 	{ "waiting_subs_daysno",    INT_PARAM, &waiting_subs_daysno},
 	{ "mix_dialog_presence",    INT_PARAM, &mix_dialog_presence},
-	{ "bla_presentity_spec",    STR_PARAM, &bla_presentity_spec_param},
+	{ "bla_presentity_spec",    STR_PARAM, &bla_presentity_spec_param.s},
 	{ "bla_fix_remote_target",  INT_PARAM, &fix_remote_target},
 	{ "notify_offline_body",    INT_PARAM, &notify_offline_body},
 	{ "end_sub_on_timeout",     INT_PARAM, &end_sub_on_timeout},
@@ -476,7 +476,7 @@ static void destroy(void)
 {
 	LM_NOTICE("destroy module ...\n");
 
-	if(subs_htable && pa_db)
+	if(subs_htable && !library_mode && child_init(process_no)==0)
 		timer_db_update(0, 0);
 
 	if(subs_htable)
@@ -783,6 +783,11 @@ static inline int mi_print_shtable_record(struct mi_node *rpl, subs_t* s)
 	p= int2str((unsigned long)s->version, &len);
 	attr = add_mi_attr(node, MI_DUP_VALUE, "version", 7, p, len);
 	if (attr==NULL) goto error;
+	if (s->sh_tag.len) {
+		attr = add_mi_attr(node, MI_DUP_VALUE, "sharing_tag", 11,
+			s->sh_tag.s, s->sh_tag.len);
+		if (attr==NULL) goto error;
+	}
 
 	node1 = add_mi_node_child(node, 0, "to_user", 7, s->to_user.s, s->to_user.len);
 	if (node1==NULL) goto error;

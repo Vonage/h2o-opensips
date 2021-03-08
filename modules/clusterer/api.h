@@ -49,7 +49,7 @@ typedef struct clusterer_node {
 } clusterer_node_t;
 
 enum clusterer_send_ret {
-	CLUSTERER_SEND_SUCCES = 0,
+	CLUSTERER_SEND_SUCCESS = 0,
 	CLUSTERER_CURR_DISABLED = 1,  /* current node disabled */
 	CLUSTERER_DEST_DOWN = -1,     /* destination node(s) already down or probing */
 	CLUSTERER_SEND_ERR = -2       /* error */
@@ -161,13 +161,13 @@ typedef void (*cl_event_cb_f)(enum clusterer_event ev, int node_id);
  * Register a capability(grouping of BIN packets/cluster events used to
  * achieve a certain functionality).
  *
- * @require_sync: 1 - if successful data sync is required in order for
- * this capability to be in the OK state, 0 - otherwise
+ * @startup_sync: require a sync on startup (1), or just start this cap
+ *                in the OK state (0)
  * @sync_cond: only sync with certain types of nodes
  *             (useful for federated usrloc)
  */
 typedef int (*register_capability_f)(str *cap, cl_packet_cb_f packet_cb,
-					cl_event_cb_f event_cb, int cluster_id, int require_sync,
+					cl_event_cb_f event_cb, int cluster_id, int startup_sync,
 					enum cl_node_match_op sync_cond);
 
 /*

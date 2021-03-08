@@ -358,6 +358,17 @@ static int fix_actions(struct action* a)
 					t->elem[1].type = SCRIPTVAR_ELEM_ST;
 				}
 				break;
+			case ASSERT_T:
+				if (t->elem[0].type!=EXPR_ST){
+					LM_CRIT("invalid subtype %d for assert (should be expr)\n",
+								t->elem[0].type);
+					ret = E_BUG;
+					goto error;
+				}
+				if (t->elem[0].u.data)
+					if ((ret=fix_expr((struct expr*)t->elem[0].u.data))<0)
+						return ret;
+				break;
 			case IF_T:
 				if (t->elem[0].type!=EXPR_ST){
 					LM_CRIT("invalid subtype %d for if (should be expr)\n",
@@ -1036,18 +1047,18 @@ inline static int comp_s2s(int op, str *s1, str *s2)
 			else ret = 0;
 			break;
 		case MATCH_OP:
-			if ( s2==NULL || s1->len == 0 ) return 0;
+			if ( s2==NULL ) return 0;
 			make_nt_copy( &cp1, s1);
 			ret=(regexec((regex_t*)s2, cp1.s, 0, 0, 0)==0);
 			break;
 		case NOTMATCH_OP:
-			if ( s2==NULL || s1->len == 0 ) return 0;
+			if ( s2==NULL ) return 0;
 			make_nt_copy( &cp1, s1);
 			ret=(regexec((regex_t*)s2, cp1.s, 0, 0, 0)!=0);
 			break;
 		case MATCHD_OP:
 		case NOTMATCHD_OP:
-			if ( s2->s==NULL || s1->len == 0 ) return 0;
+			if ( s2->s==NULL ) return 0;
 			re=(regex_t*)pkg_malloc(sizeof(regex_t));
 			if (re==0) {
 				LM_CRIT("pkg memory allocation failure\n");
@@ -1251,8 +1262,8 @@ inline static int comp_scriptvar(struct sip_msg *msg, int op, operand_t *left,
 		}
 		if(rvalue.flags&PV_VAL_NULL || lvalue.flags&PV_VAL_NULL ) {
 			if (rvalue.flags&PV_VAL_NULL && lvalue.flags&PV_VAL_NULL )
-				return (op==EQUAL_OP)?1:0;
-			return (op==DIFF_OP)?1:0;
+				return op==EQUAL_OP || op==MATCH_OP || op==MATCHD_OP;
+			return op==DIFF_OP || op==NOTMATCH_OP || op==NOTMATCHD_OP;
 		}
 
 		if(op==MATCH_OP||op==NOTMATCH_OP)
@@ -2113,18 +2124,22 @@ int is_script_async_func_used( char *name, int param_no)
 
 int run_startup_route(void)
 {
-	struct sip_msg req;
+	struct sip_msg *req;
+	int ret, old_route_type;
 
-	memset(&req, 0, sizeof(struct sip_msg));
-	req.first_line.type = SIP_REQUEST;
+	req = get_dummy_sip_msg();
+	if(req == NULL) {
+		LM_ERR("No more memory\n");
+		return -1;
+	}
 
-	req.first_line.u.request.method.s= "DUMMY";
-	req.first_line.u.request.method.len= 5;
-	req.first_line.u.request.uri.s= "sip:user@domain.com";
-	req.first_line.u.request.uri.len= 19;
-	req.rcv.src_ip.af = AF_INET;
-	req.rcv.dst_ip.af = AF_INET;
-
+	swap_route_type(old_route_type, STARTUP_ROUTE);
 	/* run the route */
-	return run_top_route( startup_rlist.a, &req);
+	ret = run_top_route( startup_rlist.a, req);
+	set_route_type(old_route_type);
+
+	/* clean whatever extra structures were added by script functions */
+	release_dummy_sip_msg(req);
+
+	return ret;
 }

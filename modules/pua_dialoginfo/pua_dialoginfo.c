@@ -88,6 +88,7 @@ static int osips_ps = 1;
 static int publish_on_trying = 0;
 static int nopublish_flag = -1;
 static char *nopublish_flag_str = 0;
+send_publish_t pua_send_publish = NULL;
 
 
 /** module functions */
@@ -518,7 +519,7 @@ static int mod_init(void)
 	pua_send_publish= pua.send_publish;
 
 	nopublish_flag = get_flag_id_by_name(FLAG_TYPE_MSG, nopublish_flag_str);
-	nopublish_flag = (nopublish_flag!=-1)?(1<<nopublish_flag):0;
+	nopublish_flag = (nopublish_flag>=0)?(1<<nopublish_flag):0;
 
 	if(!osips_ps)
 		evp = dialoginfo_process_body;

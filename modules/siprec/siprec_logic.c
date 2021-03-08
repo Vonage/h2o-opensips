@@ -170,7 +170,7 @@ unlock:
 int srec_register_callbacks(struct src_sess *sess)
 {
 	/* also, the b2b ref moves on the dialog */
-	if (srec_dlg.register_dlgcb(sess->dlg, DLGCB_TERMINATED|DLGCB_EXPIRED,
+	if (srec_dlg.register_dlgcb(sess->dlg, DLGCB_TERMINATED|DLGCB_EXPIRED|DLGCB_FAILED,
 			srec_dlg_end, sess, src_unref_session)){
 		LM_ERR("cannot register callback for dialog termination\n");
 		return -1;
@@ -217,7 +217,7 @@ static int srec_b2b_notify(struct sip_msg *msg, str *key, int type, void *param)
 	LM_DBG("received b2b reply with code %d\n", msg->REPLY_STATUS);
 
 	ret = 0;
-	/* check if the reply was successfully */
+	/* check if the reply was successful */
 	if (msg->REPLY_STATUS < 200) {
 		/* wait for a final reply */
 		return 0;
@@ -478,7 +478,7 @@ static void tm_update_recording(struct cell *t, int type, struct tmcb_params *ps
 		return;
 
 	tmp = (struct _tm_src_param *)*ps->param;
-	/* engage only on successfull calls */
+	/* engage only on successful calls */
 	SIPREC_LOCK(tmp->ss);
 	src_update_recording(ps->rpl, tmp->ss, tmp->part_no);
 	SIPREC_UNLOCK(tmp->ss);
@@ -486,17 +486,22 @@ static void tm_update_recording(struct cell *t, int type, struct tmcb_params *ps
 
 void tm_start_recording(struct cell *t, int type, struct tmcb_params *ps)
 {
+	str body;
 	struct src_sess *ss;
 
-	if (!is_invite(t) || ps->code < 200 || ps->code >= 300)
+	if (!is_invite(t) || ps->code >= 300)
+		return;
+
+	/* check if we have a reply with body */
+	if (get_body(ps->rpl, &body) != 0 || body.len==0)
 		return;
 
 	ss = (struct src_sess *)*ps->param;
-	/* engage only on successfull calls */
+	/* engage only on successful calls */
 	SIPREC_LOCK(ss);
 	/* if session has been started, do not start it again */
 	if (ss->flags & SIPREC_STARTED)
-		LM_WARN("Session %p (%s) already started!\n", ss, ss->uuid);
+		LM_DBG("Session %p (%s) already started!\n", ss, ss->uuid);
 	else if (src_start_recording(ps->rpl, ss) < 0)
 		LM_ERR("cannot start recording!\n");
 	SIPREC_UNLOCK(ss);

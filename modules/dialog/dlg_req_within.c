@@ -171,7 +171,8 @@ dlg_t * build_dialog_info(struct dlg_cell * cell, int dst_leg, int src_leg,char 
 	} else
 		cell->legs[dst_leg].last_gen_cseq++;
 
-	*reply_marker = DLG_PING_PENDING;
+	if (reply_marker)
+		*reply_marker = DLG_PING_PENDING;
 
 	td->loc_seq.value = cell->legs[dst_leg].last_gen_cseq -1;
 
@@ -235,7 +236,7 @@ static void dual_bye_event(struct dlg_cell* dlg, struct sip_msg *req,
 
 		/*destroy linkers */
 		destroy_linkers(dlg);
-		remove_dlg_prof_table(dlg,0,0);
+		remove_dlg_prof_table(dlg,is_active,0);
 
 		/* remove from timer */
 		ret = remove_dlg_timer(&dlg->tl);
@@ -270,6 +271,7 @@ static void dual_bye_event(struct dlg_cell* dlg, struct sip_msg *req,
 				else
 					context_destroy(CONTEXT_GLOBAL, *new_ctx);
 				current_processing_ctx = old_ctx;
+				release_dummy_sip_msg(fake_msg);
 			} /* no CB run in case of failure FIXME */
 		} else {
 			/* we should have the msg and context from upper levels */
@@ -583,7 +585,7 @@ error:
 
 int send_leg_msg(struct dlg_cell *dlg,str *method,int src_leg,int dst_leg,
 	str *hdrs,str *body,dlg_request_callback func,
-	void *param,dlg_release_func release,char *reply_marker)
+	void *param,dlg_release_func release,char *reply_marker, int no_ack)
 {
 	context_p old_ctx;
 	context_p *new_ctx;
@@ -617,7 +619,8 @@ int send_leg_msg(struct dlg_cell *dlg,str *method,int src_leg,int dst_leg,
 	if (push_new_processing_context( dlg, &old_ctx, &new_ctx, NULL)!=0)
 		return -1;
 
-	//dialog_info->T_flags=T_NO_AUTOACK_FLAG;
+	if (no_ack)
+		dialog_info->T_flags=T_NO_AUTOACK_FLAG;
 
 	result = d_tmb.t_request_within
 		(method,         /* method*/

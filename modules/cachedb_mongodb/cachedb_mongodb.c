@@ -18,6 +18,8 @@
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
  */
 
+#define _GNU_SOURCE
+
 #include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
@@ -32,6 +34,7 @@
 #include "../../error.h"
 #include "../../pt.h"
 #include "../../cachedb/cachedb.h"
+#include "../../ssl_init_tweaks.h"
 
 #include "cachedb_mongodb_dbase.h"
 #include "cachedb_mongodb_json.h"
@@ -144,12 +147,8 @@ static int child_init(int rank)
 	struct cachedb_url *it;
 	cachedb_con *con;
 
-	if(rank == PROC_MAIN || rank == PROC_TCP_MAIN) {
-		return 0;
-	}
-
 	for (it = mongodb_script_urls;it;it=it->next) {
-		LM_DBG("iterating through conns - [%.*s]\n",it->url.len,it->url.s);
+		LM_DBG("iterating through conns - [%s]\n", db_url_escape(&it->url));
 		con = mongo_con_init(&it->url);
 		if (con == NULL) {
 			LM_ERR("failed to open connection\n");

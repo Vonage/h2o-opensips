@@ -852,7 +852,7 @@ t_reply("404", "Use $rU not found");
 
    All parameters accept any kind of variables.
 
-   This function can be used from REQUEST_ROUTE, FAILURE_ROUTE.
+   This function can be used from REQUEST_ROUTE.
 
    Example 1.26. t_reply_with_body usage
 ...
@@ -1533,17 +1533,17 @@ Chapter 3. Frequently Asked Questions
 
    3.1.
 
-       What happened with old cancel_call() function
+   What happened with old cancel_call() function
 
-       The function was replace (as functionality) by
-       cancel_branch("a") - cancel all braches.
+   The function was replace (as functionality) by
+   cancel_branch("a") - cancel all braches.
 
    3.2.
 
-       How can I report a bug?
+   How can I report a bug?
 
-       Please follow the guidelines provided at:
-       https://github.com/OpenSIPS/opensips/issues.
+   Please follow the guidelines provided at:
+   https://github.com/OpenSIPS/opensips/issues.
 
 Chapter 4. Contributors
 
@@ -1552,28 +1552,28 @@ Chapter 4. Contributors
    Table 4.1. Top contributors by DevScore^(1), authored
    commits^(2) and lines added/removed^(3)
      Name DevScore Commits Lines ++ Lines --
-   1. Bogdan-Andrei Iancu (@bogdan-iancu) 1022 577 20556 15825
+   1. Bogdan-Andrei Iancu (@bogdan-iancu) 1030 584 20657 15858
    2. Jiri Kuthan (@jiriatipteldotorg) 545 198 18723 11167
    3. Jan Janak (@janakj) 160 76 6462 1840
    4. Andrei Pelinescu-Onciul 147 105 2447 1210
-   5. Razvan Crainea (@razvancrainea) 99 77 1670 414
-   6. Liviu Chircu (@liviuchircu) 77 55 1027 674
+   5. Razvan Crainea (@razvancrainea) 104 82 1677 418
+   6. Liviu Chircu (@liviuchircu) 81 59 1046 685
    7. Daniel-Constantin Mierla (@miconda) 43 37 322 166
    8. Anca Vamanu 38 19 778 651
    9. Vlad Paiu (@vladpaiu) 25 22 169 55
    10. Henning Westerholt (@henningw) 24 19 122 184
 
    All remaining contributors: Dan Pascu (@danpascu), Ovidiu Sas
-   (@ovidiusas), Juha Heinanen (@juha-h), Ionut Ionita
-   (@ionutrazvanionita), Maksym Sobolyev (@sobomax), Raphael
-   Coeffic, Vlad Patrascu (@rvlad-patrascu), Nils Ohlmeier, Klaus
-   Darilion, Andreas Granig, Elias Baixas, Marcus Hunger,
-   Christophe Sollet (@csollet), Jeffrey Magder, Ezequiel Lovelle,
-   Saúl Ibarra Corretgé (@saghul), Elena-Ramona Modroiu, John
-   Riordan, Julián Moreno Patiño, Andrei Dragus, Jesus Rodrigues,
+   (@ovidiusas), Vlad Patrascu (@rvlad-patrascu), Juha Heinanen
+   (@juha-h), Ionut Ionita (@ionutrazvanionita), Maksym Sobolyev
+   (@sobomax), Raphael Coeffic, Nils Ohlmeier, Klaus Darilion,
+   Andreas Granig, Elias Baixas, Marcus Hunger, Christophe Sollet
+   (@csollet), Jeffrey Magder, Ezequiel Lovelle (@lovelle), Saúl
+   Ibarra Corretgé (@saghul), Elena-Ramona Modroiu, John Riordan,
+   Julián Moreno Patiño, Andrei Dragus, Jesus Rodrigues,
    Konstantin Bokarius, Aron Podrigal (@ar45), Anonymous, Dusan
-   Klinec, Mark Dalby, Walter Doekes (@wdoekes), Alexey Vasilyev
-   (@vasilevalex), Nick Altmann (@nikbyte), Edson Gellert
+   Klinec (@ph4r05), Mark Dalby, Walter Doekes (@wdoekes), Alexey
+   Vasilyev (@vasilevalex), Nick Altmann (@nikbyte), Edson Gellert
    Schubert, Ingo Wolfsberger, Daniel Hsueh.
 
    (1) DevScore = author_commits + author_lines_added /
@@ -1596,27 +1596,27 @@ Chapter 4. Contributors
 
    Table 4.2. Most recently active contributors^(1) to this module
                       Name                   Commit Activity
-   1.  Razvan Crainea (@razvancrainea)     Jul 2010 - Sep 2019
-   2.  Bogdan-Andrei Iancu (@bogdan-iancu) Nov 2001 - Aug 2019
-   3.  Liviu Chircu (@liviuchircu)         Jan 2013 - May 2019
-   4.  Aron Podrigal (@ar45)               Nov 2018 - Nov 2018
-   5.  Alexey Vasilyev (@vasilevalex)      Sep 2018 - Sep 2018
-   6.  Vlad Patrascu (@rvlad-patrascu)     May 2017 - Jul 2018
-   7.  Vlad Paiu (@vladpaiu)               Jun 2011 - May 2016
-   8.  Ionut Ionita (@ionutrazvanionita)   Nov 2014 - Apr 2016
-   9.  Julián Moreno Patiño                Feb 2016 - Feb 2016
-   10. Nick Altmann (@nikbyte)             Jan 2016 - Jan 2016
+   1.  Bogdan-Andrei Iancu (@bogdan-iancu) Nov 2001 - Jan 2021
+   2.  Razvan Crainea (@razvancrainea)     Jul 2010 - Dec 2020
+   3.  Vlad Patrascu (@rvlad-patrascu)     May 2017 - Nov 2020
+   4.  Liviu Chircu (@liviuchircu)         Jan 2013 - Nov 2020
+   5.  Dan Pascu (@danpascu)               Feb 2006 - May 2019
+   6.  Aron Podrigal (@ar45)               Nov 2018 - Nov 2018
+   7.  Alexey Vasilyev (@vasilevalex)      Sep 2018 - Sep 2018
+   8.  Vlad Paiu (@vladpaiu)               Jun 2011 - May 2016
+   9.  Ionut Ionita (@ionutrazvanionita)   Nov 2014 - Apr 2016
+   10. Julián Moreno Patiño                Feb 2016 - Feb 2016
 
-   All remaining contributors: Ovidiu Sas (@ovidiusas), Dusan
-   Klinec, Ezequiel Lovelle, Walter Doekes (@wdoekes), Christophe
-   Sollet (@csollet), Maksym Sobolyev (@sobomax), Saúl Ibarra
-   Corretgé (@saghul), Anonymous, Mark Dalby, Anca Vamanu, Andrei
-   Dragus, John Riordan, Dan Pascu (@danpascu), Henning Westerholt
-   (@henningw), Klaus Darilion, Daniel-Constantin Mierla
-   (@miconda), Konstantin Bokarius, Edson Gellert Schubert, Jesus
-   Rodrigues, Marcus Hunger, Juha Heinanen (@juha-h), Jeffrey
-   Magder, Elias Baixas, Daniel Hsueh, Andreas Granig,
-   Elena-Ramona Modroiu, Ingo Wolfsberger, Andrei
+   All remaining contributors: Nick Altmann (@nikbyte), Ovidiu Sas
+   (@ovidiusas), Dusan Klinec (@ph4r05), Ezequiel Lovelle
+   (@lovelle), Walter Doekes (@wdoekes), Christophe Sollet
+   (@csollet), Maksym Sobolyev (@sobomax), Saúl Ibarra Corretgé
+   (@saghul), Anonymous, Mark Dalby, Anca Vamanu, Andrei Dragus,
+   John Riordan, Henning Westerholt (@henningw), Klaus Darilion,
+   Daniel-Constantin Mierla (@miconda), Konstantin Bokarius, Edson
+   Gellert Schubert, Jesus Rodrigues, Marcus Hunger, Juha Heinanen
+   (@juha-h), Jeffrey Magder, Elias Baixas, Daniel Hsueh, Andreas
+   Granig, Elena-Ramona Modroiu, Ingo Wolfsberger, Andrei
    Pelinescu-Onciul, Jan Janak (@janakj), Jiri Kuthan
    (@jiriatipteldotorg), Raphael Coeffic, Nils Ohlmeier.
 
@@ -1627,8 +1627,8 @@ Chapter 5. Documentation
 
 5.1. Contributors
 
-   Last edited by: Liviu Chircu (@liviuchircu), Razvan Crainea
-   (@razvancrainea), Alexey Vasilyev (@vasilevalex), Vlad Patrascu
+   Last edited by: Razvan Crainea (@razvancrainea), Liviu Chircu
+   (@liviuchircu), Alexey Vasilyev (@vasilevalex), Vlad Patrascu
    (@rvlad-patrascu), Bogdan-Andrei Iancu (@bogdan-iancu), Nick
    Altmann (@nikbyte), Ovidiu Sas (@ovidiusas), Vlad Paiu
    (@vladpaiu), Anca Vamanu, Henning Westerholt (@henningw), Klaus

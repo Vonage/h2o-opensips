@@ -46,7 +46,8 @@ CLUSTERER Module
 
               1.5.3. cluster_broadcast_req(cluster_id, msg[, tag])
 
-              1.5.4. cluster_check_addr(cluster_id, ip, addr_type)
+              1.5.4. cluster_check_addr(cluster_id, ip[,
+                      addr_type])
 
         1.6. Exported MI Functions
 
@@ -361,9 +362,11 @@ modparam("clusterer", "node_timeout", 10)
 
 1.4.10. seed_fallback_interval
 
-   The time in seconds to wait for a suitable donor node before
-   falling back to a "synced" state in case of a "seed" node. If
-   set to 0 the node is considered as already synced from startup.
+   Only relevant for "seed" nodes. The time, in seconds, to wait
+   for a suitable donor node before falling back to a "synced"
+   state, following a node restart or an MI cluster sync command.
+   If set to 0, the node is considered as already synced from
+   startup.
 
    Default value is “0”.
 
@@ -525,8 +528,8 @@ modparam("clusterer", "description_col", "description")
        provided.
 
    The function can return the following values:
-     * 1 - successfuly sent message to destination node or a valid
-       next hop
+     * 1 - successfully sent message to destination node or a
+       valid next hop
      * -1 - current node is disabled so sending is impossbile
      * -2 - destination node is not reachable through any path
        according to the discovered topology
@@ -570,8 +573,8 @@ route[rpl_resume] {
        must be a variable.
 
    The function can return the following values:
-     * 1 - successfuly sent message to destination node or a valid
-       next hop
+     * 1 - successfully sent message to destination node or a
+       valid next hop
      * -1 - current node is disabled so sending is impossbile
      * -2 - destination node is not reachable through any path
        according to the discovered topology
@@ -599,7 +602,7 @@ p(rcv_tag)");
    nodes in the specified cluster.
 
    The function can return the following values:
-     * 1 - successfuly sent message to at least one node;
+     * 1 - successfully sent message to at least one node;
      * -1 - current node is disabled so sending is impossbile;
      * -2 - all nodes in the cluster are unreachable according to
        the discovered topology;
@@ -617,12 +620,12 @@ p(rcv_tag)");
 cluster_broadcast_req("$var(cl_id)", "$var(share_data)");
 ...
 
-1.5.4.  cluster_check_addr(cluster_id, ip, addr_type)
+1.5.4.  cluster_check_addr(cluster_id, ip[, addr_type])
 
    This function checks whether the given IP address belongs to
    one of the nodes in the cluster.
 
-   The addr_type parameter can be set to in order to select the
+   The addr_type parameter can be set in order to select the
    address of the node that the comparison is made against, with
    the possible values of:
      * bin - node's BIN interface listener;
@@ -777,7 +780,7 @@ Cluster:: 2
 
    Lists the registered capabilities and their states.
 
-   Name: clusterer_list
+   Name: clusterer_list_cap
 
    Parameters:none
 
@@ -786,7 +789,7 @@ Cluster:: 2
                 _empty_line_
 
    Example 1.28. clusterer_list_cap usage
-$ ./opensipsctl fifo clusterer_list
+$ ./opensipsctl fifo clusterer_list_cap
 Cluster:: 1
         Capability:: dialog-dlg-repl State=Ok
         Capability:: usrloc-contact-repl State=not synced
@@ -986,7 +989,7 @@ typedef struct clusterer_node {
      * int node_id - the id of the destination node
 
    The function returns one of the following:
-     * CLUSTERER_SEND_SUCCES - successfuly sent packet to
+     * CLUSTERER_SEND_SUCCESS - successfully sent packet to
        destination node or a valid next hop
      * CLUSTERER_CURR_DISABLED - current node is disabled so
        sending is impossbile
@@ -1005,8 +1008,8 @@ typedef struct clusterer_node {
      * int cluster_id - the cluster id
 
    The function returns one of the following:
-     * CLUSTERER_SEND_SUCCES - successfuly sent packet to at least
-       one node
+     * CLUSTERER_SEND_SUCCESS - successfully sent packet to at
+       least one node
      * CLUSTERER_CURR_DISABLED - current node is disabled so
        sending is impossbile
      * CLUSTERER_DEST_DOWN - all nodes in the cluster are
@@ -1079,14 +1082,14 @@ Chapter 3. Contributors
    Table 3.1. Top contributors by DevScore^(1), authored
    commits^(2) and lines added/removed^(3)
      Name DevScore Commits Lines ++ Lines --
-   1. Vlad Patrascu (@rvlad-patrascu) 225 71 9118 4567
-   2. Eseanu Marius Cristian (@eseanucristian) 45 10 3142 534
-   3. Liviu Chircu (@liviuchircu) 41 28 575 405
+   1. Vlad Patrascu (@rvlad-patrascu) 227 73 9121 4570
+   2. Liviu Chircu (@liviuchircu) 45 32 614 434
+   3. Eseanu Marius Cristian (@eseanucristian) 45 10 3142 534
    4. Razvan Crainea (@razvancrainea) 20 14 308 132
-   5. Bogdan-Andrei Iancu (@bogdan-iancu) 8 6 59 49
+   5. Bogdan-Andrei Iancu (@bogdan-iancu) 9 7 59 55
    6. Ionel Cerghit (@ionel-cerghit) 8 2 250 212
-   7. Gohar Ahmed (@goharahmed) 3 1 6 5
-   8. Fabian Gast (@fgast) 3 1 1 1
+   7. Fabian Gast (@fgast) 4 2 3 3
+   8. Gohar Ahmed (@goharahmed) 3 1 6 5
 
    (1) DevScore = author_commits + author_lines_added /
    (project_lines_added / project_commits) + author_lines_deleted
@@ -1108,12 +1111,12 @@ Chapter 3. Contributors
 
    Table 3.2. Most recently active contributors^(1) to this module
                         Name                     Commit Activity
-   1. Bogdan-Andrei Iancu (@bogdan-iancu)      Apr 2016 - Sep 2019
-   2. Vlad Patrascu (@rvlad-patrascu)          Jul 2016 - Sep 2019
-   3. Razvan Crainea (@razvancrainea)          Nov 2015 - Sep 2019
-   4. Liviu Chircu (@liviuchircu)              Mar 2016 - Aug 2019
-   5. Gohar Ahmed (@goharahmed)                Mar 2019 - Mar 2019
-   6. Fabian Gast (@fgast)                     Nov 2018 - Nov 2018
+   1. Vlad Patrascu (@rvlad-patrascu)          Jul 2016 - Jan 2021
+   2. Fabian Gast (@fgast)                     Nov 2018 - Jul 2020
+   3. Liviu Chircu (@liviuchircu)              Mar 2016 - Jul 2020
+   4. Bogdan-Andrei Iancu (@bogdan-iancu)      Apr 2016 - Jun 2020
+   5. Razvan Crainea (@razvancrainea)          Nov 2015 - Sep 2019
+   6. Gohar Ahmed (@goharahmed)                Mar 2019 - Mar 2019
    7. Ionel Cerghit (@ionel-cerghit)           Dec 2016 - Dec 2016
    8. Eseanu Marius Cristian (@eseanucristian) Jul 2015 - Sep 2015
 
