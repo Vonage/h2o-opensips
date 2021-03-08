@@ -837,6 +837,7 @@ static struct tcp_connection* tcpconn_new(int sock, union sockaddr_union* su,
 	tcp_connections_no++;
 	return c;
 
+error:
 	lock_destroy(&c->write_lock);
 error0:
 	shm_free(c);
