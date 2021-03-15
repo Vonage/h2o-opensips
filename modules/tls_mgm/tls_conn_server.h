@@ -220,7 +220,7 @@ static void add_certificates( SSL* ssl, struct tls_data* data)
  * Wrapper around SSL_accept, returns -1 on error, 0 on success
  */
 static int tls_accept(struct tcp_connection *c, short *poll_events,
-	gen_lock_t *ssl_global_lock)
+	struct tls_mgm_binds *tls_api)
 {
 	int ret, err;
 	SSL *ssl;
@@ -241,7 +241,8 @@ static int tls_accept(struct tcp_connection *c, short *poll_events,
 #endif
 #endif
 	#ifndef NO_SSL_GLOBAL_LOCK
-	lock_get(ssl_global_lock);
+	if (tls_api)
+		tls_api->global_lock_get();
 	#endif
 	ret = SSL_accept(ssl);
 #if OPENSSL_VERSION_NUMBER < 0x10100000L
@@ -255,7 +256,8 @@ static int tls_accept(struct tcp_connection *c, short *poll_events,
 
 	if (ret > 0) {
 		#ifndef NO_SSL_GLOBAL_LOCK
-		lock_release(ssl_global_lock);
+		if (tls_api)
+			tls_api->global_lock_release();
 		#endif
 
 		LM_INFO("New TLS connection from %s:%d accepted\n",
@@ -296,7 +298,8 @@ static int tls_accept(struct tcp_connection *c, short *poll_events,
 		switch (err) {
 			case SSL_ERROR_ZERO_RETURN:
 				#ifndef NO_SSL_GLOBAL_LOCK
-				lock_release(ssl_global_lock);
+				if (tls_api)
+					tls_api->global_lock_release();
 				#endif
 
 				LM_INFO("TLS connection from %s:%d accept failed cleanly\n",
@@ -310,7 +313,8 @@ static int tls_accept(struct tcp_connection *c, short *poll_events,
 				return -1;
 			case SSL_ERROR_WANT_READ:
 				#ifndef NO_SSL_GLOBAL_LOCK
-				lock_release(ssl_global_lock);
+				if (tls_api)
+					tls_api->global_lock_release();
 				#endif
 
 				if (poll_events)
@@ -318,7 +322,8 @@ static int tls_accept(struct tcp_connection *c, short *poll_events,
 				return 0;
 			case SSL_ERROR_WANT_WRITE:
 				#ifndef NO_SSL_GLOBAL_LOCK
-				lock_release(ssl_global_lock);
+				if (tls_api)
+					tls_api->global_lock_release();
 				#endif
 
 				if (poll_events)
@@ -354,7 +359,8 @@ static int tls_accept(struct tcp_connection *c, short *poll_events,
 				}
 
 				#ifndef NO_SSL_GLOBAL_LOCK
-				lock_release(ssl_global_lock);
+				if (tls_api)
+					tls_api->global_lock_release();
 				#endif
 
 				return -1;
@@ -370,7 +376,7 @@ static int tls_accept(struct tcp_connection *c, short *poll_events,
  * wrapper around SSL_connect, returns 0 on success, -1 on error
  */
 static int tls_connect(struct tcp_connection *c, short *poll_events,
-	gen_lock_t *ssl_global_lock)
+	struct tls_mgm_binds *tls_api)
 {
 	int ret, err;
 	SSL *ssl;
@@ -386,13 +392,15 @@ static int tls_connect(struct tcp_connection *c, short *poll_events,
 	ssl = (SSL *) c->extra_data;
 
 	#ifndef NO_SSL_GLOBAL_LOCK
-	lock_get(ssl_global_lock);
+	if (tls_api)
+		tls_api->global_lock_get();
 	#endif
 
 	ret = SSL_connect(ssl);
 	if (ret > 0) {
 		#ifndef NO_SSL_GLOBAL_LOCK
-		lock_release(ssl_global_lock);
+		if (tls_api)
+			tls_api->global_lock_release();
 		#endif
 
 		LM_INFO("New TLS connection to %s:%d established\n",
@@ -434,7 +442,8 @@ static int tls_connect(struct tcp_connection *c, short *poll_events,
 		switch (err) {
 			case SSL_ERROR_ZERO_RETURN:
 			#ifndef NO_SSL_GLOBAL_LOCK
-			lock_release(ssl_global_lock);
+			if (tls_api)
+				tls_api->global_lock_release();
 			#endif
 
 				LM_INFO("New TLS connection to %s:%d failed cleanly\n",
@@ -447,7 +456,8 @@ static int tls_connect(struct tcp_connection *c, short *poll_events,
 				return -1;
 			case SSL_ERROR_WANT_READ:
 				#ifndef NO_SSL_GLOBAL_LOCK
-				lock_release(ssl_global_lock);
+				if (tls_api)
+					tls_api->global_lock_release();
 				#endif
 
 				if (poll_events)
@@ -455,7 +465,8 @@ static int tls_connect(struct tcp_connection *c, short *poll_events,
 				return 0;
 			case SSL_ERROR_WANT_WRITE:
 				#ifndef NO_SSL_GLOBAL_LOCK
-				lock_release(ssl_global_lock);
+				if (tls_api)
+					tls_api->global_lock_release();
 				#endif
 
 				if (poll_events)
@@ -486,7 +497,8 @@ static int tls_connect(struct tcp_connection *c, short *poll_events,
 				}
 
 				#ifndef NO_SSL_GLOBAL_LOCK
-				lock_release(ssl_global_lock);
+				if (tls_api)
+					tls_api->global_lock_release();
 				#endif
 
 				return -1;
@@ -497,7 +509,6 @@ static int tls_connect(struct tcp_connection *c, short *poll_events,
 	return -1;
 }
 
-
 /*
  * called before tls_read, the this function should attempt tls_accept or
  * tls_connect depending on the state of the connection, if this function
@@ -505,7 +516,7 @@ static int tls_connect(struct tcp_connection *c, short *poll_events,
  * call tcp_read
  */
 static inline int tls_fix_read_conn(struct tcp_connection *c,
-	gen_lock_t *ssl_global_lock)
+	struct tls_mgm_binds *tls_api)
 {
 	/*
 	* no lock acquired
@@ -524,11 +535,11 @@ static inline int tls_fix_read_conn(struct tcp_connection *c,
 	if ( c->proto_flags & F_TLS_DO_ACCEPT ) {
 		ret = tls_update_fd(c, c->fd);
 		if (!ret)
-			ret = tls_accept(c, NULL, ssl_global_lock);
+			ret = tls_accept(c, NULL, tls_api);
 	} else if ( c->proto_flags & F_TLS_DO_CONNECT ) {
 		ret = tls_update_fd(c, c->fd);
 		if (!ret)
-			ret = tls_connect(c, NULL, ssl_global_lock);
+			ret = tls_connect(c, NULL, tls_api);
 	}
 
 	lock_release(&c->write_lock);
@@ -541,7 +552,7 @@ static inline int tls_fix_read_conn(struct tcp_connection *c,
  * -1 on error, 0 when it would block
  */
 static int tls_write(struct tcp_connection *c, int fd, const void *buf,
-						size_t len, short *poll_events, gen_lock_t *ssl_global_lock)
+	size_t len, short *poll_events, struct tls_mgm_binds *tls_api)
 {
 	int             ret,
 					err;
@@ -553,13 +564,15 @@ static int tls_write(struct tcp_connection *c, int fd, const void *buf,
 	ssl = (SSL *) c->extra_data;
 
 	#ifndef NO_SSL_GLOBAL_LOCK
-	lock_get(ssl_global_lock);
+	if (tls_api)
+		tls_api->global_lock_get();
 	#endif
 
 	ret = SSL_write(ssl, buf, len);
 	if (ret > 0) {
 		#ifndef NO_SSL_GLOBAL_LOCK
-		lock_release(ssl_global_lock);
+		if (tls_api)
+			tls_api->global_lock_release();
 		#endif
 
 		LM_DBG("write was successful (%d bytes)\n", ret);
@@ -569,7 +582,8 @@ static int tls_write(struct tcp_connection *c, int fd, const void *buf,
 		switch (err) {
 		case SSL_ERROR_ZERO_RETURN:
 			#ifndef NO_SSL_GLOBAL_LOCK
-			lock_release(ssl_global_lock);
+			if (tls_api)
+				tls_api->global_lock_release();
 			#endif
 
 			LM_DBG("connection closed cleanly\n");
@@ -577,7 +591,8 @@ static int tls_write(struct tcp_connection *c, int fd, const void *buf,
 			return -1;
 		case SSL_ERROR_WANT_READ:
 			#ifndef NO_SSL_GLOBAL_LOCK
-			lock_release(ssl_global_lock);
+			if (tls_api)
+				tls_api->global_lock_release();
 			#endif
 
 			if (poll_events)
@@ -585,7 +600,8 @@ static int tls_write(struct tcp_connection *c, int fd, const void *buf,
 			return 0;
 		case SSL_ERROR_WANT_WRITE:
 			#ifndef NO_SSL_GLOBAL_LOCK
-			lock_release(ssl_global_lock);
+			if (tls_api)
+				tls_api->global_lock_release();
 			#endif
 
 			if (poll_events)
@@ -599,7 +615,8 @@ static int tls_write(struct tcp_connection *c, int fd, const void *buf,
 			tls_print_errstack();
 
 			#ifndef NO_SSL_GLOBAL_LOCK
-			lock_release(ssl_global_lock);
+			if (tls_api)
+				tls_api->global_lock_release();
 			#endif
 
 			return -1;
@@ -618,8 +635,7 @@ static int tls_write(struct tcp_connection *c, int fd, const void *buf,
  * fixme: probably does not work correctly
  */
 static inline int tls_blocking_write(struct tcp_connection *c, int fd, const char *buf,
-										size_t len, struct tls_mgm_binds *api,
-										gen_lock_t *ssl_global_lock)
+										size_t len, struct tls_mgm_binds *api)
 {
 	#define MAX_SSL_RETRIES 32
 	int             written, n;
@@ -644,15 +660,15 @@ again:
 	pf.events = 0;
 
 	if ( c->proto_flags & F_TLS_DO_ACCEPT ) {
-		if (tls_accept(c, &(pf.events), ssl_global_lock) < 0)
+		if (tls_accept(c, &(pf.events), api) < 0)
 			goto error;
 		timeout = api->get_handshake_timeout();
 	} else if ( c->proto_flags & F_TLS_DO_CONNECT ) {
-		if (tls_connect(c, &(pf.events), ssl_global_lock) < 0)
+		if (tls_connect(c, &(pf.events), api) < 0)
 			goto error;
 		timeout = api->get_handshake_timeout();
 	} else {
-		n = tls_write(c, fd, buf, len, &(pf.events), ssl_global_lock);
+		n = tls_write(c, fd, buf, len, &(pf.events), api);
 		timeout = api->get_send_timeout();
 	}
 
