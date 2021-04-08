@@ -645,6 +645,18 @@ void cancel_invite(struct sip_msg *cancel_msg,
 	 * timer; this helps with better coping with missed/lated provisional
 	 * replies in the context of cancelling the transaction
 	 */
+
+	 /* Handle a special case here, when there is only one PHONY
+	  * branch (not a real signaling branch, just a fake one
+	  * to force keeping the transaction alive) - if the case,
+	  * it means there are no other real signaling branches, 
+	  * so we can force a 487 reply on the PHONY branch, in order
+	  * to terminate the whole transaction on the spot */
+	if ( (t_invite->nr_of_outgoings-t_invite->first_branch)==1 &&
+	(t_invite->uac[t_invite->first_branch].flags & T_UAC_IS_PHONY) ) {
+		relay_reply( t_invite, FAKED_REPLY, t_invite->first_branch,
+			487, &cancel_bitmap);
+	}
 #if 0
 	/* internally cancel branches with no received reply */
 	for (i=t_invite->first_branch; i<t_invite->nr_of_outgoings; i++) {
@@ -805,6 +817,14 @@ int t_forward_nonack( struct cell *t, struct sip_msg* p_msg ,
 			if (t->uac[i].br_flags & tcp_no_new_conn_bflag)
 				tcp_no_new_conn = 1;
 
+			/* successfully sent out -> run callbacks */
+			if ( has_tran_tmcbs( t, TMCB_REQUEST_BUILT) ) {
+				set_extra_tmcb_params( &t->uac[i].request.buffer,
+					&t->uac[i].request.dst);
+				run_trans_callbacks( TMCB_REQUEST_BUILT, t,
+					p_msg, 0, 0);
+			}
+
 			do {
 				if (check_blacklists( t->uac[i].request.dst.proto,
 				&t->uac[i].request.dst.to,
@@ -813,6 +833,8 @@ int t_forward_nonack( struct cell *t, struct sip_msg* p_msg ,
 					LM_DBG("blocked by blacklists\n");
 					ser_error=E_IP_BLOCKED;
 				} else {
+					set_extra_tmcb_params( &t->uac[i].request.buffer,
+							&t->uac[i].request.dst);
 					run_trans_callbacks(TMCB_PRE_SEND_BUFFER, t, p_msg, 0, i);
 
 					if (SEND_BUFFER( &t->uac[i].request)==0) {
@@ -849,10 +871,10 @@ int t_forward_nonack( struct cell *t, struct sip_msg* p_msg ,
 			set_kr(REQ_FWDED);
 
 			/* successfully sent out -> run callbacks */
-			if ( has_tran_tmcbs( t, TMCB_REQUEST_BUILT|TMCB_MSG_SENT_OUT) ) {
+			if ( has_tran_tmcbs( t, TMCB_MSG_SENT_OUT) ) {
 				set_extra_tmcb_params( &t->uac[i].request.buffer,
 					&t->uac[i].request.dst);
-				run_trans_callbacks( TMCB_REQUEST_BUILT|TMCB_MSG_SENT_OUT, t,
+				run_trans_callbacks( TMCB_MSG_SENT_OUT, t,
 					p_msg, 0, 0);
 			}
 

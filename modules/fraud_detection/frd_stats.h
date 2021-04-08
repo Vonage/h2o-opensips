@@ -31,8 +31,8 @@
 #include "../../locking.h"
 #include "../../rw_locking.h"
 
-#define FRD_USER_HASH_SIZE 1000
-#define FRD_PREFIX_HASH_SIZE 10
+#define FRD_USER_HASH_SIZE 1024
+#define FRD_PREFIX_HASH_SIZE 8
 #define FRD_SECS_PER_WINDOW 60
 
 typedef struct {
@@ -40,7 +40,7 @@ typedef struct {
 	unsigned int total_calls;
 	unsigned int concurrent_calls;
 
-	str last_called_prefix;
+	str last_dial;
 	unsigned int seq_calls;
 
 	unsigned int last_matched_rule;
@@ -51,6 +51,7 @@ typedef struct {
 typedef struct _frd_hash_item {
 	gen_lock_t            lock;
 	frd_stats_t           stats;
+	unsigned int          interval_id; /* version of the current interval */
 } frd_stats_entry_t;
 
 int init_stats_table(void);

@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE table PUBLIC "-//opensips.org//DTD DBSchema V1.1//EN" 
-  "http://opensips.org/pub/opensips/dbschema/dtd/1.1/dbschema.dtd" [
+  "https://opensips.org/pub/opensips/dbschema/dtd/1.1/dbschema.dtd" [
 
 <!ENTITY % entities SYSTEM "entities.xml">
 %entities;
@@ -47,6 +47,7 @@
         <type>binary</type>
         <description>doc</description>
         <type db="mysql">LONGBLOB</type>
+        <pi_type db="mysql">DB_BLOB</pi_type>
     </column>
 
     <column id="doc_type">

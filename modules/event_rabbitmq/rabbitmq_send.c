@@ -368,13 +368,16 @@ static int rmq_reconnect(evi_reply_sock *sock)
 			LM_ERR("cannot create AMQP socket\n");
 			goto destroy_rmqp;
 		}
-		socket = amqp_socket_open(amqp_sock, sock->address.s, sock->port);
+		socket = amqp_socket_open_noblock(amqp_sock, sock->address.s,
+			sock->port, &conn_timeout_tv);
 		if (socket < 0) {
+			amqp_connection_close(rmqp->conn, AMQP_REPLY_SUCCESS);
 			LM_ERR("cannot open AMQP socket\n");
 			goto destroy_rmqp;
 		}
 #else
-		socket = amqp_open_socket(sock->address.s, sock->port);
+		socket = amqp_open_socket_noblock(sock->address.s, sock->port,
+			&conn_timeout_tv);
 		if (socket < 0) {
 			LM_ERR("cannot open AMQP socket\n");
 			goto destroy_rmqp;

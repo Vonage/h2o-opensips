@@ -132,6 +132,7 @@ struct module_exports exports = {
 	MOD_TYPE_DEFAULT,/* class of this module */
 	MODULE_VERSION,
 	DEFAULT_DLFLAGS,               /* dlopen flags */
+	0,				               /* load function */
 	NULL,            /* OpenSIPS module dependencies */
 	0,                             /* exported functions */
 	0,                             /* exported async functions */
@@ -141,6 +142,7 @@ struct module_exports exports = {
 	0,                             /* exported pseudo-variables */
 	0,			 				   /* exported transformations */
 	mi_procs,                      /* extra processes */
+	0,                             /* module pre-initialization function */
 	mi_mod_init,                   /* module initialization function */
 	(response_function) 0,         /* response handling function */
 	(destroy_function) mi_destroy, /* destroy function */
@@ -161,7 +163,7 @@ static int mi_mod_init(void)
 	LM_DBG("testing socket existence...\n");
 
 	if( mi_socket==NULL || *mi_socket == 0) {
-		LM_ERR("no DATAGRAM_ socket configured\n");
+		LM_ERR("missing modparam: 'socket_name'\n");
 		return -1;
 	}
 

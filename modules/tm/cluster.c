@@ -55,6 +55,9 @@ static void tm_repl_cancel(bin_packet_t *packet, str *buf, struct receive_info *
 	struct via_body via;
 	struct via_param branch;
 
+	/* cleanup the structure */
+	memset(&msg, 0, sizeof(msg));
+
 	msg.REQ_METHOD = METHOD_CANCEL;
 
 	msg.via1 = &via;
@@ -254,7 +257,7 @@ static bin_packet_t *tm_replicate_packet(struct sip_msg *msg, int type)
 
 	TM_BIN_PUSH(int, msg->rcv.proto, "proto");
 	TM_BIN_PUSH(str, &msg->rcv.bind_address->name, "dst host");
-	TM_BIN_PUSH(int, msg->rcv.dst_port, "dst port");
+	TM_BIN_PUSH(int, msg->rcv.bind_address->port_no, "dst port");
 	tmp.s = (char *)&msg->rcv.src_ip;
 	tmp.len = sizeof(struct ip_addr);
 	TM_BIN_PUSH(str, &tmp, "src host");
@@ -473,7 +476,7 @@ int tm_anycast_replicate(struct sip_msg *msg)
 		return -1;
 	}
 
-	if (msg->flags & FL_TM_REPLICATED) {
+	if (msg->msg_flags & FL_TM_REPLICATED) {
 		LM_DBG("message already replicated, shouldn't have got here\n");
 		return -2;
 	}
