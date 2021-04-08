@@ -141,6 +141,8 @@
 
 #include "test/unit_tests.h"
 
+#include "ssl_tweaks.h"
+
 /*
  * when enabled ("-T" cmdline param), OpenSIPS startup will unfold as follows:
  *   - enable debug mode
@@ -226,7 +228,7 @@ int tcpthreshold = 0;
 int sip_warning = 0;
 /* should localy-generated messages include server's signature? */
 int server_signature=1;
-/* Server header to be used when proxy generates request as UAS.
+/* Server header to be used when proxy generates a reply as UAS.
    Default is to use SERVER_HDR CRLF (assigned later).
 */
 str server_header = {SERVER_HDR,sizeof(SERVER_HDR)-1};
@@ -301,6 +303,9 @@ extern int yydebug;
 
 
 int is_main = 1; /* flag = is this the  "main" process? */
+
+/* flag = is this an initial, pre-daemon process ? */
+int is_pre_daemon = 1;
 
 char* pid_file = 0; /* filename as asked by user */
 char* pgid_file = 0;
@@ -672,9 +677,9 @@ static void sig_usr(int signo)
 					/* ignored*/
 					break;
 			case SIGCHLD:
-					pid = waitpid(-1, &status, WNOHANG);
-					LM_DBG("SIGCHLD received from %ld (status=%d), ignoring\n",
-						(long)pid,status);
+					while ( (pid = waitpid(-1, &status, WNOHANG))>0 )
+						LM_DBG("SIGCHLD received from %ld (status=%d),"
+							" ignoring\n", (long)pid,status);
 					break;
 			case SIGSEGV:
 					/* looks like we ate some spicy SIP */
@@ -820,19 +825,13 @@ static int main_loop(void)
 
 	if (testing_framework) {
 		if (init_child(1) < 0) {
-			LM_ERR("error in init_child for PROC_MAIN\n");
+			LM_ERR("error in init_child for First Worker\n");
 			report_failure_status();
 			goto error;
 		}
 
 		rc = run_unit_tests();
 		shutdown_opensips(rc);
-	}
-
-	if (init_child(PROC_MAIN) < 0) {
-		LM_ERR("error in init_child for PROC_MAIN\n");
-		report_failure_status();
-		goto error;
 	}
 
 	report_conditional_status( (!no_daemon_mode), 0);
@@ -1359,6 +1358,7 @@ try_again:
 		LM_ERR("failed to initialize SIP forking logic!\n");
 		goto error;
 	}
+
 
 	/* init modules */
 	if (init_modules() != 0) {

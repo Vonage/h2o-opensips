@@ -51,8 +51,6 @@
 #define DLG_PING_FAIL		(1<<2)
 
 extern struct tm_binds d_tmb;
-extern int dlg_enable_stats;
-extern stat_var * active_dlgs;
 
 typedef void (dlg_request_callback)(struct cell *t,int type,
 					struct tmcb_params* ps);
@@ -123,5 +121,5 @@ struct mi_root * mi_terminate_dlg(struct mi_root *cmd_tree, void *param );
 
 int send_leg_msg(struct dlg_cell *dlg,str *method,int src_leg,int dst_leg,
 		str *hdrs,str *body,dlg_request_callback func,void *param,
-		dlg_release_func release,char *reply_marker);
+		dlg_release_func release,char *reply_marker, int no_ack);
 #endif

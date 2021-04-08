@@ -87,6 +87,7 @@ extern struct socket_info *probing_sock;
 extern event_id_t dispatch_evi_id;
 extern ds_partition_t *default_partition;
 
+struct tm_binds tmb;
 struct fs_binds fs_api;
 
 #define dst_is_active(_dst) \
@@ -687,9 +688,10 @@ int init_ds_db(ds_partition_t *partition)
 		LM_ERR("failed to query table version\n");
 		return -1;
 	} else if (!supported_ds_version(_ds_table_version)) {
-		LM_ERR("invalid table version (found %d , required %d)\n"
-			"(use opensipsdbctl reinit)\n",
-			_ds_table_version, DS_TABLE_VERSION );
+		LM_ERR("invalid version for table '%.*s' (found %d, required %d)\n"
+		    "(use opensipsdbctl reinit)\n",
+		    partition->table_name.len, partition->table_name.s,
+		    _ds_table_version, DS_TABLE_VERSION );
 		return -1;
 	}
 
@@ -762,11 +764,15 @@ void ds_flusher_routine(unsigned int ticks, void* param)
 		val_set.type = DB_INT;
 		val_set.nul  = 0;
 
+		/* access ds data under reader's lock */
+		lock_start_read( partition->lock );
+
 		/* update the gateways */
 		if (partition->dbf.use_table(*partition->db_handle,
 					&partition->table_name) < 0) {
 			LM_ERR("cannot select table \"%.*s\"\n",
 				partition->table_name.len, partition->table_name.s);
+			lock_stop_read( partition->lock );
 			continue;
 		}
 		key_cmp[0] = &ds_set_id_col;
@@ -803,6 +809,8 @@ void ds_flusher_routine(unsigned int ticks, void* param)
 				}
 			}
 		}
+
+		lock_stop_read( partition->lock );
 	}
 
 	return;
@@ -1743,7 +1751,7 @@ int ds_select_dst(struct sip_msg *msg, ds_select_ctl_p ds_select_ctl,
 
 	if(rc == 0){
 		selected->chosen_count++;
-		LM_DBG("aici_intrat [%hu]\n", selected->chosen_count);
+		LM_DBG("chosen count: %hu\n", selected->chosen_count);
 	}
 
 
@@ -2028,48 +2036,49 @@ int ds_set_state(int group, str *address, int state, int type,
 					/* this destination switched state between 
 					 * disabled <> enabled -> update active info */
 					re_calculate_active_dsts( idx );
+
+				/* trigger the event */
+				if (dispatch_evi_id == EVI_ERROR) {
+					LM_ERR("event not registered %d\n", dispatch_evi_id);
+				} else if (evi_probe_event(dispatch_evi_id)) {
+					if (!(list = evi_get_params())) {
+						lock_stop_read( partition->lock );
+						return 0;
+					}
+					if (partition != default_partition
+					&& evi_param_add_str(list,&partition_str,&partition->name)){
+						LM_ERR("unable to add partition parameter\n");
+						evi_free_params(list);
+						lock_stop_read( partition->lock );
+						return 0;
+					}
+					if (evi_param_add_int(list, &group_str, &group)) {
+						LM_ERR("unable to add group parameter\n");
+						evi_free_params(list);
+						lock_stop_read( partition->lock );
+						return 0;
+					}
+					if (evi_param_add_str(list, &address_str, address)) {
+						LM_ERR("unable to add address parameter\n");
+						evi_free_params(list);
+						lock_stop_read( partition->lock );
+						return 0;
+					}
+					if (evi_param_add_str(list, &status_str,
+								type ? &inactive_str : &active_str)) {
+						LM_ERR("unable to add status parameter\n");
+						evi_free_params(list);
+						lock_stop_read( partition->lock );
+						return 0;
+					}
+
+					if (evi_raise_event(dispatch_evi_id, list)) {
+						LM_ERR("unable to send event\n");
+					}
+				}
+
 			}
 
-			if (dispatch_evi_id == EVI_ERROR) {
-				LM_ERR("event not registered %d\n", dispatch_evi_id);
-			} else if (evi_probe_event(dispatch_evi_id)) {
-				if (!(list = evi_get_params())) {
-					lock_stop_read( partition->lock );
-					return 0;
-				}
-				if (partition != default_partition
-				&& evi_param_add_str(list,&partition_str,&partition->name)){
-					LM_ERR("unable to add partition parameter\n");
-					evi_free_params(list);
-					lock_stop_read( partition->lock );
-					return 0;
-				}
-				if (evi_param_add_int(list, &group_str, &group)) {
-					LM_ERR("unable to add group parameter\n");
-					evi_free_params(list);
-					lock_stop_read( partition->lock );
-					return 0;
-				}
-				if (evi_param_add_str(list, &address_str, address)) {
-					LM_ERR("unable to add address parameter\n");
-					evi_free_params(list);
-					lock_stop_read( partition->lock );
-					return 0;
-				}
-				if (evi_param_add_str(list, &status_str,
-							type ? &inactive_str : &active_str)) {
-					LM_ERR("unable to add status parameter\n");
-					evi_free_params(list);
-					lock_stop_read( partition->lock );
-					return 0;
-				}
-
-				if (evi_raise_event(dispatch_evi_id, list)) {
-					LM_ERR("unable to send event\n");
-				}
-			} else {
-				LM_DBG("no event sent\n");
-			}
 			lock_stop_read( partition->lock );
 			return 0;
 		}
@@ -2328,11 +2337,6 @@ static void ds_options_callback( struct cell *t, int type,
 	return;
 }
 
-void shm_free_cb_param(void *param)
-{
-	shm_free(param);
-}
-
 /*
  * Timer for checking inactive destinations
  *
@@ -2400,8 +2404,9 @@ void ds_check_timer(unsigned int ticks, void* param)
 							dlg,
 							ds_options_callback,
 							(void*)cb_param,
-							shm_free_cb_param) < 0) {
+							osips_shm_free) < 0) {
 						LM_ERR("unable to execute dialog\n");
+						shm_free(cb_param);
 					}
 					tmb.free_dlg(dlg);
 				}

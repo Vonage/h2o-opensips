@@ -149,6 +149,7 @@ struct module_exports exports= {
 	MOD_TYPE_DEFAULT,/* class of this module */
 	MODULE_VERSION,
 	DEFAULT_DLFLAGS, /* dlopen flags */
+	0,				 /* load function */
 	&deps,           /* OpenSIPS module dependencies */
 	cmds,            /* exported functions */
 	0,               /* exported async functions */
@@ -158,6 +159,7 @@ struct module_exports exports= {
 	0,               /* exported pseudo-variables */
 	0,				 /* exported transformations */
 	0,               /* extra processes */
+	0,               /* module pre-initialization function */
 	mod_init,        /* module initialization function */
 	0,               /* reply processing function */
 	mod_destroy,
@@ -306,7 +308,7 @@ static int mod_init(void)
 static int child_init( int rank )
 {
 	/* init DB connection */
-	if ( rank<PROC_MAIN)
+	if ( rank<1 )
 		return 0;
 	if ( cc_connect_db(&db_url)!=0 ) {
 		LM_CRIT("cannot initialize database connection\n");

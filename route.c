@@ -290,14 +290,14 @@ static int fix_actions(struct action* a)
 						LM_ALERT("BUG in route() type %d/%d\n",
 								 t->elem[1].type, t->elem[2].type);
 						ret=E_BUG;
-						break;
+						goto error;
 					}
 					if (t->elem[1].u.number >= MAX_ACTION_ELEMS ||
 							t->elem[1].u.number <= 0) {
 						LM_ALERT("BUG in number of route parameters %d\n",
 								 (int)t->elem[1].u.number);
 						ret=E_BUG;
-						break;
+						goto error;
 					}
 				}
 				break;
@@ -357,6 +357,17 @@ static int fix_actions(struct action* a)
 					t->elem[1].u.data = (void*)model;
 					t->elem[1].type = SCRIPTVAR_ELEM_ST;
 				}
+				break;
+			case ASSERT_T:
+				if (t->elem[0].type!=EXPR_ST){
+					LM_CRIT("invalid subtype %d for assert (should be expr)\n",
+								t->elem[0].type);
+					ret = E_BUG;
+					goto error;
+				}
+				if (t->elem[0].u.data)
+					if ((ret=fix_expr((struct expr*)t->elem[0].u.data))<0)
+						return ret;
 				break;
 			case IF_T:
 				if (t->elem[0].type!=EXPR_ST){
@@ -978,7 +989,6 @@ inline static int comp_s2s(int op, str *s1, str *s2)
 	} while(0)
 	static str cp1 = {NULL,0};
 	static str cp2 = {NULL,0};
-	int n;
 	int rt;
 	int ret;
 	regex_t* re;
@@ -993,17 +1003,16 @@ inline static int comp_s2s(int op, str *s1, str *s2)
 	switch(op) {
 		case EQUAL_OP:
 			if ( s2->s==NULL || s1->len != s2->len) return 0;
-			ret=(strncasecmp(s1->s, s2->s, s2->len)==0);
+			ret=(str_strcasecmp(s1, s2)==0);
 		break;
 		case DIFF_OP:
 			if ( s2->s==NULL ) return 0;
 			if(s1->len != s2->len) return 1;
-			ret=(strncasecmp(s1->s, s2->s, s2->len)!=0);
+			ret=(str_strcasecmp(s1, s2)!=0);
 			break;
 		case GT_OP:
 			if ( s2->s==NULL ) return 0;
-			n = (s1->len>=s2->len)?s1->len:s2->len;
-			rt = strncasecmp(s1->s,s2->s, n);
+			rt = str_strcasecmp(s1, s2);
 			if (rt>0)
 				ret = 1;
 			else if(rt==0 && s1->len>s2->len)
@@ -1012,8 +1021,7 @@ inline static int comp_s2s(int op, str *s1, str *s2)
 			break;
 		case GTE_OP:
 			if ( s2->s==NULL ) return 0;
-			n = (s1->len>=s2->len)?s1->len:s2->len;
-			rt = strncasecmp(s1->s,s2->s, n);
+			rt = str_strcasecmp(s1, s2);
 			if (rt>0)
 				ret = 1;
 			else if(rt==0 && s1->len>=s2->len)
@@ -1022,8 +1030,7 @@ inline static int comp_s2s(int op, str *s1, str *s2)
 			break;
 		case LT_OP:
 			if ( s2->s==NULL ) return 0;
-			n = (s1->len>=s2->len)?s1->len:s2->len;
-			rt = strncasecmp(s1->s,s2->s, n);
+			rt = str_strcasecmp(s1, s2);
 			if (rt<0)
 				ret = 1;
 			else if(rt==0 && s1->len<s2->len)
@@ -1032,8 +1039,7 @@ inline static int comp_s2s(int op, str *s1, str *s2)
 			break;
 		case LTE_OP:
 			if ( s2->s==NULL ) return 0;
-			n = (s1->len>=s2->len)?s1->len:s2->len;
-			rt = strncasecmp(s1->s,s2->s, n);
+			rt = str_strcasecmp(s1, s2);
 			if (rt<0)
 				ret = 1;
 			else if(rt==0 && s1->len<=s2->len)
@@ -1041,18 +1047,18 @@ inline static int comp_s2s(int op, str *s1, str *s2)
 			else ret = 0;
 			break;
 		case MATCH_OP:
-			if ( s2==NULL || s1->len == 0 ) return 0;
+			if ( s2==NULL ) return 0;
 			make_nt_copy( &cp1, s1);
 			ret=(regexec((regex_t*)s2, cp1.s, 0, 0, 0)==0);
 			break;
 		case NOTMATCH_OP:
-			if ( s2==NULL || s1->len == 0 ) return 0;
+			if ( s2==NULL ) return 0;
 			make_nt_copy( &cp1, s1);
 			ret=(regexec((regex_t*)s2, cp1.s, 0, 0, 0)!=0);
 			break;
 		case MATCHD_OP:
 		case NOTMATCHD_OP:
-			if ( s2->s==NULL || s1->len == 0 ) return 0;
+			if ( s2->s==NULL ) return 0;
 			re=(regex_t*)pkg_malloc(sizeof(regex_t));
 			if (re==0) {
 				LM_CRIT("pkg memory allocation failure\n");
@@ -1256,8 +1262,8 @@ inline static int comp_scriptvar(struct sip_msg *msg, int op, operand_t *left,
 		}
 		if(rvalue.flags&PV_VAL_NULL || lvalue.flags&PV_VAL_NULL ) {
 			if (rvalue.flags&PV_VAL_NULL && lvalue.flags&PV_VAL_NULL )
-				return (op==EQUAL_OP)?1:0;
-			return (op==DIFF_OP)?1:0;
+				return op==EQUAL_OP || op==MATCH_OP || op==MATCHD_OP;
+			return op==DIFF_OP || op==NOTMATCH_OP || op==NOTMATCHD_OP;
 		}
 
 		if(op==MATCH_OP||op==NOTMATCH_OP)
@@ -2119,6 +2125,7 @@ int is_script_async_func_used( char *name, int param_no)
 int run_startup_route(void)
 {
 	struct sip_msg req;
+	int ret;
 
 	memset(&req, 0, sizeof(struct sip_msg));
 	req.first_line.type = SIP_REQUEST;
@@ -2131,5 +2138,8 @@ int run_startup_route(void)
 	req.rcv.dst_ip.af = AF_INET;
 
 	/* run the route */
-	return run_top_route( startup_rlist.a, &req);
+	ret = run_top_route( startup_rlist.a, &req);
+	free_sip_msg( &req );
+
+	return ret;
 }

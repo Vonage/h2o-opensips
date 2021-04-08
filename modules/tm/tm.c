@@ -369,6 +369,7 @@ struct module_exports exports= {
 	MOD_TYPE_DEFAULT,/* class of this module */
 	MODULE_VERSION,
 	DEFAULT_DLFLAGS, /* dlopen flags */
+	0,				 /* load function */
 	&deps,           /* OpenSIPS module dependencies */
 	cmds,      /* exported functions */
 	NULL,      /* exported async functions */
@@ -378,6 +379,7 @@ struct module_exports exports= {
 	mod_items, /* exported pseudo-variables */
 	0,		   /* exported transformations */
 	0,         /* extra processes */
+	0,         /* module pre-initialization function */
 	mod_init,  /* module initialization function */
 	(response_function) reply_received,
 	(destroy_function) tm_shutdown,
@@ -705,6 +707,7 @@ int load_tm( struct tm_binds *tmb)
 	/* reply functions */
 	tmb->t_reply = (treply_f)w_t_reply;
 	tmb->t_reply_with_body = t_reply_with_body;
+	tmb->t_gen_totag = t_gen_totag;
 
 	/* transaction location/status functions */
 	tmb->t_newtran = w_t_newtran;
@@ -756,7 +759,7 @@ int load_tm( struct tm_binds *tmb)
 }
 
 
-static int do_t_cleanup( struct sip_msg *foo, void *bar)
+static int do_t_cleanup( struct sip_msg *req, void *bar)
 {
 	struct cell *t;
 
@@ -772,12 +775,18 @@ static int do_t_cleanup( struct sip_msg *foo, void *bar)
 
 	reset_e2eack_t();
 
-	if ( (t=get_t())!=NULL && t!=T_UNDEFINED &&   /* we have a transaction */
-	/* with an UAS request not yet updated from script msg */
-	t->uas.request && (t->uas.request->msg_flags & FL_SHM_UPDATED)==0 )
-		update_cloned_msg_from_msg( t->uas.request, foo);
+	if ( (t=get_t())!=NULL && t!=T_UNDEFINED && /* we have a transaction */
+	t->uas.request && req->REQ_METHOD==t->uas.request->REQ_METHOD) {
+		/* check the UAS request not yet updated from script msg */
+		LOCK_REPLIES(t);
+		if (t->uas.request->msg_flags & FL_SHM_UPDATED)
+			LM_DBG("transaction %p already updated! Skipping update!\n", t);
+		else
+			update_cloned_msg_from_msg( t->uas.request, req);
+		UNLOCK_REPLIES(t);
+	}
 
-	return t_unref(foo) == 0 ? SCB_DROP_MSG : SCB_RUN_ALL;
+	return t_unref(req) == 0 ? SCB_DROP_MSG : SCB_RUN_ALL;
 }
 
 
@@ -1593,8 +1602,8 @@ static int w_t_new_request(struct sip_msg* msg, char *p_method,
 		}
 		LM_DBG("setting CTX AVP to <%.*s>\n", ctx.s.len, ctx.s.s);
 		avp_list = set_avp_list( &dlg.avps );
-		if (!add_avp( AVP_VAL_STR, uac_ctx_avp_id, ctx))
-			LM_ERR("failed to add ctx AVP, ignorring...\n");
+		if (add_avp( AVP_VAL_STR, uac_ctx_avp_id, ctx) < 0)
+			LM_ERR("failed to add ctx AVP, ignoring...\n");
 		set_avp_list( avp_list );
 	}
 
@@ -1666,6 +1675,7 @@ static int w_t_inject_branches(struct sip_msg* msg, char *s_flags)
 	if (!is_local) {
 		UNLOCK_REPLIES(t);
 		UNREF(t);
+		set_t(NULL);
 	}
 
 	return rc;
@@ -1735,8 +1745,7 @@ static int pv_get_tm_reply_code(struct sip_msg *msg, pv_param_t *param,
 		return -1;
 
 	/* first get the transaction */
-	if (t_check( msg , 0 )==-1) return -1;
-	if ( (t=get_t())==0) {
+	if (!(t = get_t()) || t == T_UNDEFINED) {
 		/* no T */
 		code = 0;
 	} else {
@@ -1783,8 +1792,7 @@ static int pv_get_tm_ruri(struct sip_msg *msg, pv_param_t *param,
 		return -1;
 
 	/* first get the transaction */
-	if (t_check( msg , 0 )==-1) return -1;
-	if ( (t=get_t())==0) {
+	if (!(t = get_t()) || t == T_UNDEFINED) {
 		/* no T */
 		if (msg!=NULL&&msg!=FAKED_REPLY && msg->first_line.type==SIP_REQUEST){
 			res->rs = *GET_RURI(msg);

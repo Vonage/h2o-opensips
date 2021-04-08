@@ -55,7 +55,7 @@ gen_lock_t * rl_lock;
 static double * rl_load_value;     /* actual load, used by PIPE_ALGO_FEEDBACK */
 static double * pid_kp, * pid_ki, * pid_kd, * pid_setpoint; /* PID tuning params */
 static int * drop_rate;         /* updated by PIPE_ALGO_FEEDBACK */
-static int *rl_feedback_limit;
+int *rl_feedback_limit;
 
 int * rl_network_load;	/* network load */
 int * rl_network_count;	/* flag for counting network algo users */
@@ -185,7 +185,8 @@ struct module_exports exports= {
 	MOD_TYPE_DEFAULT,/* class of this module */
 	MODULE_VERSION,
 	DEFAULT_DLFLAGS,	/* dlopen flags */
-	&deps,            /* OpenSIPS module dependencies */
+	0,					/* load function */
+	&deps,				/* OpenSIPS module dependencies */
 	cmds,
 	NULL,
 	params,
@@ -194,6 +195,7 @@ struct module_exports exports= {
 	mod_items,			/* exported pseudo-variables */
 	0,					/* exported transformations */
 	0,					/* extra processes */
+	0,					/* module pre-initialization function */
 	mod_init,			/* module initialization function */
 	0,
 	mod_destroy,		/* module exit function */
@@ -448,9 +450,6 @@ void mod_destroy(void)
 	RL_SHM_FREE(pid_setpoint);
 	RL_SHM_FREE(drop_rate);
 	RL_SHM_FREE(rl_feedback_limit);
-
-	if (db_url.s && db_url.len)
-		destroy_cachedb();
 }
 
 
@@ -580,9 +579,9 @@ int rl_pipe_check(rl_pipe_t *pipe)
 		case PIPE_ALGO_RED:
 			if (!pipe->load)
 				return 1;
-			return counter % pipe->load ? -1 : 1;
+			return (counter % pipe->load ? -1 : 1);
 		case PIPE_ALGO_NETWORK:
-			return pipe->load;
+			return (pipe->load ? pipe->load : 1);
 		case PIPE_ALGO_FEEDBACK:
 			return (hash[counter % 100] < *drop_rate) ? -1 : 1;
 		case PIPE_ALGO_HISTORY:

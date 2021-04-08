@@ -43,11 +43,14 @@ struct process_table *pt=0;
 /* variable keeping the number of created processes READONLY!! */
 unsigned int counted_processes = 0;
 
-
-int init_multi_proc_support(void)
+/* counts the number of processes known by OpenSIPS at startup.
+ * Note that the number of processes might change during init, if one of the
+ * module decides that it will no longer use a process (ex; rtpproxy timeout
+ * process)
+ */
+int count_child_processes(void)
 {
-	unsigned short proc_no;
-	unsigned int i;
+	unsigned int proc_no;
 
 	proc_no = 0;
 
@@ -58,13 +61,28 @@ int init_multi_proc_support(void)
 	/* attendent */
 	proc_no++;
 
-	/* info packet UDP receivers */
-
 	/* timer processes */
 	proc_no += 3 /* timer keeper + timer trigger + dedicated */;
 
 	/* count the processes requested by modules */
 	proc_no += count_module_procs();
+
+#ifdef UNIT_TESTS
+#include "mem/test/test_hp_malloc.h"
+	if (testing_framework)
+		proc_no += TEST_MALLOC_PROCS - 1;
+#endif
+
+	return proc_no;
+}
+
+
+int init_multi_proc_support(void)
+{
+	unsigned short proc_no;
+	unsigned int i;
+
+	proc_no = count_child_processes();
 
 	/* allocate the PID table */
 	pt = shm_malloc(sizeof(struct process_table)*proc_no);

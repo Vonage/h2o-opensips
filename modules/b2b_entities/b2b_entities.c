@@ -70,6 +70,8 @@ static int b2b_update_period = 100;
 int uac_auth_loaded;
 str b2b_key_prefix = str_init("B2B");
 int b2be_db_mode = WRITE_BACK;
+b2b_table server_htable = NULL;
+b2b_table client_htable = NULL;
 
 #define DB_COLS_NO  26
 
@@ -125,6 +127,7 @@ struct module_exports exports= {
 	MOD_TYPE_DEFAULT,               /* class of this module */
 	MODULE_VERSION,                 /* module version */
 	DEFAULT_DLFLAGS,                /* dlopen flags */
+	0,				                /* load function */
 	&deps,                          /* OpenSIPS module dependencies */
 	cmds,                           /* exported functions */
 	NULL,                           /* exported async functions */
@@ -134,6 +137,7 @@ struct module_exports exports= {
 	0,                              /* exported pseudo-variables */
 	0,								/* exported transformations */
 	0,                              /* extra processes */
+	0,                              /* module pre-initialization function */
 	mod_init,                       /* module initialization function */
 	(response_function) 0,          /* response handling function */
 	(destroy_function) mod_destroy, /* destroy function */
@@ -199,9 +203,12 @@ static int mod_init(void)
 		return -1;
 	}
 	memset(&b2be_dbf, 0, sizeof(db_func_t));
+
+	if(b2be_db_mode)
+		init_db_url(db_url, 1);
+
 	if(b2be_db_mode && db_url.s)
 	{
-		db_url.len = strlen(db_url.s);
 		b2be_dbtable.len = strlen(b2be_dbtable.s);
 
 		/* binding to database module  */
@@ -347,10 +354,14 @@ static int child_init(int rank)
 /** Module destroy function */
 static void mod_destroy(void)
 {
-	if(b2be_db ) {
-		if(b2be_db_mode==WRITE_BACK)
+	if (b2be_dbf.init && b2be_db_mode==WRITE_BACK) {
+		b2be_db = b2be_dbf.init(&db_url);
+		if(!b2be_db) {
+			LM_ERR("connecting to database failed, unable to flush\n");
+		} else {
 			b2b_entities_dump(1);
-		b2be_dbf.close(b2be_db);
+			b2be_dbf.close(b2be_db);
+		}
 	}
 	destroy_b2b_htables();
 }

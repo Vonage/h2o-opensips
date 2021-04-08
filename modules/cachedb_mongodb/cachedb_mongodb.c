@@ -18,6 +18,8 @@
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
  */
 
+#define _GNU_SOURCE
+
 #include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
@@ -32,6 +34,7 @@
 #include "../../error.h"
 #include "../../pt.h"
 #include "../../cachedb/cachedb.h"
+#include "../../ssl_init_tweaks.h"
 
 #include "cachedb_mongodb_dbase.h"
 #include "cachedb_mongodb_json.h"
@@ -80,6 +83,7 @@ struct module_exports exports= {
 	MOD_TYPE_CACHEDB,/* class of this module */
 	MODULE_VERSION,
 	DEFAULT_DLFLAGS,			/* dlopen flags */
+	0,							/* load function */
 	&deps,            /* OpenSIPS module dependencies */
 	0,						/* exported functions */
 	0,						/* exported async functions */
@@ -89,6 +93,7 @@ struct module_exports exports= {
 	0,							/* exported pseudo-variables */
 	0,							/* exported transformations */
 	0,							/* extra processes */
+	0,							/* module pre-initialization function */
 	mod_init,					/* module initialization function */
 	(response_function) 0,      /* response handling function */
 	(destroy_function)destroy,	/* destroy function */
@@ -116,6 +121,7 @@ static int mod_init(void)
 	cde.cdb_func.get_counter = mongo_con_get_counter;
 	cde.cdb_func.set = mongo_con_set;
 	cde.cdb_func.remove = mongo_con_remove;
+	cde.cdb_func._remove = _mongo_con_remove;
 	cde.cdb_func.add = mongo_con_add;
 	cde.cdb_func.sub = mongo_con_sub;
 	cde.cdb_func.query = mongo_con_query;
@@ -140,10 +146,6 @@ static int child_init(int rank)
 {
 	struct cachedb_url *it;
 	cachedb_con *con;
-
-	if(rank == PROC_MAIN || rank == PROC_TCP_MAIN) {
-		return 0;
-	}
 
 	for (it = mongodb_script_urls;it;it=it->next) {
 		LM_DBG("iterating through conns - [%.*s]\n",it->url.len,it->url.s);

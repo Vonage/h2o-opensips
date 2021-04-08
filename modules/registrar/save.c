@@ -434,6 +434,8 @@ static inline int update_contacts(struct sip_msg* _m, urecord_t* _r,
 				LM_ERR("failed to insert contact\n");
 				goto error;
 			}
+
+			num++;
 		} else {
 			/* Contact found */
 			if (e == 0) {
@@ -932,6 +934,8 @@ int _remove(struct sip_msg *msg, char *udomain, char *aor_gp, char *contact_gp,
 		LM_ERR("failed to extract Address Of Record\n");
 		return E_BAD_URI;
 	}
+
+	memset( &delete_nh_he, 0, sizeof(struct hostent));
 
 	ul.lock_udomain((udomain_t *)udomain, &aor_user);
 

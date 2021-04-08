@@ -58,15 +58,10 @@ extern str concalls_thresh_crit_col;
 extern str seqcalls_thresh_warn_col;
 extern str seqcalls_thresh_crit_col;
 
-#define DEF_PARAM_STR_NAME(pname, strname)\
-	static str pname ## _name = str_init(strname)
-
-DEF_PARAM_STR_NAME(cpm, "calls per minute");
-DEF_PARAM_STR_NAME(total_calls, "total calls");
-DEF_PARAM_STR_NAME(concurrent_calls, "concurrent calls");
-DEF_PARAM_STR_NAME(seq_calls, "sequential calls");
-#undef DEF_PARAM_STR_NAME
-
+static str cpm_name = str_init("calls per minute");
+static str total_calls_name = str_init("total calls");
+static str concurrent_calls_name = str_init("concurrent calls");
+static str seq_calls_name = str_init("sequential calls");
 
 dr_head_p *dr_head;
 struct dr_binds drb;
@@ -139,6 +134,7 @@ struct module_exports exports= {
 	MOD_TYPE_DEFAULT,
 	MODULE_VERSION,
 	DEFAULT_DLFLAGS,            /* dlopen flags */
+	0,				            /* load function */
 	&deps,
 	cmds,                       /* exported functions */
 	0,                          /* exported async functions */
@@ -148,6 +144,7 @@ struct module_exports exports= {
 	0,                          /* exported pseudo-variables */
 	0,			 				/* exported transformations */
 	0,                          /* extra processes */
+	0,                          /* module pre-initialization function */
 	mod_init,                   /* module initialization function */
 	(response_function) 0,      /* response handling function */
 	(destroy_function)destroy,  /* destroy function */
@@ -221,8 +218,10 @@ static int mod_init(void)
 	*dr_head = NULL;
 
 	set_lengths();
-	if (init_stats_table() != 0)
+	if (init_stats_table() != 0) {
+		LM_ERR("failed to init fraud stats table\n");
 		return -1;
+	}
 
 	/* Check if table version is ok */
 	frd_init_db();
@@ -278,8 +277,7 @@ static int check_fraud(struct sip_msg *msg, char *_user, char *_number, char *_p
 	str user, number;
 	unsigned int pid;
 	frd_dlg_param *param;
-	extern unsigned int frd_data_rev;
-	int rc = rc_ok_thr;
+	int rc = rc_ok_thr, itv_reset = 0;
 
 	if (*dr_head == NULL) {
 		/* No data, probably still loading */
@@ -348,23 +346,24 @@ static int check_fraud(struct sip_msg *msg, char *_user, char *_number, char *_p
 		se->stats.total_calls = 0;
 		se->stats.concurrent_calls = 0;
 		se->stats.seq_calls = 0;
+		se->interval_id++;
+		itv_reset = 1;
 	}
 
 	/* Update the stats */
 
 	lock_get(frd_seq_calls_lock);
-	if (se->stats.last_called_prefix.len == matched_len &&
-			memcmp(se->stats.last_called_prefix.s, number.s, matched_len) == 0) {
-
+	if (str_match(&se->stats.last_dial, &number)) {
 		/* We have called the same number last time */
 		++se->stats.seq_calls;
-	}
-	else {
-		if (shm_str_extend(&se->stats.last_called_prefix, matched_len) != 0) {
+	} else {
+		if (shm_str_sync(&se->stats.last_dial, &number) != 0) {
+			lock_release(frd_seq_calls_lock);
 			LM_ERR("oom\n");
-			return rc_error;
+			rc = rc_error;
+			goto out;
 		}
-		memcpy(se->stats.last_called_prefix.s, number.s, matched_len);
+
 		se->stats.seq_calls = 1;
 	}
 	lock_release(frd_seq_calls_lock);
@@ -373,13 +372,12 @@ static int check_fraud(struct sip_msg *msg, char *_user, char *_number, char *_p
 	++se->stats.total_calls;
 
 	/* Calls per FRD_SECS_PER_WINDOW */
-	if (nowt - se->stats.last_matched_time >= 2 * FRD_SECS_PER_WINDOW) {
+	if (nowt - se->stats.last_matched_time >= 2 * FRD_SECS_PER_WINDOW || itv_reset) {
 		/* outside the range of t0 + 2*WINDOW_SIZE; we can't use any of the
 		 * data since they are too old */
 		se->stats.cpm = 0;
 		memset(se->stats.calls_window, 0,
 				sizeof(unsigned short) * FRD_SECS_PER_WINDOW);
-		se->stats.calls_window[nowt % FRD_SECS_PER_WINDOW] = 1;
 		se->stats.last_matched_time = nowt;
 	}
 	else if (nowt - se->stats.last_matched_time >= FRD_SECS_PER_WINDOW) {
@@ -398,14 +396,14 @@ static int check_fraud(struct sip_msg *msg, char *_user, char *_number, char *_p
 			se->stats.cpm -= se->stats.calls_window[i];
 			se->stats.calls_window[i] = 0;
 		}
-		se->stats.calls_window[nowt%FRD_SECS_PER_WINDOW]++;
 	} else {
 		/* less than t0 + WINDOW_SIZE; all we need to do is to increase
 		 * the number of calls for nowt */
-		se->stats.calls_window[nowt%FRD_SECS_PER_WINDOW]++;
 	}
 
 	++se->stats.cpm;
+	se->stats.calls_window[nowt % FRD_SECS_PER_WINDOW]++;
+
 	++se->stats.concurrent_calls;
 
 	/* Check the thresholds */
@@ -413,7 +411,7 @@ static int check_fraud(struct sip_msg *msg, char *_user, char *_number, char *_p
 	frd_thresholds_t *thr = (frd_thresholds_t*)rule->attrs.s;
 
 #define CHECK_AND_RAISE(pname, type) \
-	(se->stats.pname >= thr->pname ## _thr.type) { \
+	(thr->pname ## _thr.type && se->stats.pname >= thr->pname ## _thr.type) { \
 		raise_ ## type ## _event(&pname ## _name, &se->stats.pname,\
 				&thr->pname ## _thr.type, &user, &number, &rule->id);\
 		rc = rc_ ## type ## _thr;\
@@ -451,13 +449,15 @@ static int check_fraud(struct sip_msg *msg, char *_user, char *_number, char *_p
 		LM_ERR("no more shm memory\n");
 		rc = rc_error;
 	} else if (shm_str_dup(&param->number, &number) == 0) {
-		param->stats = se;
-		param->thr = thr;
-		param->user = shm_user;
+		param->stats = se;        /* safe to ref, only freed @ shutdown */
+		param->user = shm_user;   /* safe to ref, only freed @ shutdown */
 		param->ruleid = rule->id;
-		param->data_rev = frd_data_rev;
 
-		if (dlgb.register_dlgcb(dlgc, DLGCB_TERMINATED|DLGCB_FAILED|DLGCB_EXPIRED,
+		param->calldur_warn = thr->call_duration_thr.warning;
+		param->calldur_crit = thr->call_duration_thr.critical;
+		param->interval_id = se->interval_id;
+
+		if (dlgb.register_dlgcb(dlgc, DLGCB_DESTROY,
 					dialog_terminate_CB, param, free_dialog_CB_param) != 0) {
 			LM_ERR("failed to register dialog terminated callback\n");
 			shm_free(param->number.s);
@@ -504,9 +504,8 @@ static struct mi_root* mi_show_stats(struct mi_root *cmd_tree, void *param)
 	if (!stats_exist(user, prefix)) {
 		LM_WARN("There is no data for user<%.*s> and prefix=<%.*s>\n",
 				user.len, user.s, prefix.len, prefix.s);
-		return init_mi_tree(400, MI_BAD_PARM_S, MI_BAD_PARM_LEN);
+		return init_mi_tree(404, MI_SSTR("No data for this user+number yet!"));
 	}
-
 
 	struct mi_root* rpl_tree = init_mi_tree(200, MI_OK_S, MI_OK_LEN);
 	if (rpl_tree == NULL)
