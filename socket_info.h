@@ -387,7 +387,8 @@ static inline char *proto2a(int proto)
 }
 
 
-#define MAX_SOCKET_STR ( 4 + 1 + IP_ADDR_MAX_STR_SIZE+1+INT2STR_MAX_LEN+1)
+#define ALLOW_FOR_HOST 50 /* Bump buffer from 69 to 120 (119+1) for long aliases */
+#define MAX_SOCKET_STR ( 4 + 1 + IP_ADDR_MAX_STR_SIZE+1+INT2STR_MAX_LEN+1+ALLOW_FOR_HOST+1)
 #define sock_str_len(_sock) ( 3 + 1*((_sock)->proto==PROTO_SCTP) + 1 + \
 		(_sock)->address_str.len + 1 + (_sock)->port_no_str.len)
 
