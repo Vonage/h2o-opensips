@@ -1808,6 +1808,14 @@ static int mod_init(void) {
 	SSL_load_error_strings();
 	init_ssl_methods();
 
+	#ifndef NO_SSL_GLOBAL_LOCK
+	tls_global_lock = lock_alloc();
+	if (!tls_global_lock || !lock_init(tls_global_lock)) {
+		LM_ERR("could not initialize global openssl lock!\n");
+		return -1;
+	}
+	#endif
+
 #if (OPENSSL_VERSION_NUMBER < 0x10100000L)
 	n = check_for_krb();
 	if (n==-1) {
