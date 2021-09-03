@@ -944,38 +944,11 @@ static int load_certificate_db(SSL_CTX * ctx, str *blob)
 		tls_global_lock_release();
 		#endif
 		LM_ERR("Unable to use certificate\n");
-		X509_free(cert);
-		BIO_free(cbio);
 		return -1;
 	}
 	#ifndef NO_SSL_GLOBAL_LOCK
 	tls_global_lock_release();
 	#endif
-	tls_dump_cert_info("Certificate loaded: ", cert);
-	X509_free(cert);
-
-	while ((cert = PEM_read_bio_X509(cbio, NULL, 0, NULL)) != NULL) {
-		#ifndef NO_SSL_GLOBAL_LOCK
-		tls_global_lock_get();
-		#endif
-		if (!SSL_CTX_add_extra_chain_cert(ctx, cert)){
-			#ifndef NO_SSL_GLOBAL_LOCK
-			tls_global_lock_release();
-			#endif
-			tls_dump_cert_info("Unable to add chain cert: ", cert);
-			X509_free(cert);
-			BIO_free(cbio);
-			return -1;
-		}
-		#ifndef NO_SSL_GLOBAL_LOCK
-		tls_global_lock_release();
-		#endif
-		/* The x509 certificate provided to SSL_CTX_add_extra_chain_cert()
-		*	will be freed by the library when the SSL_CTX is destroyed.
-		*	An application should not free the x509 object.a*/
-		tls_dump_cert_info("Chain certificate loaded: ", cert);
->>>>>>> e3c231093 (proto_tls/wss: complete fix in commit b6b7520)
-	}
 
 	X509_free(cert);
 	LM_DBG("successfully loaded\n");
