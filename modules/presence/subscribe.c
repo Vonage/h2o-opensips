@@ -39,6 +39,7 @@
 #include "notify.h"
 #include "clustering.h"
 
+#define SHARING_TAG_ALWAYS_NULL   1
 
 int get_stored_info(struct sip_msg* msg, subs_t* subs, int* error_ret,
 		str* reply_str);
@@ -1684,7 +1685,7 @@ void update_db_subs(db_con_t *db,db_func_t *dbf, shtable_t hash_table,
 		return;
 	}
 
-	if (sh_tags==NULL) {
+	if (sh_tags==NULL || SHARING_TAG_ALWAYS_NULL) {
 
 		/* no clustering, simply delete all expired subs */
 		LM_DBG("delete all expired subscriptions\n");
