@@ -1050,7 +1050,7 @@ modparam("drouting", "use_partitions", 1)
 	</section>
 
 <section id="param_db_partitions_url" xreflabel="db_partitions_url">
-		<title><varname>db_partitions_url</varname> (int)</title>
+		<title><varname>db_partitions_url</varname> (str)</title>
 		<para>
 		The url to the database containing partition-specific
 		information. (partition-specific information includes
@@ -1075,7 +1075,7 @@ modparam("drouting", "db_partitions_url", "mysql://user:password@localhost/opens
 	</section>
 
 	<section id="param_db_partitions_table" xreflabel="db_partitions_table">
-		<title><varname>db_partitions_table</varname> (int)</title>
+		<title><varname>db_partitions_table</varname> (str)</title>
 		<para>
 		The name of the table containing partition definitions. To be
 		used with <varname>use_partitions</varname> and <varname>db_partitions_url</varname>.
@@ -1557,7 +1557,7 @@ if (use_next_gw("my_partition")) {
 }
 ...
 # Also fetch the carrier attributes, if any
-if (use_next_gw("my_partition", , "$var(carrier_attrs)")) {
+if (use_next_gw("my_partition", , , "$var(carrier_attrs)")) {
 	xlog("Carrier attributes of current gateway: $var(carrier_attrs)\n");
 	t_relay();
 	exit;
@@ -1767,7 +1767,7 @@ if (goes_to_gw("my_partition", "1", , "$var(gw_attrs)")) {
 		<title><function>is_from_gw</function> usage when <varname>use_partitions</varname> is 0</title>
 		<programlisting format="linespecific">
 # match the source IP (only) against all gateways
-if (is_from_gw("3", "n")) {
+if (is_from_gw("-1", "n")) {
 	...
 }
 </programlisting>
@@ -1777,7 +1777,7 @@ if (is_from_gw("3", "n")) {
 		<title><function>is_from_gw</function> usage when <varname>use_partitions</varname> is 1</title>
 		<programlisting format="linespecific">
 # match the source IP and port against all "outbound" gateways and return its carrier
-if (is_from_gw("outbound", "3", "c")) {
+if (is_from_gw("outbound", "-1", "c")) {
 	...
 }
 </programlisting>

@@ -85,10 +85,6 @@
 #define MEM_FRAG_AVOIDANCE
 
 
-#define F_MALLOC_LARGE_LIMIT    F_MALLOC_OPTIMIZE
-#define F_MALLOC_DEFRAG_LIMIT (F_MALLOC_LARGE_LIMIT * 5)
-#define F_MALLOC_DEFRAG_PERCENT 5
-
 unsigned long frag_size(void* p){
 	if(!p)
 		return 0;
@@ -97,9 +93,6 @@ unsigned long frag_size(void* p){
 
 static inline void free_minus(struct fm_block* qm, unsigned long size )
 {
-
-	if( size > F_MALLOC_LARGE_LIMIT )
-		qm->large_space -= size;
 
 	#if defined(DBG_MALLOC) || defined(STATISTICS)
 	qm->real_used+=size;
@@ -110,10 +103,6 @@ static inline void free_minus(struct fm_block* qm, unsigned long size )
 
 static inline void free_plus(struct fm_block* qm, unsigned long size )
 {
-
-	if( size > F_MALLOC_LARGE_LIMIT )
-		qm->large_space += size;
-
 	#if defined(DBG_MALLOC) || defined(STATISTICS)
 	qm->real_used-=size;
 	qm->used-=size;
@@ -335,12 +324,6 @@ struct fm_block* fm_malloc_init(char* address, unsigned long size, char *name)
 
 	/* link initial fragment into the free list*/
 
-	qm->large_space = 0;
-	qm->large_limit = qm->size / 100 * F_MALLOC_DEFRAG_PERCENT;
-
-	if( qm->large_limit < F_MALLOC_DEFRAG_LIMIT )
-		qm->large_limit = F_MALLOC_DEFRAG_LIMIT;
-
 	fm_insert_free(qm, qm->first_frag);
 
 
@@ -378,12 +361,13 @@ void* fm_malloc(struct fm_block* qm, unsigned long size)
 	/* not found, bad! */
 
 #if defined(DBG_MALLOC) || defined(STATISTICS)
-	LM_ERR(oom_errorf, qm->name, qm->size - qm->real_used, size,
-			qm->name[0] == 'p' ? "M" : "m");
-	LM_INFO("attempting defragmentation...\n");
+	LM_WARN("not enough continuous free %s memory (%ld bytes left, need %lu), attempting " \
+			"defragmentation... please increase the \"-%s\" command line parameter!\n",
+			qm->name, qm->size - qm->real_used, size, qm->name[0] == 'p' ? "M" : "m");
 #else
-	LM_ERR(oom_nostats_errorf, qm->name, size, qm->name[0] == 'p' ? "M" : "m");
-	LM_INFO("attempting defragmentation...\n");
+	LM_WARN("not enough continuous free %s memory (need %lu), attempting defragmentation... " \
+			"please increase the \"-%s\" command line parameter!\n",
+			qm->name, qm->size - qm->real_used, size, qm->name[0] == 'p' ? "M" : "m");
 #endif
 
 	for( frag = qm->first_frag; (char*)frag < (char*)qm->last_frag;  )
@@ -427,7 +411,12 @@ void* fm_malloc(struct fm_block* qm, unsigned long size)
 		frag = n;
 	}
 
-	LM_INFO("unable to alloc a big enough fragment!\n");
+#if defined(DBG_MALLOC) || defined(STATISTICS)
+	LM_ERR(oom_errorf, qm->name, qm->size - qm->real_used, size,
+			qm->name[0] == 'p' ? "M" : "m");
+#else
+	LM_ERR(oom_nostats_errorf, qm->name, size, qm->name[0] == 'p' ? "M" : "m");
+#endif
 	pkg_threshold_check();
 	return 0;
 
@@ -503,16 +492,9 @@ void fm_free(struct fm_block* qm, void* p)
 			f->line);
 	#endif
 
-join:
-
-	if( qm->large_limit < qm->large_space )
-		goto no_join;
-
+	/* attempt to join with a next fragment that also happens to be free */
 	n = FRAG_NEXT(f);
-
-	if (((char*)n < (char*)qm->last_frag) &&  frag_is_free(n) )
-	{
-
+	if (((char*)n < (char*)qm->last_frag) && frag_is_free(n)) {
 		fm_remove_free(qm, n);
 		/* join */
 		f->size += n->size + FRAG_OVERHEAD;
@@ -521,11 +503,7 @@ join:
 		//qm->real_used -= FRAG_OVERHEAD;
 		qm->used += FRAG_OVERHEAD;
 		#endif
-
-		goto join;
 	}
-
-no_join:
 
 #ifdef DBG_MALLOC
 	f->file = file;
@@ -745,7 +723,6 @@ void fm_status(struct fm_block* qm)
 
 	}
 	LM_GEN1(memdump, "TOTAL: %6d free fragments = %6lu free bytes\n", i, size);
-	LM_GEN1(memdump, "TOTAL: %ld large bytes\n", qm->large_space );
 	LM_GEN1(memdump, "TOTAL: %u overhead\n", (unsigned int)FRAG_OVERHEAD );
 	LM_GEN1(memdump, "-----------------------------\n");
 }

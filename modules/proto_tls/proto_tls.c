@@ -112,7 +112,8 @@ static void mod_destroy(void);
 static int proto_tls_init(struct proto_info *pi);
 static int proto_tls_init_listener(struct socket_info *si);
 static int proto_tls_send(struct socket_info* send_sock,
-		char* buf, unsigned int len, union sockaddr_union* to, int id);
+		char* buf, unsigned int len, union sockaddr_union* to,
+		unsigned int id);
 static void tls_report(int type, unsigned long long conn_id, int conn_flags,
 		void *extra);
 static struct mi_root* tls_trace_mi(struct mi_root* cmd, void* param );
@@ -359,7 +360,7 @@ static void proto_tls_conn_clean(struct tcp_connection* c)
 		c->proto_data = NULL;
 	}
 
-	tls_conn_clean(c);
+	tls_conn_clean(c, &tls_mgm_api);
 }
 
 
@@ -430,7 +431,8 @@ error:
 
 
 static int proto_tls_send(struct socket_info* send_sock,
-				char* buf, unsigned int len, union sockaddr_union* to, int id)
+		char* buf, unsigned int len, union sockaddr_union* to,
+		unsigned int id)
 {
 	struct tcp_connection *c;
 	struct tls_domain *dom;
@@ -541,7 +543,7 @@ static int tls_read_req(struct tcp_connection* con, int* bytes_read)
 	}
 
 	/* do this trick in order to trace whether if it's an error or not */
-	ret=tls_fix_read_conn(con, t_dst);
+	ret=tls_fix_read_conn(con, t_dst, &tls_mgm_api);
 
 	/* if there is pending tracing data on an accepted connection, flush it
 	 * As this is a read op, we look only for accepted conns, not to conflict
@@ -576,7 +578,7 @@ again:
 		if (req->parsed<req->pos){
 			bytes=0;
 		}else{
-			bytes=tls_read(con,req);
+			bytes=tls_read(con,req, &tls_mgm_api);
 			if (bytes<0) {
 				LM_ERR("failed to read \n");
 				goto error;
