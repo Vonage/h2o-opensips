@@ -828,26 +828,44 @@ int db_sqlite_free_result(db_con_t* _h, db_res_t* _r)
  */
 void db_sqlite_free_result_rows(db_res_t* _r)
 {
-	db_val_t* values;
+	int i, j;
+	db_val_t* val;
 
 	if (!_r) {
 		LM_DBG("nothing to free!\n");
 		return;
 	}
-	
-	if(RES_ROWS(_r)!=0)
-	{
-		values = _r->rows[0].values;
-		/* db_sqlite_allocate_rows allocates memory for rows and values separately.
-		/* Hence freeing rows using generic function and then values separately*/
-		db_free_rows(_r);
-		if(values)
-		{
-			pkg_free(values);
-			values = NULL;
+
+	if (RES_ROWS(_r)) {
+		for(i=0; i < RES_ROW_N(_r); i++) {
+			for (j=0; j < RES_COL_N(_r); j++) {
+				val = &(_r->rows[i].values[j]);
+				if (VAL_NULL(val) || !VAL_FREE(val))
+					continue;
+
+				switch (VAL_TYPE(val)) {
+					case DB_STRING:
+					case DB_STR:
+						pkg_free(VAL_STR(val).s);
+						VAL_STR(val).s = 0;
+						break;
+					case DB_BLOB:
+						pkg_free(VAL_BLOB(val).s);
+						VAL_BLOB(val).s = 0;
+						break;
+					default:
+						break;
+				}
+
+			}
 		}
+		/* free all the columns; they are all allocated at once */
+		pkg_free( _r->rows[0].values);
+		/* free the rows */
+		pkg_free( _r->rows);
+		_r->rows = NULL;
 	}
-	RES_ROWS(_r) = 0;
+
 	RES_ROW_N(_r) = 0;
 }
 
