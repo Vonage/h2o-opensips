@@ -39,6 +39,7 @@
 #include "notify.h"
 #include "clustering.h"
 
+#define SHARING_TAG_ALWAYS_NULL   1
 
 int get_stored_info(struct sip_msg* msg, subs_t* subs, int* error_ret,
 		str* reply_str);
@@ -195,20 +196,14 @@ int update_subs_db(subs_t* subs, int type)
 	query_vals[n_query_cols].val.str_val = subs->event->name;
 	n_query_cols++;
 
-	query_cols[n_query_cols] = &str_event_id_col;
-	query_vals[n_query_cols].type = DB_STR;
-	query_vals[n_query_cols].nul = 0;
-
-	if(subs->event_id.s)
+	if(subs->event_id.s && (subs->event_id.len > 0))
 	{
+		query_cols[n_query_cols] = &str_event_id_col;
+		query_vals[n_query_cols].type = DB_STR;
+		query_vals[n_query_cols].nul = 0;
 		query_vals[n_query_cols].val.str_val = subs->event_id;
+		n_query_cols++;
 	}
-	else
-	{
-		query_vals[n_query_cols].val.str_val.s = "";
-		query_vals[n_query_cols].val.str_val.len = 0;
-	}
-	n_query_cols++;
 
 	query_cols[n_query_cols] = &str_callid_col;
 	query_vals[n_query_cols].type = DB_STR;
@@ -1690,7 +1685,7 @@ void update_db_subs(db_con_t *db,db_func_t *dbf, shtable_t hash_table,
 		return;
 	}
 
-	if (sh_tags==NULL) {
+	if (sh_tags==NULL || SHARING_TAG_ALWAYS_NULL) {
 
 		/* no clustering, simply delete all expired subs */
 		LM_DBG("delete all expired subscriptions\n");
