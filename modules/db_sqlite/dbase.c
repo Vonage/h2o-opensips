@@ -836,10 +836,10 @@ void db_sqlite_free_result_rows(db_res_t* _r)
 		return;
 	}
 
-	if (RES_ROWS(_r)) {
-		for(i=0; i < RES_ROW_N(_r); i++) {
-			for (j=0; j < RES_COL_N(_r); j++) {
-				val = &(_r->rows[i].values[j]);
+	if (RES_ROWS(*_r)) {
+		for(i=0; i < RES_ROW_N(*_r); i++) {
+			for (j=0; j < RES_COL_N(*_r); j++) {
+				val = &((*_r)->rows[i].values[j]);
 				if (VAL_NULL(val) || !VAL_FREE(val))
 					continue;
 
@@ -855,18 +855,18 @@ void db_sqlite_free_result_rows(db_res_t* _r)
 						break;
 					default:
 						break;
+						}
+
+					}
 				}
-
+				/* free all the columns; they are all allocated at once */
+				pkg_free( (*_r)->rows[0].values);
+				/* free the rows */
+				pkg_free( (*_r)->rows);
+				(*_r)->rows = NULL;
 			}
-		}
-		/* free all the columns; they are all allocated at once */
-		pkg_free( _r->rows[0].values);
-		/* free the rows */
-		pkg_free( _r->rows);
-		_r->rows = NULL;
-	}
 
-	RES_ROW_N(_r) = 0;
+	RES_ROW_N(*_r) = 0;
 }
 
 /**
