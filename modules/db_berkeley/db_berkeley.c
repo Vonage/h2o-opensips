@@ -36,6 +36,7 @@
 
 #include "../../db/db_res.h"
 #include "../../db/db.h"
+#include "../../db/db_ut.h"
 #include "db_berkeley.h"
 #include "bdb_lib.h"
 #include "bdb_res.h"
@@ -95,7 +96,8 @@ struct module_exports exports = {
 	MOD_TYPE_SQLDB,/* class of this module */
 	MODULE_VERSION,
 	DEFAULT_DLFLAGS, /* dlopen flags */
-	NULL,            /* OpenSIPS module dependencies */
+	0,				 /* load function */
+	NULL,			 /* OpenSIPS module dependencies */
 	cmds,     /* Exported functions */
 	0,        /* Exported async functions */
 	params,   /* Exported parameters */
@@ -104,6 +106,7 @@ struct module_exports exports = {
 	0,        /* exported pseudo-variables */
 	0,		  /* exported transformations */
 	0,        /* extra processes */
+	0,        /* module pre-initialization function */
 	mod_init, /* module initialization function */
 	0,        /* response function*/
 	destroy,  /* destroy function */
@@ -699,7 +702,7 @@ int bdb_insert(db_con_t* _h, db_key_t* _k, db_val_t* _v, int _n)
 	/* verify col types provided */
 	for(i=0; i<_n; i++)
 	{	j = lkey[i];
-		if(bdb_is_neq_type(_tp->colp[j]->type, _v[i].type))
+		if(db_is_neq_type(_tp->colp[j]->type, _v[i].type))
 		{
 			LM_WARN("incompatible types v[%d] - c[%d]!\n", i, j);
 			ret = -8;

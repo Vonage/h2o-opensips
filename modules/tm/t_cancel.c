@@ -72,7 +72,11 @@ void cancel_uacs( struct cell *t, branch_bm_t cancel_bm )
 				/* send a cancel out */
 				cancel_branch(t, i);
 			} else {
-				/* set flag to catch the delaied replies */
+				/* if no reply received on this branch, do not send out
+				 * a CANCEL as it is against RFC3261. We will eventually send
+				 * one out IF we receive later a reply on this branch, so let's
+				 * flag it for catching (and cancelling) such delaied replies
+				 */
 				t->uac[i].flags |= T_UAC_TO_CANCEL_FLAG;
 			}
 		}
@@ -110,11 +114,17 @@ void cancel_branch( struct cell *t, int branch )
 	 * to deal with it */
 	crb->activ_type=TYPE_LOCAL_CANCEL;
 
+	if ( has_tran_tmcbs( t, TMCB_REQUEST_BUILT) ) {
+		set_extra_tmcb_params( &crb->buffer, &crb->dst);
+		run_trans_callbacks( TMCB_REQUEST_BUILT,
+			t, t->uas.request, 0, 0);
+	}
+
 	LM_DBG("sending cancel...\n");
 	if (SEND_BUFFER( crb )==0) {
-		if ( has_tran_tmcbs( t, TMCB_REQUEST_BUILT|TMCB_MSG_SENT_OUT) ) {
+		if ( has_tran_tmcbs( t, TMCB_MSG_SENT_OUT) ) {
 			set_extra_tmcb_params( &crb->buffer, &crb->dst);
-			run_trans_callbacks( TMCB_REQUEST_BUILT|TMCB_MSG_SENT_OUT,
+			run_trans_callbacks( TMCB_MSG_SENT_OUT,
 				t, t->uas.request, 0, 0);
 		}
 	}

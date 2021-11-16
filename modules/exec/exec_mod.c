@@ -119,6 +119,7 @@ struct module_exports exports= {
 	MOD_TYPE_DEFAULT,/* class of this module */
 	MODULE_VERSION,
 	DEFAULT_DLFLAGS,/* dlopen flags */
+	0,				/* load function */
 	NULL,           /* OpenSIPS module dependencies */
 	cmds,           /* Exported functions */
 	acmds,          /* Exported async functions */
@@ -128,6 +129,7 @@ struct module_exports exports= {
 	0,              /* exported pseudo-variables */
 	0,			 	/* exported transformations */
 	0,              /* extra processes */
+	0,              /* pre-initialization module */
 	mod_init,       /* initialization module */
 	0,              /* response function */
 	exec_shutdown,  /* destroy function */
@@ -375,7 +377,7 @@ static int exec_fixup(void** param, int param_no)
 }
 
 
-static inline int setenvvar(struct hf_wrapper** hf, int_str* value, int idx)
+static inline int setenvvar(struct hf_wrapper** hf, int_str* value, int isstr, int idx)
 {
 	#define OSIPS_EXEC "OSIPS_EXEC_"
 
@@ -386,7 +388,7 @@ static inline int setenvvar(struct hf_wrapper** hf, int_str* value, int idx)
 	sidx.s = int2str((unsigned long)idx, &sidx.len);
 
 	(*hf)->envvar=pkg_malloc(strlen(OSIPS_EXEC) + sidx.len + 1/*=*/
-					+ (*value).s.len + 1/*\0*/);
+					+ (isstr?(*value).s.len:INT2STR_MAX_LEN) + 1/*\0*/);
 	if ((*hf)->envvar==0) {
 		LM_ERR("no more pkg mem\n");
 		return -1;
@@ -400,9 +402,14 @@ static inline int setenvvar(struct hf_wrapper** hf, int_str* value, int idx)
 
 	(*hf)->envvar[len++] = '=';
 
-	memcpy((*hf)->envvar+len, value->s.s, value->s.len);
-
-	(*hf)->envvar[len+ value->s.len] = '\0';
+	if (isstr) {
+		memcpy((*hf)->envvar+len, value->s.s, value->s.len);
+		(*hf)->envvar[len+ value->s.len] = '\0';
+	} else {
+		sidx.s = int2str((unsigned long)value->n, &sidx.len);
+		memcpy((*hf)->envvar+len, sidx.s, sidx.len);
+		(*hf)->envvar[len+ sidx.len] = '\0';
+	}
 
 	(*hf)->next_other=(*hf)->next_same=NULL;
 
@@ -435,21 +442,17 @@ static struct hf_wrapper* get_avp_values_list(struct sip_msg* msg, pv_param_p av
 	if (!hf)
 		goto memerr;
 
-	setenvvar(&hf, &value, idx++);
+	setenvvar(&hf, &value, (avp_ptr->flags & AVP_VAL_STR), idx++);
 	hf_head=hf;
 
-	while (search_next_avp( avp_ptr, &value) != 0) {
+	while ((avp_ptr = search_next_avp( avp_ptr, &value)) != 0) {
 		hf->next_other=pkg_malloc(sizeof(struct hf_wrapper));
+		hf=hf->next_other;
+
 		if (!hf)
 			goto memerr;
 
-		hf=hf->next_other;
-
-		setenvvar(&hf, &value, idx++);
-
-		avp_ptr = avp_ptr->next;
-		if (avp_ptr->id > avp_name)
-			break;
+		setenvvar(&hf, &value, (avp_ptr->flags & AVP_VAL_STR), idx++);
 	}
 
 	return hf_head;

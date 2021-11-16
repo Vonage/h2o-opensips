@@ -128,6 +128,7 @@ set_bitmap:
 			LM_DBG("use DB_BITMAP type\n");
 			RES_TYPES(_r)[i] = DB_BITMAP;
 			len = sizeof(VAL_BITMAP((db_val_t*)NULL));
+			dtype = SQLT_UIN;
 			break;
 
 		case SQLT_INT:		/* (ORANET TYPE) integer */
@@ -135,41 +136,44 @@ set_int:
 			LM_DBG("use DB_INT result type\n");
 			RES_TYPES(_r)[i] = DB_INT;
 			len = sizeof(VAL_INT((db_val_t*)NULL));
+			dtype = SQLT_INT;
 			break;
 
 		case SQLT_LNG:		/* long */
 		case SQLT_VNU:		/* NUM with preceding length byte */
-		case SQLT_NUM:		/* (ORANET TYPE) oracle numeric */
+		case SQLT_NUM:		/* (ORANET TYPE) oracle numeric */ {
+			sb1 sc;
+			status = OCIAttrGet(param, OCI_DTYPE_PARAM,
+				(dvoid**)(dvoid*)&sc, NULL,
+				OCI_ATTR_SCALE, con->errhp);
+			if (status != OCI_SUCCESS) goto ora_err;
+			if (sc) goto set_flt;
+
 			len = 0; /* PRECISION is ub1 */
 			status = OCIAttrGet(param, OCI_DTYPE_PARAM,
 				(dvoid**)(dvoid*)&len, NULL, OCI_ATTR_PRECISION,
 				con->errhp);
 			if (status != OCI_SUCCESS) goto ora_err;
-			if (len <= 11) {
-				sb1 sc;
-				status = OCIAttrGet(param, OCI_DTYPE_PARAM,
-					(dvoid**)(dvoid*)&sc, NULL,
-					OCI_ATTR_SCALE, con->errhp);
-				if (status != OCI_SUCCESS) goto ora_err;
-				if (!sc) {
-					dtype = SQLT_INT;
-					if (len != 11) goto set_int;
-					dtype = SQLT_UIN;
-					goto set_bitmap;
-				}
-			}
+
+			if (len < 11)
+				goto set_int;
+			else if (len == 11)
+				goto set_bitmap;
+
+			/* len > 11 */
 			LM_DBG("use DB_BIGINT result type\n");
 			RES_TYPES(_r)[i] = DB_BIGINT;
 			len = sizeof(VAL_BIGINT((db_val_t*)NULL));
-			dtype = SQLT_NUM;
+			dtype = SQLT_INT;
 			break;
-
+		}
 		case SQLT_FLT:		/* (ORANET TYPE) Floating point number */
 		case SQLT_BFLOAT:       /* Native Binary float*/
 		case SQLT_BDOUBLE:	/* NAtive binary double */
 		case SQLT_IBFLOAT:	/* binary float canonical */
 		case SQLT_IBDOUBLE:	/* binary double canonical */
 		case SQLT_PDN:		/* (ORANET TYPE) Packed Decimal Numeric */
+set_flt:
 			LM_DBG("use DB_DOUBLE result type\n");
 			RES_TYPES(_r)[i] = DB_DOUBLE;
 			len = sizeof(VAL_DOUBLE((db_val_t*)NULL));
@@ -293,7 +297,7 @@ static int convert_row(db_res_t* _res, db_row_t* _r, dmap_t* _d)
 			break;
 
 		case DB_BIGINT:
-			VAL_BIGINT(v) = *_d->pv[i].i;
+			VAL_BIGINT(v) = *((long long*)_d->pv[i].i);
 			break;
 
 		case DB_BITMAP:
@@ -369,7 +373,7 @@ static int get_rows(ora_con_t* con, db_res_t* _r, OCIStmt* _c, dmap_t* _d)
 	// timelimited operation
 	status = begin_timelimit(con, 0);
 	if (status != OCI_SUCCESS) goto ora_err;
-	do status = OCIStmtFetch2(_c, con->errhp, 1, OCI_FETCH_NEXT, 0,
+	do status = OCIStmtFetch2(_c, con->errhp, 1, OCI_FETCH_LAST, 0,
 		OCI_DEFAULT);
 	while (wait_timelimit(con, status));
 	if (done_timelimit(con, status)) goto stop_load;
@@ -388,6 +392,13 @@ static int get_rows(ora_con_t* con, db_res_t* _r, OCIStmt* _c, dmap_t* _d)
 	if (!rcnt) {
 		LM_ERR("lastpos==0\n");
 		goto stop_load;
+	}
+
+	if (rcnt > 5) {
+		ub4 prefetch = rcnt/5;
+		status = OCIAttrSet(_c, OCI_HTYPE_STMT, &prefetch, 0,
+			OCI_ATTR_PREFETCH_ROWS, con->errhp);
+		if (status != OCI_SUCCESS) goto ora_err;
 	}
 
 	RES_ROW_N(_r) = rcnt;

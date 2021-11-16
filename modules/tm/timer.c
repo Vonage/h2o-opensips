@@ -240,16 +240,13 @@ static void delete_cell( struct cell *p_cell, int unlock )
 	}
 }
 
-
+/* used to inject a negative reply in behalf of a certian T branch; as it is
+ * a non-200OK reply, it cannot lead to a cancelling scenario */
 static void fake_reply(struct cell *t, int branch, int code )
 {
-	branch_bm_t cancel_bitmap;
-	short do_cancel_branch;
+	branch_bm_t cancel_bitmap = 0;
 	enum rps reply_status;
 
-	do_cancel_branch = is_invite(t) && should_cancel_branch(t, branch);
-
-	cancel_bitmap=do_cancel_branch ? 1<<branch : 0;
 	if ( is_local(t) ) {
 		reply_status=local_reply( t, FAKED_REPLY, branch,
 					  code, &cancel_bitmap );
@@ -260,6 +257,11 @@ static void fake_reply(struct cell *t, int branch, int code )
 		reply_status=relay_reply( t, FAKED_REPLY, branch, code,
 			&cancel_bitmap );
 	}
+	/* again, a final negative reply on a branch will never lead to a
+	 * situation to cancel other existing branches, so the
+	 * cancel_bitmap should be empty here (we use it as a dummy holder), so
+	 * no need trigger an UACs cancelling
+	 */
 }
 
 
@@ -330,6 +332,7 @@ inline static void final_response_handler( struct timer_link *fr_tl )
 	context_p old_ctx;
 	struct retr_buf* r_buf;
 	struct cell *t;
+	branch_bm_t cancel_bitmap;
 
 	if (fr_tl==0){
 		/* or BUG?, ignoring it for now */
@@ -389,8 +392,10 @@ inline static void final_response_handler( struct timer_link *fr_tl )
 
 	/* out-of-lock do the cancel I/O */
 	if (is_invite(t) && should_cancel_branch(t, r_buf->branch) ) {
-		set_cancel_extra_hdrs( CANCEL_REASON_SIP_480, sizeof(CANCEL_REASON_SIP_480)-1);
-		cancel_branch(t, r_buf->branch );
+		cancel_bitmap =  1 << r_buf->branch ;
+		set_cancel_extra_hdrs( CANCEL_REASON_SIP_480,
+			sizeof(CANCEL_REASON_SIP_480)-1);
+		cancel_uacs(t, cancel_bitmap );
 		set_cancel_extra_hdrs( NULL, 0);
 	}
 	/* lock reply processing to determine how to proceed reliably */
@@ -938,12 +943,18 @@ end:
 
 
 /* similar to set_timer, except it allows only one-time
-   timer setting and all later attempts are ignored */
-void set_1timer( struct timer_link *new_tl, enum lists list_id,
+ * timer setting and all later attempts are ignored
+ * Returned values:
+ *    0 if the linker was actually added to the list
+ *   -1 if the linker was not added as it was already found in the list;
+ *      do not consider this an error, but a NOP.
+ */
+int set_1timer( struct timer_link *new_tl, enum lists list_id,
 												utime_t* ext_timeout )
 {
 	utime_t timeout;
 	struct timer* list;
+	int ret = -1;
 
 
 	if (list_id>=NR_OF_TIMER_LISTS) {
@@ -951,7 +962,7 @@ void set_1timer( struct timer_link *new_tl, enum lists list_id,
 #ifdef EXTRA_DEBUG
 		abort();
 #endif
-		return;
+		return ret;
 	}
 
 	if (!ext_timeout) {
@@ -966,8 +977,11 @@ void set_1timer( struct timer_link *new_tl, enum lists list_id,
 	if (!new_tl->time_out) {
 		insert_timer_unsafe( list, new_tl, timeout +
 			((timer_id2type[list_id]==UTIME_TYPE)?get_uticks():get_ticks()));
+		ret = 0;
 	}
 	unlock(list->mutex);
+
+	return ret;
 }
 
 

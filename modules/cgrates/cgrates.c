@@ -157,6 +157,7 @@ struct module_exports exports = {
 	MOD_TYPE_DEFAULT,/* class of this module */
 	MODULE_VERSION,
 	DEFAULT_DLFLAGS, /* dlopen flags */
+	0,				 /* load function */
 	&deps,           /* OpenSIPS module dependencies */
 	cmds,
 	acmds,
@@ -166,6 +167,7 @@ struct module_exports exports = {
 	pvars,       /* exported pseudo-variables */
 	0,			 /* exported transformations */
 	0,           /* extra processes */
+	0,
 	mod_init,
 	0,           /* reply processing */
 	mod_destroy, /* destroy function */
@@ -280,8 +282,12 @@ static int child_init(int rank)
 	struct cgr_engine *e;
 	struct cgr_conn *c;
 
-	/* connect to all servers */
-	/* go through each server and initialize a single connection */
+	/* external procs don't have a reactor, so they won't be able
+	 * to run any commands received by CGRateS, nor they will generate cmds */
+	if (rank == PROC_MODULE)
+		return 0;
+
+	/* go through each server and initialize a default connection */
 	list_for_each(l, &cgrates_engines) {
 		e = list_entry(l, struct cgr_engine, list);
 		/* start a connection for everybody */
@@ -438,7 +444,7 @@ static int pv_set_cgr(struct sip_msg *msg, pv_param_t *param,
 	if (kv) {
 		/* replace the old value */
 		cgr_free_kv_val(kv);
-		if ((!val || val->flags & PV_VAL_NULL) && op == COLONEQ_T) {
+		if (!val || val->flags & PV_VAL_NULL) {
 			/* destroy the value */
 			cgr_free_kv(kv);
 			return 0;

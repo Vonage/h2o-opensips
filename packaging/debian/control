@@ -12,7 +12,7 @@ Build-Depends: bison,
                libcurl4-gnutls-dev,
                libdb-dev (>= 4.6.19),
                libexpat1-dev,
-               libgeoip-dev (>= 1.4.4),
+               libmaxminddb-dev | libgeoip-dev (>= 1.4.4),
                libhiredis-dev,
                libjson-c-dev,
                libldap2-dev,
@@ -35,13 +35,13 @@ Build-Depends: bison,
                uuid-dev,
                libxml2-dev,
                pkg-config,
-               python,
-               python-dev,
+               python | python-is-python2,
+               python-dev | python-dev-is-python2,
                unixodbc-dev,
                xsltproc,
                zlib1g-dev
 Standards-Version: 3.9.8
-Homepage: http://www.opensips.org/
+Homepage: https://opensips.org/
 
 Package: opensips
 Architecture: any
@@ -532,7 +532,7 @@ Package: opensips-emergency-module
 Architecture: any
 Multi-Arch: same
 Depends: opensips (= ${binary:Version}), ${misc:Depends}, ${shlibs:Depends}
-Description: Emerrgency call module for OpenSIPS
+Description: Emergency call module for OpenSIPS
  OpenSIPS is a very fast and flexible SIP (RFC3261)
  server. Written entirely in C, OpenSIPS can handle thousands calls
  per second even on low-budget hardware.

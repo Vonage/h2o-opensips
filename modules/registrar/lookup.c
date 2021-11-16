@@ -204,11 +204,13 @@ ucontact_t **select_contacts(struct sip_msg *msg, ucontact_t *contacts,
 			have_gruu = 1;
 			LM_DBG("ruri has gruu\n");
 
-			if (ct->instance.len-2 != sip_instance->len ||
-			    memcmp(ct->instance.s+1, sip_instance->s, sip_instance->len)) {
+			if (ZSTR(ct->instance) || ct->instance.len-2 != sip_instance->len ||
+			        memcmp(ct->instance.s+1, sip_instance->s, sip_instance->len)) {
+
 				LM_DBG("no match to sip instance - [%.*s] - [%.*s]\n",
-				       ct->instance.len-2, ct->instance.s+1,
-						sip_instance->len, sip_instance->s);
+				       ZSTR(ct->instance) ? 0 : ct->instance.len-2,
+				       ZSTR(ct->instance) ? NULL : ct->instance.s+1,
+				       sip_instance->len, sip_instance->s);
 				/* not the targeted instance, search some more */
 				continue;
 			}
@@ -706,34 +708,40 @@ int is_contact_registered(struct sip_msg* _m, char *_d, char* _a,
 
 	ul.lock_udomain(ud, &aor);
 	if (ul.get_urecord(ud, &aor, &r) == 1) {
-		LM_DBG("%.*s not found in usrloc!\n", aor.len, aor.s);
+		LM_DBG("AoR '%.*s' not found in usrloc!\n", aor.len, aor.s);
 		ul.unlock_udomain(ud, &aor);
 		return NOT_FOUND;
 	}
 
 	/* callid not defined; contact might be defined or not */
 	if (!_cid) {
+		LM_DBG("found AoR, searching for ct: '%.*s'\n", curi.len, curi.s);
+
 		for (c=r->contacts; c; c=c->next) {
-			if (!str_strcmp(&curi, &c->c))
+			if (str_match(&curi, &c->c))
 				goto out_found_unlock;
 		}
 	/* contact not defined; callid defined */
 	} else if (!_c && _cid) {
+		LM_DBG("found AoR, searching for Call-ID: '%.*s'\n",
+		       callid.len, callid.s);
+
 		for (c=r->contacts; c; c=c->next) {
-			if (!str_strcmp(&callid, &c->callid))
+			if (str_match(&callid, &c->callid))
 				goto out_found_unlock;
 		}
 	/* both callid and contact defined */
 	} else {
+		LM_DBG("found AoR, searching for ct: '%.*s' and Call-ID: '%.*s'\n",
+		       curi.len, curi.s, callid.len, callid.s);
+
 		for (c=r->contacts; c; c=c->next) {
-			if (!str_strcmp(&curi, &c->c) &&
-					!str_strcmp(&callid, &c->callid))
+			if (str_match(&curi, &c->c) && str_match(&callid, &c->callid))
 				goto out_found_unlock;
 		}
 	}
 
 	ul.unlock_udomain(ud, &aor);
-
 	return NOT_FOUND;
 
 out_no_contact:

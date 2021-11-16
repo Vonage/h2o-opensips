@@ -76,6 +76,7 @@ struct module_exports exports= {
 	MOD_TYPE_DEFAULT,/* class of this module */
 	MODULE_VERSION,
 	DEFAULT_DLFLAGS,			/* dlopen flags */
+	0,							/* load function */
 	&deps,              /* OpenSIPS module dependencies */
 	0,					/* exported functions */
 	0,					/* exported async functions */
@@ -85,6 +86,7 @@ struct module_exports exports= {
 	0,					/* exported pseudo-variables */
 	0,			 		/* exported transformations */
 	0,					/* extra processes */
+	0,						/* module pre-initialization function */
 	mod_init,				/* module initialization function */
 	(response_function) 0,      		/* response handling function */
 	(destroy_function)destroy,		/* destroy function */
@@ -142,8 +144,6 @@ static int child_init(int rank)
 static void destroy(void)
 {
 	LM_NOTICE("destroy module dns_cache ...\n");
-	if (cdbc)
-		cdbf.destroy(cdbc);
 }
 
 static int rdata_struct_len=sizeof(struct rdata)-sizeof(void *) -

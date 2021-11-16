@@ -220,6 +220,7 @@ struct module_exports exports = {
 	MOD_TYPE_DEFAULT,/* class of this module */
 	MODULE_VERSION,  /* module version */
 	DEFAULT_DLFLAGS, /* dlopen flags */
+	0,				 /* load function */
 	&deps,           /* OpenSIPS module dependencies */
 	cmds,       /* Exported functions */
 	acmds,      /* Exported async functions */
@@ -229,6 +230,7 @@ struct module_exports exports = {
 	0,          /* exported pseudo-variables */
 	0,			/* exported transformations */
 	0,          /* extra processes */
+	0,          /* Module pre-initialization function */
 	avpops_init,/* Module initialization function */
 	(response_function) 0,
 	(destroy_function) 0,
@@ -308,8 +310,7 @@ error:
 
 static int avpops_child_init(int rank)
 {
-	/* skip main process and TCP manager process */
-	if (!need_db || rank==PROC_MAIN || rank==PROC_TCP_MAIN)
+	if (!need_db)
 		return 0;
 	/* init DB connection */
 	return avpops_db_init(&db_table, db_columns);

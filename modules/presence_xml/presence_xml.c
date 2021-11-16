@@ -123,6 +123,7 @@ struct module_exports exports= {
 	MOD_TYPE_DEFAULT,           /* class of this module */
 	MODULE_VERSION,				/* module version */
 	 DEFAULT_DLFLAGS,           /* dlopen flags */
+	 0,							/* load function */
 	 &deps,                     /* OpenSIPS module dependencies */
 	 0,  						/* exported functions */
 	 0,  						/* exported async functions */
@@ -132,6 +133,7 @@ struct module_exports exports= {
 	 0,							/* exported pseudo-variables */
 	 0,			 				/* exported transformations */
 	 0,							/* extra processes */
+	 0,							/* module pre-initialization function */
 	 mod_init,					/* module initialization function */
 	 (response_function) 0,		/* response handling function */
  	 destroy,					/* destroy function */
@@ -336,8 +338,6 @@ static int child_init(int rank)
 static void destroy(void)
 {
 	LM_DBG("start\n");
-	if(pxml_db && pxml_dbf.close)
-		pxml_dbf.close(pxml_db);
 
 	free_xs_list(xs_list, SHM_MEM_TYPE);
 

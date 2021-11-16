@@ -39,6 +39,7 @@
 #include "../../ut.h"
 #include "../../timer.h"
 #include "../../str.h"
+#include "../../pt.h"
 #include "../../mem/shm_mem.h"
 #include "../../db/db.h"
 #include "../../parser/parse_from.h"
@@ -143,6 +144,7 @@ struct module_exports exports= {
 	MOD_TYPE_DEFAULT,/* class of this module */
 	MODULE_VERSION,
 	DEFAULT_DLFLAGS, /* dlopen flags */
+	0,				 /* load function */
 	&deps,           /* OpenSIPS module dependencies */
 	cmds,       /* exported commands */
 	0,          /* exported async commands */
@@ -156,6 +158,7 @@ struct module_exports exports= {
 	0,          /* exported pseudo-variables */
 	0,			/* exported transformations */
 	0,          /* extra processes */
+	0,          /* pre-mod init */
 	mod_init,   /* mod init */
 	(response_function) 0,       /* response handler */
 	(destroy_function) destroy,  /* destroy function */
@@ -596,7 +599,7 @@ void destroy(void)
 
 	LM_DBG("destroy module ...\n");
 
-	if(imc_db==NULL)
+	if (child_init( process_no )<0)
 		goto done;
 
 	mq_cols[0] = &imc_col_username;

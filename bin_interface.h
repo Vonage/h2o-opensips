@@ -45,6 +45,19 @@
 #define is_valid_bin_packet(_p) \
 	(memcmp(_p, BIN_PACKET_MARKER, BIN_PACKET_MARKER_SIZE) == 0)
 
+#define _ensure_bin_version(pkt, needed, pkt_desc) \
+	do { \
+		if (get_bin_pkg_version(pkt) != (needed)) { \
+			if (pkt_desc && *pkt_desc) \
+				LM_INFO("discarding %s, ver %d: need ver %d\n", \
+				        pkt_desc, get_bin_pkg_version(pkt), (needed)); \
+			else \
+				LM_INFO("discarding packet type %d, ver %d: need ver %d\n", \
+				        pkt->type, get_bin_pkg_version(pkt), (needed)); \
+			return; \
+		} \
+	} while (0)
+#define ensure_bin_version(pkt, needed) _ensure_bin_version(pkt, needed, "")
 
 typedef struct bin_packet {
 	str buffer;
@@ -65,11 +78,19 @@ struct packet_cb_list {
 	struct packet_cb_list *next;
 };
 
+/* returns the version of the bin protocol from the given message */
+static inline short get_bin_pkg_version(bin_packet_t *packet)
+{
+	return *(short *)(packet->buffer.s + BIN_PACKET_MARKER_SIZE
+	                  + PKG_LEN_FIELD_SIZE);
+}
 
-/**
-	returns the version of the bin protocol from the received message
-*/
-short get_bin_pkg_version(bin_packet_t *packet);
+/* overrides the version of the bin protocol from the given message */
+static inline void set_bin_pkg_version(bin_packet_t *packet, short new_version)
+{
+	*(short *)(packet->buffer.s + BIN_PACKET_MARKER_SIZE
+	           + PKG_LEN_FIELD_SIZE) = new_version;
+}
 
 /*
  * returns the capability from the message

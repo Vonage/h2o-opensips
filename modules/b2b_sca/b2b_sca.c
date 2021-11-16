@@ -180,6 +180,7 @@ struct module_exports exports= {
         MOD_TYPE_DEFAULT,               /* class of this module */
         MODULE_VERSION,                 /* module version */
         DEFAULT_DLFLAGS,                /* dlopen flags */
+        0,				                /* load function */
         &deps,                          /* OpenSIPS module dependencies */
         cmds,                           /* exported functions */
         0,                              /* exported async functions */
@@ -189,6 +190,7 @@ struct module_exports exports= {
         0,                              /* exported pseudo-variables */
 		0,								/* exported transformations */
         0,                              /* extra processes */
+        0,                              /* module pre-initialization function */
         mod_init,                       /* module initialization function */
         (response_function) 0,          /* response handling function */
         (destroy_function) mod_destroy, /* destroy function */
@@ -344,7 +346,7 @@ static int mod_init(void)
 
 static int child_init(int rank)
 {
-	if (sca_db_mode==DB_MODE_REALTIME &&  (rank>PROC_MAIN || rank==PROC_MODULE)) {
+	if (sca_db_mode==DB_MODE_REALTIME &&  (rank>=1 || rank==PROC_MODULE)) {
 		if (connect_sca_db(&db_url)) {
 			LM_ERR("failed to connect to database (rank=%d)\n",rank);
 			return -1;
@@ -357,9 +359,6 @@ static int child_init(int rank)
 
 static void mod_destroy(void)
 {
-	//if (sca_db_mode != DB_MODE_NONE) {
-	//	sca_update_db();
-	//}
 	destroy_b2b_sca_handlers();
 	destroy_b2b_sca_htable();
 

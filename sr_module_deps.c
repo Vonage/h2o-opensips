@@ -149,7 +149,7 @@ int add_modparam_dependencies(struct sr_module *mod, param_export_t *param)
 		return 0;
 
 	/* clear previous entries in case this parameter is set multiple times */
-	for (it = &unsolved_deps; it->next; it = it->next) {
+	for (it = &unsolved_deps; it && it->next; it = it->next) {
 		if (strcmp(it->next->mod->exports->name, mod->exports->name) == 0 &&
 			(it->next->script_param &&
 			 strcmp(it->next->script_param, param->name) == 0)) {
@@ -278,7 +278,8 @@ int solve_module_dependencies(struct sr_module *modules)
 		if (!dep_solved) {
 			switch (dep_type) {
 			case DEP_SILENT:
-				LM_DBG("module %s depends on %s%s%s%.*s%s%s, but %s loaded!\n",
+				LM_DBG("module %s soft-depends on "
+				           "%s%s%s%.*s%s%s, and %s loaded -- proceeding\n",
 						md->mod->exports->name,
 						md->dep.len == 0 ?
 							((md->mod_type == MOD_TYPE_SQLDB ||

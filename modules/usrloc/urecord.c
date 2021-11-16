@@ -501,24 +501,44 @@ int cdb_add_ct_update(cdb_dict_t *updates, const ucontact_t *ct, char remove)
 	int len, base64len;
 
 	cdb_key_init(&contacts_key, "contacts");
-	len = ct->c.len + 1 + ct->callid.len;
-	base64len = calc_base64_encode_len(len);
+	
+	switch (matching_mode) {
+	case CONTACT_ONLY:
+		len = ct->c.len  ;
+		base64len = calc_base64_encode_len(len);
+		if (pkg_str_extend(&ctkey_pkg_buf, len) < 0) {
+			LM_ERR("oom\n");
+			return -1;
+		}
 
-	if (pkg_str_extend(&ctkey_pkg_buf, len) < 0) {
-		LM_ERR("oom\n");
+		if (pkg_str_extend(&ctkeyb64_pkg_buf, base64len) < 0) {
+			LM_ERR("oom\n");
+			return -1;
+		}
+		memcpy(ctkey_pkg_buf.s, ct->c.s, ct->c.len);
+		break;
+	case CONTACT_CALLID:
+		len = ct->c.len + 1 + ct->callid.len;
+		base64len = calc_base64_encode_len(len);
+		if (pkg_str_extend(&ctkey_pkg_buf, len) < 0) {
+			LM_ERR("oom\n");
+			return -1;
+		}
+
+		if (pkg_str_extend(&ctkeyb64_pkg_buf, base64len) < 0) {
+			LM_ERR("oom\n");
+			return -1;
+		}
+		memcpy(ctkey_pkg_buf.s, ct->c.s, ct->c.len);
+		ctkey_pkg_buf.s[ct->c.len] = ':';
+		memcpy(ctkey_pkg_buf.s + ct->c.len + 1, ct->callid.s,
+			ct->callid.len);
+		break;
+	default:
+		LM_CRIT("unknown matching_mode %d\n", matching_mode);
 		return -1;
 	}
-
-	if (pkg_str_extend(&ctkeyb64_pkg_buf, base64len) < 0) {
-		LM_ERR("oom\n");
-		return -1;
-	}
-
-	memcpy(ctkey_pkg_buf.s, ct->c.s, ct->c.len);
-	ctkey_pkg_buf.s[ct->c.len] = ':';
-	memcpy(ctkey_pkg_buf.s + ct->c.len + 1, ct->callid.s,
-	       ct->callid.len);
-
+	
 	base64encode((unsigned char *)ctkeyb64_pkg_buf.s,
 	             (unsigned char *)ctkey_pkg_buf.s, len);
 
@@ -765,7 +785,7 @@ void release_urecord(urecord_t* _r, char is_replicated)
 int insert_ucontact(urecord_t* _r, str* _contact, ucontact_info_t* _ci,
 										ucontact_t** _c, char is_replicated)
 {
-	int first_contact = _r->contacts == NULL ? 1 : 0;
+	int first_contact = !_r->contacts;
 
 	/* not used in db only mode */
 	if (_ci->contact_id == 0) {
@@ -844,7 +864,7 @@ int delete_ucontact(urecord_t* _r, struct ucontact* _c, char is_replicated)
 static inline struct ucontact* contact_match( ucontact_t* ptr, str* _c)
 {
 	while(ptr) {
-		if ((_c->len == ptr->c.len) && !memcmp(_c->s, ptr->c.s, _c->len)) {
+		if ((_c->len == ptr->c.len) && !memcmp(_c->s, ptr->c.s, _c->len) && ptr->expires != UL_EXPIRED_TIME ) {
 			return ptr;
 		}
 
@@ -861,6 +881,7 @@ static inline struct ucontact* contact_callid_match( ucontact_t* ptr,
 		if ( (_c->len==ptr->c.len) && (_callid->len==ptr->callid.len)
 		&& !memcmp(_c->s, ptr->c.s, _c->len)
 		&& !memcmp(_callid->s, ptr->callid.s, _callid->len)
+		&& ptr->expires != UL_EXPIRED_TIME
 		) {
 			return ptr;
 		}

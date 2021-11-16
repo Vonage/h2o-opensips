@@ -55,6 +55,7 @@ static int db_sqlite_store_result(const db_con_t* _h, db_res_t** _r, const db_va
 static int db_sqlite_bind_values(sqlite3_stmt* stmt, const db_val_t* _v, const int _n);
 #endif
 static int db_sqlite_free_result_internal(const db_con_t* _h, db_res_t* _r);
+static void db_sqlite_free_result_rows(db_res_t* _r);
 
 static int db_sqlite_submit_dummy_query(const db_con_t* _h, const str* _s)
 {
@@ -265,10 +266,7 @@ int db_sqlite_fetch_result(const db_con_t* _h, db_res_t** _r, const int nrows)
 		}
 	} else {
 		/* free old rows */
-		if(RES_ROWS(*_r)!=0)
-			db_free_rows(*_r);
-		RES_ROWS(*_r) = 0;
-		RES_ROW_N(*_r) = 0;
+		db_sqlite_free_result_rows(*_r);
 	}
 
 	/* determine the number of rows remaining to be processed */
@@ -684,7 +682,7 @@ int db_last_inserted_id(const db_con_t* _h)
 
 	CON_SET_CURR_PS(_h, &ps);
 #endif
-	ret = snprintf(sql_buf, SQL_BUF_LEN, "insert into %.*s (",
+	ret = snprintf(sql_buf, SQL_BUF_LEN, "insert or replace into %.*s (",
 		CON_TABLE(_h)->len, CON_TABLE(_h)->s);
 	if (ret < 0 || ret >= SQL_BUF_LEN) goto error;
 	off = ret;
@@ -702,15 +700,6 @@ int db_last_inserted_id(const db_con_t* _h)
 	off += ret;
 
 	*(sql_buf + off++) = ')';
-
-	ret = snprintf(sql_buf + off, SQL_BUF_LEN - off, " on duplicate key update ");
-	if (ret < 0 || ret >= (SQL_BUF_LEN - off)) goto error;
-	off += ret;
-
-	ret = db_print_set(_h, sql_buf + off, SQL_BUF_LEN - off, _k, _v, _n,
-		db_sqlite_val2str);
-	if (ret < 0) return -1;
-	off += ret;
 
 	sql_str.s = sql_buf;
 	sql_str.len = off;
@@ -831,6 +820,32 @@ int db_sqlite_free_result(db_con_t* _h, db_res_t* _r)
 	_r = NULL;
 
 	return 0;
+}
+
+/**
+ * Release a result set from memory.
+ * \param _r result set whose rows and values should be freed
+ * \return void
+ */
+static void db_sqlite_free_result_rows(db_res_t* _r)
+{
+	db_val_t* values;
+
+	if (!_r) {
+		LM_DBG("nothing to free!\n");
+		return;
+	}
+
+	if(RES_ROWS(_r)!=0)
+	{
+		values = _r->rows[0].values;
+		/* db_sqlite_allocate_rows allocates memory for rows and values separately.
+		 * Hence freeing rows using generic function and then values separately*/
+		db_free_rows(_r);
+		pkg_free(values);
+	}
+	RES_ROWS(_r) = 0;
+	RES_ROW_N(_r) = 0;
 }
 
 /**

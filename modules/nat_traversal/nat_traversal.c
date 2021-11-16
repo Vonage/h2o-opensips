@@ -283,6 +283,7 @@ struct module_exports exports = {
     MOD_TYPE_DEFAULT, // class of this module
     MODULE_VERSION,   // module version
     DEFAULT_DLFLAGS,  // dlopen flags
+    0,				  // load function
     &deps,            // OpenSIPS module dependencies
     commands,         // exported functions
     NULL,             // exported async functions
@@ -292,6 +293,7 @@ struct module_exports exports = {
     pvars,            // exported pseudo-variables
     NULL,             // exported transformations
     NULL,             // extra processes
+    NULL,             // pre-init function
     mod_init,         // module init function (before fork. kids will inherit)
     reply_filter,     // reply processing function
     mod_destroy,      // destroy function

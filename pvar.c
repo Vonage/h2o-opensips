@@ -2035,7 +2035,7 @@ static int pv_get_avp(struct sip_msg *msg,  pv_param_t *param, pv_value_t *res)
 		if(avp->flags & AVP_VAL_STR) {
 			res->rs = avp_value.s;
 		} else if(avp->flags & AVP_VAL_NULL) {
-			res->rs.s = NULL;
+			memset(&res->rs, 0, sizeof res->rs);
 		} else {
 			res->rs.s = sint2str(avp_value.n, &res->rs.len);
 		}
@@ -2054,7 +2054,7 @@ static int pv_get_avp(struct sip_msg *msg,  pv_param_t *param, pv_value_t *res)
 			if(avp->flags & AVP_VAL_STR) {
 				res->rs = avp_value.s;
 			} else if(avp->flags & AVP_VAL_NULL) {
-				res->rs.s = NULL;
+				memset(&res->rs, 0, sizeof res->rs);
 			} else {
 				res->rs.s = sint2str(avp_value.n, &res->rs.len);
 			}
@@ -5108,7 +5108,7 @@ static int pv_get_param(struct sip_msg *msg,  pv_param_t *ip, pv_value_t *res)
 		break;
 
 	case NUMBER_ST:
-		res->rs.s = int2str(route_params[route_rec_level][index].u.number, &res->rs.len);
+		res->rs.s = sint2str(route_params[route_rec_level][index].u.number, &res->rs.len);
 		res->ri = route_params[route_rec_level][index].u.number;
 		res->flags = PV_VAL_STR|PV_VAL_INT|PV_TYPE_INT;
 		break;

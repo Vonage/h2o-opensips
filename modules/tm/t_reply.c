@@ -498,7 +498,7 @@ static int _reply( struct cell *trans, struct sip_msg* p_msg,
 	if (code>=180 && p_msg->to
 				&& (get_to(p_msg)->tag_value.s==0
 			    || get_to(p_msg)->tag_value.len==0)) {
-		calc_crc_suffix( p_msg, tm_tag_suffix );
+		calc_tag_suffix( p_msg, tm_tag_suffix );
 		buf = build_res_buf_from_sip_req(code,text, &tm_tag, p_msg, &len, &bm);
 		return _reply_light( trans, buf, len, code,
 			tm_tag.s, TOTAG_VALUE_LEN, lock, &bm);
@@ -770,9 +770,12 @@ static inline int t_pick_branch( struct cell *t, int *res_code, int *do_cancel)
 	for ( b=t->first_branch; b<t->nr_of_outgoings ; b++ ) {
 		/* skip PHONY branches if the transaction was canceled by UAC;
 		 * a phony branch is used just to force the transaction to wait for
-		 * more branches, but if canceled, it makes no sense to wait anymore */
+		 * more branches, but if canceled, it makes no sense to wait anymore;
+		 * Exception - do not ignore the branch if there is reply pushed
+		 * on that branch, like an internal timeout or so */
 		if ( (t->uac[b].flags & T_UAC_IS_PHONY) &&
-		(t->flags & T_WAS_CANCELLED_FLAG) )
+		(t->flags & T_WAS_CANCELLED_FLAG) &&
+		t->uac[b].last_received<299 )
 			continue;
 		/* skip 'empty branches' */
 		if (!t->uac[b].request.buffer.s) continue;
@@ -1092,13 +1095,12 @@ error:
 }
 
 
-
-
 int t_reply( struct cell *t, struct sip_msg* p_msg, unsigned int code,
 	str * text )
 {
 	return _reply( t, p_msg, code, text, 1 /* lock replies */ );
 }
+
 
 int t_reply_unsafe( struct cell *t, struct sip_msg* p_msg, unsigned int code,
 	str * text )
@@ -1107,7 +1109,13 @@ int t_reply_unsafe( struct cell *t, struct sip_msg* p_msg, unsigned int code,
 }
 
 
+int t_gen_totag(struct sip_msg *msg, str *totag)
+{
+	calc_tag_suffix( msg, tm_tag_suffix );
+	*totag = tm_tag;
 
+	return 1;
+}
 
 
 void set_final_timer( /* struct s_table *h_table, */ struct cell *t )
@@ -1235,7 +1243,7 @@ enum rps relay_reply( struct cell *t, struct sip_msg *p_msg, int branch,
 			if (relayed_code>=180 && t->uas.request->to
 					&& (get_to(t->uas.request)->tag_value.s==0
 					|| get_to(t->uas.request)->tag_value.len==0)) {
-				calc_crc_suffix( t->uas.request, tm_tag_suffix );
+				calc_tag_suffix( t->uas.request, tm_tag_suffix );
 				buf = build_res_buf_from_sip_req(
 						relayed_code,
 						&text,
@@ -1753,7 +1761,7 @@ int t_reply_with_body( struct cell *trans, unsigned int code, str *text,
 	else
 	if (code>=180 && p_msg->to && (get_to(p_msg)->tag_value.s==0
 			|| get_to(p_msg)->tag_value.len==0)) {
-		calc_crc_suffix( p_msg, tm_tag_suffix );
+		calc_tag_suffix( p_msg, tm_tag_suffix );
 		rpl.s = build_res_buf_from_sip_req(code,text, &tm_tag, p_msg,
 				(unsigned int*)&rpl.len, &bm);
 		to_tag_rpl.s = tm_tag.s;

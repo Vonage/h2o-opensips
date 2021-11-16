@@ -150,6 +150,7 @@ struct module_exports exports = {
 	MOD_TYPE_DEFAULT,/* class of this module */
 	MODULE_VERSION,
 	DEFAULT_DLFLAGS, /* dlopen flags */
+	0,				 /* load function */
 	NULL,            /* OpenSIPS module dependencies */
 	cmds,      /* Exported functions */
 	0,         /* Exported async functions */
@@ -159,6 +160,7 @@ struct module_exports exports = {
 	0,         /* exported pseudo-variables */
 	0,		   /* exported transformations */
 	0,         /* extra processes */
+	0,         /* module pre-initialization function */
 	mod_init,  /* module initialization function */
 	0,         /* response function*/
 	destroy,   /* destroy function */
@@ -284,7 +286,7 @@ error:
 static int child_init(int rank)
 {
 	/* Check if database is needed by worker processes only */
-	if ( db_mode==0 && (rank>PROC_MAIN) ) {
+	if ( db_mode==0 && (rank>=1) ) {
 		if (domain_db_init(&db_url)<0) {
 			LM_ERR("Unable to connect to the database\n");
 			return -1;
@@ -302,10 +304,6 @@ static int mi_child_init(void)
 
 static void destroy(void)
 {
-	/* Destroy is called from the main process only,
-	 * there is no need to close database here because
-	 * it is closed in mod_init already
-	 */
 	if (hash_table) {
 		shm_free(hash_table);
 		hash_table = 0;

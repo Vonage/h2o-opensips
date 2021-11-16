@@ -87,7 +87,8 @@ struct module_exports exports = {
 	MOD_TYPE_DEFAULT,				/* class of this module */
 	MODULE_VERSION,
 	DEFAULT_DLFLAGS,				/* dlopen flags */
-	&deps,						    /* OpenSIPS module dependencies */
+	0,								/* load function */
+	&deps,							/* OpenSIPS module dependencies */
 	cmds,							/* exported functions */
 	0,								/* exported async functions */
 	params,							/* exported parameters */
@@ -96,6 +97,7 @@ struct module_exports exports = {
 	0,								/* exported pseudo-variables */
 	0,								/* extra processes */
 	0,								/* extra transformations */
+	0,								/* module pre-initialization function */
 	mod_init,						/* module initialization function */
 	(response_function) 0,			/* response handling function */
 	(destroy_function)mod_destroy,	/* destroy function */
@@ -237,7 +239,7 @@ static int siprec_start_rec(struct sip_msg *msg, char *_srs, char *_grp,
 
 	/* we ref the dialog to make sure it does not dissapear until we receive
 	 * the reply from the SRS */
-	srec_dlg.ref_dlg(dlg, 1);
+	srec_dlg.dlg_ref(dlg, 1);
 	ss->dlg = dlg;
 
 	ret = -2;

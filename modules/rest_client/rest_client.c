@@ -22,6 +22,7 @@
  * 2013-02-28: Created (Liviu)
  */
 
+#define _GNU_SOURCE
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -39,6 +40,8 @@
 #include "../tls_mgm/api.h"
 
 #include "rest_methods.h"
+#include "../../ssl_init_tweaks.h"
+#include "../../pt.h"
 
 /*
  * Module parameters
@@ -60,6 +63,8 @@ int _async_resume_retr_itv = 100; /* us */
 /* libcurl enables these by default */
 int ssl_verifypeer = 1;
 int ssl_verifyhost = 1;
+
+int enable_expect_100;
 
 struct tls_mgm_binds tls_api;
 
@@ -161,6 +166,7 @@ static param_export_t params[] = {
 	{ "ssl_capath",			STR_PARAM, &ssl_capath			},
 	{ "ssl_verifypeer",		INT_PARAM, &ssl_verifypeer		},
 	{ "ssl_verifyhost",		INT_PARAM, &ssl_verifyhost		},
+	{ "enable_expect_100",	INT_PARAM, &enable_expect_100	},
 	{ 0, 0, 0 }
 };
 
@@ -173,6 +179,7 @@ struct module_exports exports = {
 	MOD_TYPE_DEFAULT,/* class of this module */
 	MODULE_VERSION,  /* module version */
 	DEFAULT_DLFLAGS, /* dlopen flags */
+	0,				 /* load function */
 	&deps,            /* OpenSIPS module dependencies */
 	cmds,     /* Exported functions */
 	acmds,    /* Exported async functions */
@@ -182,84 +189,12 @@ struct module_exports exports = {
 	NULL,     /* exported pseudo-variables */
 	NULL,	  /* exported transformations */
 	NULL,     /* extra processes */
+	NULL,     /* module pre-initialization function */
 	mod_init, /* module initialization function */
 	NULL,     /* response function*/
 	mod_destroy,
 	child_init, /* per-child init function */
 };
-
-/*
- * Since libcurl's "easy" interface spawns a separate thread to perform each
- * transfer, we supply it with a set of allocation functions which make
- * everyone happy:
- *  - thread-safe
- *  - faster than libc's malloc()
- *  - integrated with OpenSIPS's memory usage reporting
- */
-static gen_lock_t thread_lock;
-
-static void *osips_malloc(size_t size)
-{
-	void *p;
-
-	lock_get(&thread_lock);
-	p = pkg_malloc(size);
-	lock_release(&thread_lock);
-
-	return p;
-}
-
-static void *osips_calloc(size_t nmemb, size_t size)
-{
-	void *p;
-
-	lock_get(&thread_lock);
-	p = pkg_malloc(nmemb * size);
-	lock_release(&thread_lock);
-	if (p) {
-		memset(p, '\0', nmemb * size);
-	}
-
-	return p;
-}
-
-static void *osips_realloc(void *ptr, size_t size)
-{
-	void *p;
-
-	lock_get(&thread_lock);
-	p = pkg_realloc(ptr, size);
-	lock_release(&thread_lock);
-
-	return p;
-}
-
-static char *osips_strdup(const char *cp)
-{
-	char *rval;
-	int len;
-
-	len = strlen(cp) + 1;
-
-	lock_get(&thread_lock);
-	rval = pkg_malloc(len);
-	lock_release(&thread_lock);
-	if (!rval) {
-		return NULL;
-	}
-
-	memcpy(rval, cp, len);
-	return rval;
-}
-
-static void osips_free(void *ptr)
-{
-	lock_get(&thread_lock);
-	if (ptr) {
-		pkg_free(ptr);
-	}
-	lock_release(&thread_lock);
-}
 
 static int mod_init(void)
 {
@@ -278,15 +213,6 @@ static int mod_init(void)
 		        "to 'curl_timeout'! setting it to %ld...\n", curl_timeout);
 		connection_timeout = curl_timeout;
 	}
-
-	lock_init(&thread_lock);
-
-	curl_global_init_mem(CURL_GLOBAL_ALL,
-						 osips_malloc,
-						 osips_free,
-						 osips_realloc,
-						 osips_strdup,
-						 osips_calloc);
 
 	INIT_LIST_HEAD(&multi_pool);
 
@@ -310,6 +236,13 @@ static int mod_init(void)
 			       "Is the tls_mgm module loaded?\n");
 			return -1;
 		}
+	}
+
+	/* we need to initialize the curl library now, otherwise, if we do it in
+	 * child_init(), in curl_easy_init(), the init handler will be run multiple times in parallel */
+	if (curl_global_init(CURL_GLOBAL_ALL) != CURLE_OK) {
+		LM_ERR("could not initialize curl!\n");
+		return -1;
 	}
 
 	LM_INFO("Module initialized!\n");

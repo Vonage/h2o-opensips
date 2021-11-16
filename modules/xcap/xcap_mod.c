@@ -80,6 +80,7 @@ struct module_exports exports = {
 	MOD_TYPE_DEFAULT,/* class of this module */
 	MODULE_VERSION,
 	DEFAULT_DLFLAGS,            /* dlopen flags */
+	0,				            /* load function */
 	&deps,           /* OpenSIPS module dependencies */
 	cmds,                       /* exported functions */
 	0,                          /* exported async functions */
@@ -89,6 +90,7 @@ struct module_exports exports = {
 	0,                          /* exported pseudo-variables */
 	0,							/* exported transformations */
 	0,                          /* extra processes */
+	0,                          /* module pre-initialization function */
 	mod_init,                   /* module initialization function */
 	(response_function) 0,      /* response handling function */
 	(destroy_function) destroy, /* destroy function */
@@ -150,19 +152,11 @@ static int child_init(int rank)
 		return -1;
 	}
 
-        if (xcap_dbf.use_table(xcap_db, &xcap_table) < 0)
-        {
-                LM_ERR("child %d: Error in use_table xcap_table\n", rank);
-                return -1;
-        }
-
 	return 0;
 }
 
 
 void destroy(void)
 {
-        if(xcap_db && xcap_dbf.close)
-	        xcap_dbf.close(xcap_db);
 }
 

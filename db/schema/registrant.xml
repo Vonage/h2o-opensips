@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE table PUBLIC "-//opensips.org//DTD DBSchema V1.1//EN" 
-  "http://opensips.org/pub/opensips/dbschema/dtd/1.1/dbschema.dtd" [
+  "https://opensips.org/pub/opensips/dbschema/dtd/1.1/dbschema.dtd" [
 
 <!ENTITY % entities SYSTEM "entities.xml">
 %entities;
@@ -76,7 +76,10 @@
 		<size>&user_len;</size>
 		<null/>
 		<default><null/></default>
-		<description>Password for authentication.</description>
+		<description>Password for authentication. If the password
+		starts with <emphasis>0x</emphasis> and is an MD5 hash, then
+		it is considered to be the HA1 representation of the hash.
+		Otherwise, it is considered to be plain text.</description>
 	</column>
 
 	<column>

@@ -51,16 +51,16 @@
   * Most libraries often provide functions that can work with an explicit given
   * length, thus avoiding the need for this copy operation.
   */
-struct _str{
+struct __str {
 	char* s; /**< string as char array */
 	int len; /**< string length, not including null-termination */
 };
 
-typedef struct _str str;
+typedef struct __str str;
 
 /* str initialization */
-#define STR_NULL {NULL, 0}
-#define str_init(_string)  {_string, sizeof(_string) - 1}
+#define STR_NULL (str){NULL, 0}
+#define str_init(_string)  (str){_string, sizeof(_string) - 1}
 static inline void init_str(str *dest, const char *src)
 {
 	dest->s = (char *)src;
@@ -79,5 +79,19 @@ static inline str *str_cpy(str *dest, const str *src)
 }
 
 #define STR_L(s) s, strlen(s)
+
+/**
+ * Handy function for writing unit tests which compare str's
+ *
+ * WARNING: _only_ use when passing (str *) to _basic_ functions,
+ *          since it is not re-entrant and may cause ugly bugs!
+ */
+static inline str *_str(const char *s)
+{
+	static str st;
+
+	init_str(&st, s);
+	return &st;
+}
 
 #endif

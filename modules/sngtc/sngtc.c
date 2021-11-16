@@ -165,6 +165,7 @@ struct module_exports exports= {
 	MOD_TYPE_DEFAULT,/* class of this module */
 	MODULE_VERSION,
 	DEFAULT_DLFLAGS,
+	0,
 	&deps,           /* OpenSIPS module dependencies */
 	cmds,
 	0,
@@ -174,6 +175,7 @@ struct module_exports exports= {
 	0,
 	0,				/* exported transformations */
 	procs,
+	0,
 	mod_init,
 	(response_function) 0,
 	(destroy_function)mod_destroy,
@@ -312,7 +314,7 @@ static int mod_init(void)
 		return -1;
 	}
 
-	sip_workers_no = udp_count_processes() + tcp_count_processes();
+	sip_workers_no = count_child_processes();
 
 	LM_DBG("Children: %d\n", sip_workers_no);
 
@@ -387,7 +389,7 @@ static int child_init(int rank)
 {
 	LM_DBG("init child\n");
 
-	if (rank <= PROC_MAIN)
+	if (rank < 1 )
 		return 0;
 
 	lock_get(index_lock);

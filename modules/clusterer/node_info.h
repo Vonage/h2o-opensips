@@ -75,7 +75,6 @@ struct node_info {
 
 	/* fields accessed only by timer */
 	int curr_no_retries;
-	struct timeval last_ping;       	/* last ping sent to this node */
 
 	/* fields protected by cluster lock */
 	int sp_top_version;                 /* last topology version for which shortest path was computed */
@@ -85,6 +84,8 @@ struct node_info {
 
 	/* fields protected by node lock */
 	clusterer_link_state link_state;	/* state of the "link" with this node */
+	int last_ping_state;				/* state(success/error) of the last ping sent to this node */
+	struct timeval last_ping;       	/* last ping sent to this node */
 	struct timeval last_pong;       	/* last pong received from this node */
 	struct neighbour *neighbour_list;   /* list of directly reachable neighbours */
 	int ls_seq_no;                      /* sequence number of the last link state update */
@@ -105,6 +106,7 @@ struct cluster_info {
 	int no_nodes;                   /* number of nodes in the cluster */
 	struct node_info *node_list;
 	struct node_info *current_node; /* current node's info in this cluster */
+	struct socket_info *send_sock;
 
 	gen_lock_t *lock;
 
@@ -127,7 +129,7 @@ int load_db_info(db_func_t *dr_dbf, db_con_t* db_hdl, str *db_table, cluster_inf
 void free_info(cluster_info_t *cl_list);
 
 int add_node_info(node_info_t **new_info, cluster_info_t **cl_list, int *int_vals,
-					char **str_vals);
+					str *str_vals);
 
 int provision_neighbor(modparam_t type, void* val);
 int provision_current(modparam_t type, void *val);

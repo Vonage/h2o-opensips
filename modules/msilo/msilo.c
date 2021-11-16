@@ -251,6 +251,7 @@ struct module_exports exports= {
 	MOD_TYPE_DEFAULT,/* class of this module */
 	MODULE_VERSION,
 	DEFAULT_DLFLAGS, /* dlopen flags */
+	0,				 /* load function */
 	&deps,           /* OpenSIPS module dependencies */
 	cmds,       /* module's exported functions */
 	0,          /* module's exported async functions */
@@ -264,6 +265,7 @@ struct module_exports exports= {
 	0,          /* exported pseudo-variables */
 	0,			/* exported transformations */
 	0,          /* extra processes */
+	0,          /* module pre-initialization function */
 	mod_init,   /* module initialization function */
 	(response_function) 0,       /* response handler */
 	(destroy_function) destroy,  /* module destroy function */
@@ -1107,9 +1109,6 @@ void destroy(void)
 {
 	LM_DBG("msilo destroy module ...\n");
 	msg_list_free(ml);
-
-	if(db_con && msilo_dbf.close)
-		msilo_dbf.close(db_con);
 }
 
 /**

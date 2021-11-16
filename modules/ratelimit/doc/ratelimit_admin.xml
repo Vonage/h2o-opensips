@@ -171,6 +171,12 @@
 		Generally though, as real life request rates drift by less, adapting should
 		happen much faster.
 		</para>
+		<para>
+		IMPORTANT NOTE: as this algorithm is diven by the load factor, the values
+		for the limits must be between 0 and 100 (as percentages) and the limits
+		for all the checks and pipes must be the same (only one value). Again, this
+		limitation are specific to this algorithm and not to the implementation.
+		</para>
 	</section>
 	</section>
 	<section id="dependencies" xreflabel="Dependencies">
@@ -506,7 +512,7 @@ modparam("ratelimit", "slot_period", 100)
 		specified when the pipe was created will be considered.
 		</para>
 		<para>
-		NOTE: This function increments the pipe's couter every time it is
+		NOTE: This function increments the pipe's counter every time it is
 		called, even if the call should be declined. Therefore If you are using
 		ratelimit to limit only successful traffic, you need to explicitely
 		decrease the counter for the declined calls using the
@@ -691,7 +697,7 @@ modparam("ratelimit", "slot_period", 100)
 		<itemizedlist>
 			<listitem><para>
 			<emphasis>pipe</emphasis> - indicates the name of the pipe whose
-			couter should be reset.
+			counter should be reset.
 			</para></listitem>
 		</itemizedlist>
 		<para>

@@ -451,7 +451,7 @@ int ospRequestRouting(
     char cinfo[OSP_DEF_CINFONUM][OSP_STRBUF_SIZE];
     char cinfostr[OSP_STRBUF_SIZE];
     unsigned int callidnumber = 1;
-    OSPT_CALL_ID* callids[callidnumber];
+    OSPT_CALL_ID* callids[callidnumber] = { NULL };
     unsigned int logsize = 0;
     char* detaillog = NULL;
     char desthost[OSP_STRBUF_SIZE];

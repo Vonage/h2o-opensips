@@ -307,6 +307,7 @@ struct module_exports exports = {
 	MOD_TYPE_DEFAULT,/* class of this module */
 	MODULE_VERSION,
 	DEFAULT_DLFLAGS, /* dlopen flags */
+	0,				 /* load function */
 	&deps,           /* OpenSIPS module dependencies */
 	cmds,
 	NULL,
@@ -316,6 +317,7 @@ struct module_exports exports = {
 	0,           /* exported pseudo-variables */
 	0,			 /* exported transformations */
 	0,           /* extra processes */
+	0,			 /* pre-init function */
 	mod_init,
 	0,           /* sipping_rpl_filter() - optional reply processing */
 	mod_destroy, /* destroy function */
@@ -567,17 +569,17 @@ mod_init(void)
 
 		fix_flag_name(sipping_flag_str, sipping_flag);
 		sipping_flag=get_flag_id_by_name(FLAG_TYPE_BRANCH, sipping_flag_str);
-		sipping_flag = (sipping_flag==-1)?0:(1<<sipping_flag);
+		sipping_flag = (sipping_flag<0)?0:(1<<sipping_flag);
 
 		fix_flag_name(rm_on_to_flag_str, rm_on_to_flag);
 		rm_on_to_flag=get_flag_id_by_name(FLAG_TYPE_BRANCH, rm_on_to_flag_str);
-		rm_on_to_flag = (rm_on_to_flag==-1)?0:(1<<rm_on_to_flag);
+		rm_on_to_flag = (rm_on_to_flag<0)?0:(1<<rm_on_to_flag);
 
 		fix_flag_name(sipping_latency_flag_str, sipping_latency_flag);
 		sipping_latency_flag = get_flag_id_by_name(FLAG_TYPE_BRANCH,
 		                                           sipping_latency_flag_str);
-		sipping_latency_flag = (sipping_latency_flag==-1)?
-		                                    0:(1<<sipping_latency_flag);
+		sipping_latency_flag = (sipping_latency_flag<0)?
+											0:(1<<sipping_latency_flag);
 
 		LM_DBG("sip ping flags: sipping_flag: %d rm_on_to_flag: %d "
 		       "sipping_latency_flag : %d\n", sipping_flag, rm_on_to_flag,
@@ -1833,7 +1835,7 @@ int fix_ignore_rpl_codes(void)
 		return 0;
 
 	ignore_rpl_codes_str.len = strlen(ignore_rpl_codes_str.s);
-	chopped_codes = _parse_csv_record(&ignore_rpl_codes_str, CSV_SIMPLE);
+	chopped_codes = parse_csv_record(&ignore_rpl_codes_str);
 	if (!chopped_codes) {
 		LM_ERR("oom\n");
 		return -1;

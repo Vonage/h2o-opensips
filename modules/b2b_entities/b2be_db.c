@@ -131,6 +131,7 @@ int b2be_db_insert(b2b_dlg_t* dlg, int type)
 {
 	dlg_leg_t* leg;
 	int cols_no;
+	int i;
 
 	if(b2be_dbf.use_table(b2be_db, &b2be_dbtable)< 0)
 	{
@@ -157,6 +158,16 @@ int b2be_db_insert(b2b_dlg_t* dlg, int type)
 		qvals[11].val.str_val.len = 0;
 	}
 	qvals[12].val.str_val= dlg->param;
+	if (dlg->param.len) {
+		/* if the parameter is not printable, do not insert it in the dabase
+		 * otherwise it will fail and the entire record will be skipped */
+		for (i = 0; i < dlg->param.len; i++)
+			if (!isprint(dlg->param.s[i])) {
+				qvals[12].val.str_val.s = NULL;
+				qvals[12].val.str_val.len = 0;
+				break;
+			}
+	}
 
 	qvals[13].val.int_val = dlg->state;
 	qvals[14].val.int_val = dlg->cseq[0];
@@ -498,7 +509,7 @@ int b2b_entities_restore(void)
 			dlg.from_uri.s       = (char*)row_vals[5].val.string_val;
 			dlg.from_uri.len     = strlen(dlg.from_uri.s);
 			dlg.from_dname.s     = (char*)row_vals[6].val.string_val;
-			dlg.from_dname.len   = strlen(dlg.from_dname.s);
+			dlg.from_dname.len   = dlg.from_dname.s?strlen(dlg.from_dname.s):0;
 			dlg.to_uri.s         = (char*)row_vals[7].val.string_val;
 			dlg.to_uri.len       = strlen(dlg.to_uri.s);
 			dlg.to_dname.s       = (char*)row_vals[8].val.string_val;
@@ -519,7 +530,7 @@ int b2b_entities_restore(void)
 			dlg.last_reply_code  = row_vals[17].val.int_val;
 			dlg.last_invite_cseq = row_vals[18].val.int_val;
 			dlg.param.s          = (char*)row_vals[12].val.string_val;
-			dlg.param.len        = strlen(dlg.param.s);
+			dlg.param.len        = dlg.param.s?strlen(dlg.param.s):0;
 			sockinfo_str.s       = (char*)row_vals[11].val.string_val;
 			if(sockinfo_str.s)
 			{

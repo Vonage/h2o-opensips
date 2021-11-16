@@ -71,7 +71,7 @@ static int wss_raw_writev(struct tcp_connection *c, int fd,
 #define _ws_common_tcp_current_req tcp_current_req
 #define _ws_common_current_req wss_current_req
 #define _ws_common_max_msg_chunks wss_max_msg_chunks
-#define _ws_common_read tls_read
+#define _ws_common_read(c, r) tls_read((c), (r), &tls_mgm_api)
 #define _ws_common_writev wss_raw_writev
 #define _ws_common_read_tout wss_hs_read_tout
 /*
@@ -124,7 +124,7 @@ static param_export_t params[] = {
 	/* XXX: should we drop the ws prefix? */
 	{ "wss_port",           INT_PARAM, &wss_port           },
 	{ "wss_max_msg_chunks", INT_PARAM, &wss_max_msg_chunks },
-	{ "wss_resource",       STR_PARAM, &wss_resource       },
+	{ "wss_resource",       STR_PARAM, &wss_resource.s     },
 	{ "wss_handshake_timeout", INT_PARAM, &wss_hs_read_tout},
 	{ "trace_destination",     STR_PARAM,         &trace_destination_name.s  },
 	{ "trace_on",						 INT_PARAM, &trace_is_on_tmp        },
@@ -152,6 +152,7 @@ struct module_exports exports = {
 	MOD_TYPE_DEFAULT,/* class of this module */
 	MODULE_VERSION,
 	DEFAULT_DLFLAGS, /* dlopen flags */
+	0,				 /* load function */
 	&deps,            /* OpenSIPS module dependencies */
 	cmds,       /* exported functions */
 	0,          /* exported async functions */
@@ -161,6 +162,7 @@ struct module_exports exports = {
 	0,          /* exported pseudo-variables */
 	0,			/* exported transformations */
 	0,          /* extra processes */
+	0,          /* module pre-initialization function */
 	mod_init,   /* module initialization function */
 	0,          /* response function */
 	0,          /* destroy function */
@@ -193,6 +195,8 @@ static int proto_wss_init(struct proto_info *pi)
 static int mod_init(void)
 {
 	LM_INFO("initializing Secure WebSocket protocol\n");
+
+	wss_resource.len = strlen(wss_resource.s);
 
 	if(load_tls_mgm_api(&tls_mgm_api) != 0){
 		LM_DBG("failed to find tls API - is tls_mgm module loaded?\n");
@@ -230,11 +234,8 @@ static int mod_init(void)
 			get_script_route_ID_by_name( trace_filter_route, rlist, RT_NO);
 	}
 
-
-
 	return 0;
 }
-
 
 static int wss_conn_init(struct tcp_connection* c)
 {
@@ -268,6 +269,7 @@ static int wss_conn_init(struct tcp_connection* c)
 
 	ret = tls_conn_init(c, &tls_mgm_api);
 	if (ret < 0) {
+		c->proto_data = NULL;
 		LM_ERR("Cannot initiate the conn\n");
 		shm_free(d);
 	}
@@ -287,6 +289,7 @@ static void ws_conn_clean(struct tcp_connection* c)
 				break;
 			case WS_ERR_NONE:
 				WS_CODE(c) = WS_ERR_NORMAL;
+				/* fall through */
 			default:
 				ws_close(c);
 				break;
@@ -298,7 +301,7 @@ static void ws_conn_clean(struct tcp_connection* c)
 
 	}
 
-	tls_conn_clean(c);
+	tls_conn_clean(c, &tls_mgm_api);
 }
 
 
@@ -519,6 +522,8 @@ send_it:
 
 	/* mark the ID of the used connection (tracing purposes) */
 	last_outgoing_tcp_id = c->id;
+	send_sock->last_local_real_port = c->rcv.dst_port;
+	send_sock->last_remote_real_port = c->rcv.src_port;
 
 	tcp_conn_release(c, 0);
 	return n;
@@ -542,7 +547,7 @@ static int wss_read_req(struct tcp_connection* con, int* bytes_read)
 	struct ws_data* d;
 
 	/* we need to fix the SSL connection before doing anything */
-	if (tls_fix_read_conn(con, t_dst) < 0) {
+	if (tls_fix_read_conn(con, t_dst, &tls_mgm_api) < 0) {
 		LM_ERR("cannot fix read connection\n");
 		if ( (d=con->proto_data) && d->dest && d->tprot ) {
 			if ( d->message ) {
@@ -633,7 +638,7 @@ static int wss_raw_writev(struct tcp_connection *c, int fd,
 		n += iov[i].iov_len;
 	}
 	lock_get(&c->write_lock);
-	n = tls_blocking_write(c, fd, buf, n, &tls_mgm_api);
+	n = tls_blocking_write(c, fd, buf, n, &tls_mgm_api, t_dst);
 #endif /* TLS_DONT_WRITE_FRAGMENTS */
 
 end:

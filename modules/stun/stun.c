@@ -83,6 +83,7 @@ struct module_exports exports = {
 	MOD_TYPE_DEFAULT,/* class of this module */
 	MODULE_VERSION,     /* module version */
 	DEFAULT_DLFLAGS,    /* dlopen flags */
+	0,				    /* load function */
 	NULL,            /* OpenSIPS module dependencies */
 	0,                  /* exported functions */
 	0,                  /* exported async functions */
@@ -92,6 +93,7 @@ struct module_exports exports = {
 	0,                  /* exported pseudo-variables */
 	0,					/* exported transformations */
 	mod_procs,          /* extra processes */
+	0,                  /* module pre-initialization function */
 	stun_mod_init,      /* module initialization function */
 	0,                  /* response function*/
 	0,                  /* destroy function */
@@ -422,6 +424,9 @@ int getTlvAttribute(IN_OUT Buffer* buf, IN_OUT StunMsg* msg){
     len = ntohs(*(T16 *) b);
     b+=2;
 
+    if (len % 4 != 0)
+        len = (len/4 + 1) * 4;
+
     if(4 + len > buf->size){
 	LM_DBG("Attribute length overflows; drop msg\n");
 	return -3;
@@ -571,6 +576,7 @@ int getTlvAttribute(IN_OUT Buffer* buf, IN_OUT StunMsg* msg){
 	    }else{
 		LM_DBG("Unknown non-mandatory attribute type = %i len = %i; "
 			"will ignore\n", type, len);
+		b += len;
 		rc = -1;
 	    }
 	    break;

@@ -192,7 +192,8 @@ struct module_exports exports = {
 	MOD_TYPE_DEFAULT,    /* class of this module */
 	MODULE_VERSION,
 	DEFAULT_DLFLAGS, /* dlopen flags */
-	&deps,            /* OpenSIPS module dependencies */
+	0,				 /* load function */
+	&deps,           /* OpenSIPS module dependencies */
 	cmds,       /* exported functions */
 	0,          /* exported async functions */
 	params,     /* module parameters */
@@ -201,6 +202,7 @@ struct module_exports exports = {
 	NULL,       /* exported pseudo-variables */
 	0,			/* exported transformations */
 	0,          /* extra processes */
+	0,          /* module pre-initialization function */
 	mod_init,   /* module initialization function */
 	0,          /* response function */
 	mod_destroy,/* destroy function */
@@ -349,7 +351,7 @@ static void proto_tls_conn_clean(struct tcp_connection* c)
 		c->proto_data = NULL;
 	}
 
-	tls_conn_clean(c);
+	tls_conn_clean(c, &tls_mgm_api);
 }
 
 
@@ -449,6 +451,10 @@ static int proto_tls_send(struct socket_info* send_sock,
 		if (tcp_no_new_conn) {
 			return -1;
 		}
+		if (!to) {
+			LM_ERR("Unknown destination - cannot open new ws connection\n");
+			return -1;
+		}
 		LM_DBG("no open tcp connection found, opening new one\n");
 		/* create tcp connection */
 		if ((c=tls_sync_connect(send_sock, to, &fd))==0) {
@@ -493,6 +499,8 @@ send_it:
 
 	/* mark the ID of the used connection (tracing purposes) */
 	last_outgoing_tcp_id = c->id;
+	send_sock->last_local_real_port = c->rcv.dst_port;
+	send_sock->last_remote_real_port = c->rcv.src_port;
 
 	tcp_conn_release(c, 0);
 	return n;
@@ -520,7 +528,7 @@ static int tls_read_req(struct tcp_connection* con, int* bytes_read)
 	}
 
 	/* do this trick in order to trace whether if it's an error or not */
-	ret=tls_fix_read_conn(con, t_dst);
+	ret=tls_fix_read_conn(con, t_dst, &tls_mgm_api);
 
 	/* if there is pending tracing data on an accepted connection, flush it
 	 * As this is a read op, we look only for accepted conns, not to conflict
@@ -555,7 +563,7 @@ again:
 		if (req->parsed<req->pos){
 			bytes=0;
 		}else{
-			bytes=tls_read(con,req);
+			bytes=tls_read(con,req, &tls_mgm_api);
 			if (bytes<0) {
 				LM_ERR("failed to read \n");
 				goto error;

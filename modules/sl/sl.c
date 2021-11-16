@@ -108,6 +108,7 @@ struct module_exports exports= {
 	MOD_TYPE_DEFAULT,/* class of this module */
 	MODULE_VERSION,
 	DEFAULT_DLFLAGS, /* dlopen flags */
+	0,				 /* load function */
 	NULL,            /* OpenSIPS module dependencies */
 	cmds,         /* exported functions */
 	NULL,         /* exported async functions */
@@ -117,6 +118,7 @@ struct module_exports exports= {
 	0,            /* exported pseudo-variables */
 	0,			  /* exported transformations */
 	0,            /* extra processes */
+	0,            /* module pre-initialization function */
 	mod_init,     /* module initialization function */
 	0,            /* reply processing function */
 	mod_destroy,
@@ -238,7 +240,7 @@ static int w_sl_send_reply(struct sip_msg* msg, char* str1, char* str2)
 		code_s = ((pv_elem_p)str2)->text;
 	}
 
-	return sl_send_reply(msg, code_i, &code_s);
+	return sl_send_reply(msg, code_i, &code_s, NULL);
 }
 
 
@@ -248,7 +250,7 @@ int load_sl( struct sl_binds *slb)
 		return -1;
 
 	slb->reply      = sl_send_reply;
-	slb->get_totag  = sl_get_totag;
+	slb->gen_totag  = sl_gen_totag;
 
 	return 1;
 }

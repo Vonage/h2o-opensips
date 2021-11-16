@@ -71,7 +71,8 @@ struct module_exports exports= {
 	MOD_TYPE_CACHEDB,/* class of this module */
 	MODULE_VERSION,
 	DEFAULT_DLFLAGS,			/* dlopen flags */
-	NULL,            /* OpenSIPS module dependencies */
+	0,							/* load function */
+	NULL,						/* OpenSIPS module dependencies */
 	0,						/* exported functions */
 	0,						/* exported async functions */
 	params,						/* exported parameters */
@@ -80,6 +81,7 @@ struct module_exports exports= {
 	0,							/* exported pseudo-variables */
 	0,							/* exported transformations */
 	0,							/* extra processes */
+	0,							/* module pre-initialization function */
 	mod_init,					/* module initialization function */
 	(response_function) 0,      /* response handling function */
 	(destroy_function)destroy,	/* destroy function */
@@ -122,10 +124,6 @@ static int child_init(int rank)
 {
 	struct cachedb_url *it;
 	cachedb_con *con;
-
-	if(rank == PROC_MAIN || rank == PROC_TCP_MAIN) {
-		return 0;
-	}
 
 	for (it = couchbase_script_urls;it;it=it->next) {
 		LM_DBG("iterating through couchbase conns - [%.*s]\n",it->url.len,it->url.s);

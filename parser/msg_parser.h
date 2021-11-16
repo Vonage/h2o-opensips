@@ -61,6 +61,7 @@
 /* convenience short-cut macros */
 #define REQ_LINE(_msg) ((_msg)->first_line.u.request)
 #define REQ_METHOD first_line.u.request.method_value
+#define REQ_METHOD_S first_line.u.request.method
 #define REPLY_STATUS first_line.u.reply.statuscode
 #define REPLY_CLASS(_reply) ((_reply)->REPLY_STATUS/100)
 
@@ -120,6 +121,7 @@ enum request_method {
                                       * either in failure route or resume 
                                       * route */
 #define FL_TM_REPLICATED	 (1<<19) /* message received due to a tm replication */
+#define FL_BODY_NO_SDP       (1<<20) /* message does not have an SDP body */
 
 /* define the # of unknown URI parameters to parse */
 #define URI_MAX_U_PARAMS 10
@@ -335,6 +337,8 @@ int parse_headers(struct sip_msg* msg, hdr_flags_t flags, int next);
 char* get_hdr_field(char* buf, char* end, struct hdr_field* hdr);
 
 void free_sip_msg(struct sip_msg* msg);
+
+int clone_headers(struct sip_msg *from_msg, struct sip_msg *to_msg);
 
 /* make sure all HFs needed for transaction identification have been
    parsed; return 0 if those HFs can't be found

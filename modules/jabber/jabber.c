@@ -190,6 +190,7 @@ struct module_exports exports= {
 	MOD_TYPE_DEFAULT,/* class of this module */
 	MODULE_VERSION,
 	DEFAULT_DLFLAGS, /* dlopen flags */
+	0,				 /* load function */
 	&deps,           /* OpenSIPS module dependencies */
 	cmds,       /* Exported functions */
 	0,          /* Exported async functions */
@@ -199,6 +200,7 @@ struct module_exports exports= {
 	0,          /* exported pseudo-variables */
 	0,			/* exported transformations */
 	0,          /* extra processes */
+	0,          /* module pre-initialization function */
 	mod_init,   /* module initialization function */
 	(response_function) 0,
 	(destroy_function) destroy,
@@ -680,13 +682,9 @@ void destroy(void)
 		}
 		pkg_free(pipes);
 	}
-	// cleaning MySQL connections
+
 	if(db_con != NULL)
-	{
-		for(i = 0; i<nrw; i++)
-			jabber_dbf.close(db_con[i]);
 		shm_free(db_con);
-	}
 
 	xj_wlist_free(jwl);
 	LM_DBG("unloaded ...\n");

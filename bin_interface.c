@@ -34,12 +34,6 @@ struct socket_info *bin;
 
 static struct packet_cb_list *reg_cbs;
 
-
-short get_bin_pkg_version(bin_packet_t *packet)
-{
-	return  *(short *)(packet->buffer.s + BIN_PACKET_MARKER_SIZE + PKG_LEN_FIELD_SIZE);
-}
-
 void set_len(bin_packet_t *packet) {
 	*(unsigned int *)(packet->buffer.s + BIN_PACKET_MARKER_SIZE) = packet->buffer.len;
 }
@@ -125,7 +119,7 @@ void bin_init_buffer(bin_packet_t *packet, char *buffer, int length)
 
 	packet->type = *(int *)(capability.s + capability.len);
 	packet->front_pointer = capability.s + capability.len + CMD_FIELD_SIZE;
-	LM_INFO("init buffer length %d\n", length);
+	LM_DBG("init buffer length %d\n", length);
 }
 
 /*

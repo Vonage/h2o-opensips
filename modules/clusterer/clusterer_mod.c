@@ -45,6 +45,7 @@
 int ping_interval = DEFAULT_PING_INTERVAL;
 int node_timeout = DEFAULT_NODE_TIMEOUT;
 int ping_timeout = DEFAULT_PING_TIMEOUT;
+int seed_fb_interval = DEFAULT_SEED_FB_INTERVAL;
 int current_id = -1;
 int db_mode = 1;
 
@@ -127,6 +128,7 @@ static param_export_t params[] = {
 	{"ping_interval",		INT_PARAM,	&ping_interval		},
 	{"node_timeout",		INT_PARAM,	&node_timeout		},
 	{"ping_timeout",		INT_PARAM,	&ping_timeout		},
+	{"seed_fallback_interval", INT_PARAM, &seed_fb_interval	},
 	{"id_col",				STR_PARAM,	&id_col.s			},
 	{"cluster_id_col",		STR_PARAM,	&cluster_id_col.s	},
 	{"node_id_col",			STR_PARAM,	&node_id_col.s		},
@@ -194,6 +196,7 @@ struct module_exports exports = {
 	MOD_TYPE_DEFAULT,		/* class of this module */
 	MODULE_VERSION,
 	DEFAULT_DLFLAGS,		/* dlopen flags */
+	0,						/* load function */
 	&deps,            		/* OpenSIPS module dependencies */
 	cmds,					/* exported functions */
 	0,						/* exported async functions */
@@ -203,6 +206,7 @@ struct module_exports exports = {
 	0,						/* exported pseudo-variables */
 	0,						/* exported transformations */
 	0,						/* extra processes */
+	0,						/* module pre-initialization function */
 	mod_init,				/* module initialization function */
 	0,						/* response handling function */
 	destroy,				/* destroy function */
@@ -231,10 +235,11 @@ do { \
 				col_name.s);	\
 			return -1;	\
 		}	\
-		pe = q_memchr(p + 1, ',', descr->s + descr->len - p - 1);	\
-		aux.s = p + 1;	\
-		aux.len = pe ? pe - p - 1 : descr->s + descr->len - p - 1;	\
-		if (aux.s >= descr->s + descr->len || !aux.len) {	\
+		p++;	\
+		pe = q_memchr(p, ',', descr->s + descr->len - p);	\
+		aux.s = p;	\
+		aux.len = pe ? pe - p : descr->s + descr->len - p;	\
+		if (aux.len == 0) {	\
 			LM_ERR("<%.*s> value expected\n", col_name.len,	\
 				col_name.s);	\
 			return -1;	\
@@ -246,17 +251,17 @@ do { \
 					col_name.s);	\
 				return -1;	\
 			}	\
-		} else \
-			str_vals[(_col_idx)] = aux.len ? aux.s : NULL;	\
+		} else	\
+			str_vals[(_col_idx)] = aux;	\
 	} else {	\
 		if ((_type) == 0)	\
 			int_vals[(_col_idx)] = -1;	\
 		else	\
-			str_vals[(_col_idx)] = NULL;	\
+			str_vals[(_col_idx)].s = NULL;	\
 	}	\
 } while(0)
 
-int parse_param_node_info(str *descr, int *int_vals, char **str_vals)
+int parse_param_node_info(str *descr, int *int_vals, str *str_vals)
 {
 	char *p, *pe;
 	str aux;
@@ -310,6 +315,10 @@ static int mod_init(void)
 		LM_WARN("Invalid ping_timeout parameter, using default value\n");
 		ping_timeout = DEFAULT_PING_TIMEOUT;
 	}
+	if (seed_fb_interval < 0) {
+		LM_WARN("Invalid seed_fallback_interval parameter, using default value\n");
+		seed_fb_interval = DEFAULT_SEED_FB_INTERVAL;
+	}
 
 	/* create & init lock */
 	if ((cl_list_lock = lock_init_rw()) == NULL) {
@@ -327,12 +336,19 @@ static int mod_init(void)
 		*cluster_list = NULL;
 	} else {
 		/* sanity check of current_id if node_id also set in a current_info param */
-		for (cl = *cluster_list; cl; cl = cl->next)
+		for (cl = *cluster_list; cl; cl = cl->next) {
+			if (!cl->current_node) {
+				LM_ERR("current node is not part of cluster %d\n",
+				       cl->cluster_id);
+				goto error;
+			}
+
 			if (cl->current_node->node_id != current_id) {
 				LM_ERR("Bad current_id parameter, value: %d different than"
 					" the node_id property in the current_info parameter\n", current_id);
 				goto error;
 			}
+		}
 	}
 
 	if (db_mode) {
@@ -376,6 +392,12 @@ static int mod_init(void)
 			LM_CRIT("Unable to register clusterer heartbeats timer\n");
 			goto error;
 		}
+	}
+
+	if (seed_fb_interval && register_utimer("cl-seed-fb-check", seed_fb_check_timer,
+		NULL, SEED_FB_CHECK_INTERVAL*1000, TIMER_FLAG_DELAY_ON_DELAY) < 0) {
+		LM_CRIT("Unable to register clusterer seed check timer\n");
+		goto error;
 	}
 
 	if (bin_register_cb(&cl_internal_cap, bin_rcv_cl_packets, NULL, 0) < 0) {
@@ -556,7 +578,7 @@ static struct mi_root * clusterer_list(struct mi_root *cmd_tree, void *param)
 			lock_release(n_info->lock);
 
 			n_hop = get_next_hop(n_info); 
-			if (n_hop <= 0)
+			if (!n_hop)
 				val = str_none;
 			else
 				val.s = int2str(n_hop, &val.len);
@@ -832,7 +854,7 @@ static struct mi_root* cluster_send_mi(struct mi_root *cmd, void *param)
 	/* send MI cmd in cluster */
 	rc = send_mi_cmd(cluster_id, node_id, cl_cmd_name, cl_cmd_params, no_params);
 	switch (rc) {
-		case CLUSTERER_SEND_SUCCES:
+		case CLUSTERER_SEND_SUCCESS:
 			LM_DBG("MI command <%.*s> sent\n", cl_cmd_name.len, cl_cmd_name.s);
 			break;
 		case CLUSTERER_CURR_DISABLED:
@@ -864,7 +886,7 @@ static struct mi_root* cluster_bcast_mi(struct mi_root *cmd, void *param)
 
 	node = cmd->node.kids;
 
-	if (node == NULL || node->next == NULL || node->next->next == NULL)
+	if (node == NULL || node->next == NULL)
 		return init_mi_tree(400, MI_SSTR(MI_MISSING_PARM));
 
 	rc = str2int(&node->value, &cluster_id);
@@ -884,7 +906,7 @@ static struct mi_root* cluster_bcast_mi(struct mi_root *cmd, void *param)
 	/* send MI cmd in cluster */
 	rc = send_mi_cmd(cluster_id, 0, cl_cmd_name, cl_cmd_params, no_params);
 	switch (rc) {
-		case CLUSTERER_SEND_SUCCES:
+		case CLUSTERER_SEND_SUCCESS:
 			LM_DBG("MI command <%.*s> sent\n", cl_cmd_name.len, cl_cmd_name.s);
 			break;
 		case CLUSTERER_CURR_DISABLED:
@@ -1161,12 +1183,6 @@ int cmd_check_addr(struct sip_msg *msg, char *param_cluster, char *param_ip,
 
 static void destroy(void)
 {
-	if (db_hdl) {
-		/* close DB connection */
-		dr_dbf.close(db_hdl);
-		db_hdl = NULL;
-	}
-
 	/* destroy data */
 	if (cluster_list) {
 		if (*cluster_list)

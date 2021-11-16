@@ -236,19 +236,18 @@ str* b2b_htable_insert(b2b_table table, b2b_dlg_t* dlg, int hash_index, int src,
 		return NULL;
 	}
 
-	if(src == B2B_SERVER)
+	if(src == B2B_SERVER && !reload)
 	{
 		dlg->tag[CALLEE_LEG].s = (char*)shm_malloc(b2b_key->len);
 		if(dlg->tag[CALLEE_LEG].s == NULL)
 		{
 			LM_ERR("No more shared memory\n");
-			if(!reload)
-				lock_release(&table[hash_index].lock);
+			lock_release(&table[hash_index].lock);
 			return 0;
 		}
 		memcpy(dlg->tag[CALLEE_LEG].s, b2b_key->s, b2b_key->len);
 		dlg->tag[CALLEE_LEG].len = b2b_key->len;
-		if(!reload && b2be_db_mode == WRITE_THROUGH)
+		if(b2be_db_mode == WRITE_THROUGH)
 			b2be_db_insert(dlg, src);
 	}
 
@@ -1155,12 +1154,6 @@ b2b_dlg_t* b2b_new_dlg(struct sip_msg* msg, str* local_contact,
 		dlg.contact[CALLER_LEG]=*local_contact;
 	else
 		dlg.contact[CALLEE_LEG]=*local_contact;
-
-	if (!msg->content_length)
-	{
-		LM_ERR("no Content-Length header found!\n");
-		return 0;
-	}
 
 	if(!init_dlg) /* called from server_new on initial Invite */
 	{
@@ -2373,13 +2366,11 @@ void b2b_tm_cback(struct cell *t, b2b_table htable, struct tmcb_params *ps)
 			}
 			switch(statuscode)
 			{
-			case 401:
-				if (0 == parse_www_authenticate_header(msg))
-					auth = get_www_authenticate(msg);
+			case WWW_AUTH_CODE:
+				parse_www_authenticate_header(msg, &auth);
 				break;
-			case 407:
-				if (0 == parse_proxy_authenticate_header(msg))
-					auth = get_proxy_authenticate(msg);
+			case PROXY_AUTH_CODE:
+				parse_proxy_authenticate_header(msg, &auth);
 				break;
 			}
 			if(uac_auth_loaded && auth && dlg->state == B2B_NEW)

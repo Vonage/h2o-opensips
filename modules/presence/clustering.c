@@ -80,7 +80,7 @@ int init_pres_clustering(void)
 	if (clustering_events.s) {
 		/* parse the event list  */
 		clustering_events.len = strlen(clustering_events.s);
-		list = _parse_csv_record(&clustering_events, CSV_SIMPLE);
+		list = parse_csv_record(&clustering_events);
 		if (list==NULL) {
 			LM_ERR("failed to parse the event CSV list <%.*s>, "
 				"ignoring...\n", clustering_events.len,
@@ -393,8 +393,10 @@ static void handle_replicated_publish(bin_packet_t *packet)
 	if (presentity_has_subscribers( &s, pres.event)==0) {
 		LM_DBG("Presentity has NO local subscribers\n");
 		/* no subscribers for this presentity, discard the publish */
-		if (p==NULL)
+		if (p==NULL) {
+			pkg_free(s.s); // allocated by uandd_to_uri()
 			return;
+		}
 
 		LM_DBG("Forcing expires 0\n");
 		/* force an expire of the presentity */
