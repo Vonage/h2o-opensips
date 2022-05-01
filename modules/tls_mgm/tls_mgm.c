@@ -943,6 +943,7 @@ static int load_certificate_db(SSL_CTX * ctx, str *blob)
 		#ifndef NO_SSL_GLOBAL_LOCK
 		tls_global_lock_release();
 		#endif
+		X509_free(cert);
 		LM_ERR("Unable to use certificate\n");
 		return -1;
 	}
@@ -1276,10 +1277,19 @@ static int init_tls_dom(struct tls_domain *d)
 		d->method = tls_default_method;
 	}
 
+	#ifndef NO_SSL_GLOBAL_LOCK
+	tls_global_lock_get();
+	#endif
+
 	/*
 	 * create context
 	 */
 	d->ctx = SSL_CTX_new(ssl_methods[d->method - 1]);
+
+	#ifndef NO_SSL_GLOBAL_LOCK
+	tls_global_lock_release();
+	#endif
+	
 	if (d->ctx == NULL) {
 		LM_ERR("cannot create ssl context for tls domain '%.*s'\n",
 			d->name.len, ZSW(d->name.s));
