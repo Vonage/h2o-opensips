@@ -330,8 +330,8 @@ static inline void dlg_release_cloned_leg(struct dlg_cell *dlg)
 {
 	struct dlg_leg *leg = &dlg->legs[dlg->legs_no[DLG_LEGS_USED] - 1];
 	shm_free(leg->adv_contact.s);
-	if (leg->out_sdp.s)
-		shm_free(leg->out_sdp.s);
+	if (leg->adv_sdp.s)
+		shm_free(leg->adv_sdp.s);
 	dlg->legs_no[DLG_LEGS_USED]--;
 }
 
