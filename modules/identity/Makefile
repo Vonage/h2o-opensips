@@ -17,8 +17,8 @@ SSL_BUILDER=$(shell \
 endif
 
 ifneq ($(SSL_BUILDER),)
-	DEFS += $(shell $(SSL_BUILDER) --cflags)
-	LIBS += $(shell $(SSL_BUILDER) --libs)
+	DEFS += -I/opt/local/include
+	LIBS += -Wl,-rpath /opt/local/lib -L/opt/local/lib -lssl -lcrypto
 else
 	DEFS += -I$(LOCALBASE)/ssl/include \
 			-I$(LOCALBASE)/include
