@@ -793,4 +793,28 @@ int delete_cluster_query(str* pres_uri, int event, unsigned int hash_code)
 	return 0;
 }
 
+int is_sub_expired(shtable_t htable,unsigned int hash_code,str to_tag)
+{
+	subs_t* s= NULL;
+	int is_expired = 0;
+
+	s = htable[hash_code].entries;
+
+	while(s)
+	{
+		if(s->to_tag.len== to_tag.len &&
+				strncmp(s->to_tag.s, to_tag.s, to_tag.len)== 0)
+		{
+			if(s->expires == 0 && 
+					s->status == TERMINATED_STATUS &&
+						strcasecmp(s->reason.s, "timeout") == 0)
+			{
+				is_expired = 1;
+			}
+			break;
+		}
+		s= s->next;
+	}
+	return is_expired;
+}
 
