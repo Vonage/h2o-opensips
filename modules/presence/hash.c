@@ -798,7 +798,7 @@ int is_sub_expired(shtable_t htable,unsigned int hash_code,str to_tag)
 	subs_t* s= NULL;
 	int is_expired = 0;
 
-	s = htable[hash_code].entries;
+	s = htable[hash_code].entries->next;
 
 	while(s)
 	{
