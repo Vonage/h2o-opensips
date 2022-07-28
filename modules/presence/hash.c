@@ -810,12 +810,12 @@ int is_sub_expired(shtable_t htable,unsigned int hash_code,str to_tag)
 					s->status == TERMINATED_STATUS &&
 						strcasecmp(s->reason.s, "timeout") == 0)
 			{
-				LM_WARN("sub found and expired to_tag [%.*s]\n",to_tag.s);
+				LM_WARN("sub found and expired to_tag [%.*s]\n",to_tag.len, to_tag.s);
 				is_expired = 1;
 			}
 			else
 			{
-				LM_WARN("sub found and it is active to_tag [%.*s]\n",to_tag.s);
+				LM_WARN("sub found and it is active to_tag [%.*s]\n",to_tag.len, to_tag.s);
 				is_expired = 0;
 			}
 			break;
@@ -824,7 +824,7 @@ int is_sub_expired(shtable_t htable,unsigned int hash_code,str to_tag)
 	}
 	if(found < 1)
 	{
-		LM_WARN("sub was not found to_tag [%.*s]\n",to_tag.s);
+		LM_WARN("sub was not found to_tag [%.*s]\n",to_tag.len, to_tag.s);
 		is_expired = 1;
 	}
 
