@@ -793,6 +793,13 @@ int delete_cluster_query(str* pres_uri, int event, unsigned int hash_code)
 	return 0;
 }
 
+/* 
+ * entry must be locked before calling this function 
+ * Returns 1 if 
+            - entry exisits subscription is expired. 
+			- entry does not exist.
+ * Returns 0 if entry is found and subscription is active. 
+*/
 int is_sub_expired(shtable_t htable,unsigned int hash_code,str to_tag)
 {
 	subs_t* s= NULL;

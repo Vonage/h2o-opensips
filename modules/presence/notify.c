@@ -2257,7 +2257,9 @@ void p_tm_callback( struct cell *t, int type, struct tmcb_params *ps)
 		int sub_expired;
 
 		hash_code= core_hash(&cb->pres_uri, &cb->ev_name, shtable_size);
+		lock_get(&subs_htable[hash_code].lock);
 		sub_expired = is_sub_expired(subs_htable, hash_code, cb->to_tag);
+		lock_release(&subs_htable[hash_code].lock);
 		delete_shtable(subs_htable, hash_code, cb->to_tag);
 		if(sub_expired < 1)
 			delete_db_subs(cb->pres_uri, cb->ev_name, cb->to_tag);
