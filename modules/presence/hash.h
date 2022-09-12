@@ -182,5 +182,7 @@ cluster_query_entry_t* search_cluster_query(str* pres_uri, int event,
 
 int delete_cluster_query(str* pres_uri, int event, unsigned int hash_code);
 
+int is_sub_expired(shtable_t htable,unsigned int hash_code,str to_tag);
+
 #endif
 

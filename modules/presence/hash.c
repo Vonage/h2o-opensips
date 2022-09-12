@@ -793,4 +793,48 @@ int delete_cluster_query(str* pres_uri, int event, unsigned int hash_code)
 	return 0;
 }
 
+/* 
+ * entry must be locked before calling this function 
+ * Returns 1 if 
+            - entry exisits subscription is expired. 
+			- entry does not exist.
+ * Returns 0 if entry is found and subscription is active. 
+*/
+int is_sub_expired(shtable_t htable,unsigned int hash_code,str to_tag)
+{
+	subs_t* s= NULL;
+	int is_expired = 0, found = 0;
+
+	s = htable[hash_code].entries->next;
+
+	while(s)
+	{
+		if(s->to_tag.len== to_tag.len &&
+				strncmp(s->to_tag.s, to_tag.s, to_tag.len)== 0)
+		{	
+			found = 1;
+			if(s->expires == 0 && 
+					s->status == TERMINATED_STATUS &&
+						strcasecmp(s->reason.s, "timeout") == 0)
+			{
+				LM_INFO("sub found and expired to_tag [%.*s]\n",to_tag.len, to_tag.s);
+				is_expired = 1;
+			}
+			else
+			{
+				LM_INFO("sub found and it is active to_tag [%.*s]\n",to_tag.len, to_tag.s);
+				is_expired = 0;
+			}
+			break;
+		}
+		s= s->next;
+	}
+	if(found < 1)
+	{
+		LM_INFO("sub was not found to_tag [%.*s]\n",to_tag.len, to_tag.s);
+		is_expired = 1;
+	}
+
+	return is_expired;
+}
 
