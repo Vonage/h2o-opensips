@@ -2673,6 +2673,14 @@ rtpproxy_offer5_f(struct sip_msg *msg,
 		param2 = aux_str.s;
 	}
 
+	if(param5)
+	{
+		LM_ERR("Param 5 is %s\n", param5);
+	}
+	else
+	{
+		LM_ERR("Param 5 is NULL\n");
+	}
 	return force_rtp_proxy(msg, param1, param2, param3, param4, param5, 1);
 }
 
