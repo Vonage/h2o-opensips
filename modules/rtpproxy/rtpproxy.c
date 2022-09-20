@@ -255,7 +255,7 @@ static int rtpproxy_recording(struct sip_msg *, char *, char *, char *, char *, 
 static int rtpproxy_answer5_f(struct sip_msg *,
 		char *, char *, char *, char *, char *);
 static int rtpproxy_offer5_f(struct sip_msg *,
-		char *, char *, char *, char *, char *);
+		char *, char *, char *, char *, char *, char *);
 static int rtpproxy_stats_f(struct sip_msg *, char *, char *, char *, char *,
 		char *, char *);
 static int rtpproxy_all_stats_f(struct sip_msg *, char *, char *, char *);
@@ -433,6 +433,9 @@ static cmd_export_t cmds[] = {
 		REQUEST_ROUTE|ONREPLY_ROUTE|FAILURE_ROUTE|BRANCH_ROUTE|LOCAL_ROUTE},
 	{"rtpproxy_offer",        (cmd_function)rtpproxy_offer5_f,      5,
 		fixup_offer_answer, 0,
+		REQUEST_ROUTE|ONREPLY_ROUTE|FAILURE_ROUTE|BRANCH_ROUTE|LOCAL_ROUTE},
+	{"rtpproxy_offer",        (cmd_function)rtpproxy_offer5_f,      6,
+		0, 0,
 		REQUEST_ROUTE|ONREPLY_ROUTE|FAILURE_ROUTE|BRANCH_ROUTE|LOCAL_ROUTE},
 	{"rtpproxy_answer",      (cmd_function)rtpproxy_answer5_f,      0,
 		0, 0,
@@ -2641,7 +2644,7 @@ static int rtpp_get_var_svalue(struct sip_msg *msg, gparam_p gp, str *val, int n
 
 static int
 rtpproxy_offer5_f(struct sip_msg *msg,
-		char *param1, char *param2, char *param3, char *param4, char *param5)
+		char *param1, char *param2, char *param3, char *param4, char *param5, char *param6)
 {
 	str aux_str;
 
@@ -2673,20 +2676,15 @@ rtpproxy_offer5_f(struct sip_msg *msg,
 		param2 = aux_str.s;
 	}
 
-	if(param5)
+	if(param6)
 	{
-		if (rtpp_get_var_svalue(msg, (gparam_p)param5, &aux_str, 1)<0) {
-			LM_ERR("bogus IP addr parameter\n");
-			return -1;
-		}
-		//param5 = aux_str.s;
-		
-		LM_ERR("Param 5 is %s\n", aux_str.s);
+		LM_ERR("Param 6 is %s\n", param6);
 	}
 	else
 	{
-		LM_ERR("Param 5 is NULL\n");
+		LM_ERR("Param 6 is NULL\n");
 	}
+
 	return force_rtp_proxy(msg, param1, param2, param3, param4, param5, 1);
 }
 
