@@ -2675,7 +2675,13 @@ rtpproxy_offer5_f(struct sip_msg *msg,
 
 	if(param5)
 	{
-		LM_ERR("Param 5 is %s\n", param5);
+		if (rtpp_get_var_svalue(msg, (gparam_p)param5, &aux_str, 1)<0) {
+			LM_ERR("bogus IP addr parameter\n");
+			return -1;
+		}
+		//param5 = aux_str.s;
+		
+		LM_ERR("Param 5 is %s\n", aux_str.s);
 	}
 	else
 	{
