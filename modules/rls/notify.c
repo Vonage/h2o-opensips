@@ -1354,10 +1354,21 @@ db_res_t * build_db_result(xmlNodePtr list_node, int n_result_cols)
  						xmlFree(display.s);
  					}
  					char buf[1024];
-                     if (reduce_notify_size)
- 					    snprintf(buf, 1023, "<?xml version=\"1.0\"?><dialog-info xmlns=\"urn:ietf:params:xml:ns:dialog-info\" version=\"9\" state=\"full\" entity=\"%s\"><dialog id=\"zx3\"><state>terminated</state><remote><local><identity display=\"%s\">%s</identity></local></remote></dialog></dialog-info>", normalized_uri->s, username, normalized_uri->s);
-                     else 
- 					    snprintf(buf, 1023, "<?xml version=\"1.0\"?><dialog-info xmlns=\"urn:ietf:params:xml:ns:dialog-info\" version=\"169\" state=\"full\" entity=\"%s\"><dialog id=\"zxcnm3\"><state>terminated</state><remote><local><identity display=\"%s\">%s</identity></local></remote></dialog></dialog-info>", normalized_uri->s, username, normalized_uri->s);
+					if(1)
+					{
+						if (reduce_notify_size)
+ 					    	snprintf(buf, 1023, "<?xml version=\"1.0\"?><dialog-info xmlns=\"urn:ietf:params:xml:ns:dialog-info\" version=\"0\" state=\"full\" entity=\"%s\"><dialog id=\"zx3\"><state>terminated</state><remote><local><identity display=\"%s\">%s</identity></local></remote></dialog></dialog-info>", normalized_uri->s, username, normalized_uri->s);
+                     	else 
+ 					    	snprintf(buf, 1023, "<?xml version=\"1.0\"?><dialog-info xmlns=\"urn:ietf:params:xml:ns:dialog-info\" version=\"169\" state=\"full\" entity=\"%s\"><dialog id=\"zxcnm3\"><state>terminated</state><remote><local><identity display=\"%s\">%s</identity></local></remote></dialog></dialog-info>", normalized_uri->s, username, normalized_uri->s);
+					}
+					else
+					{
+                    	if (reduce_notify_size)
+ 					    	snprintf(buf, 1023, "<?xml version=\"1.0\"?><dialog-info xmlns=\"urn:ietf:params:xml:ns:dialog-info\" version=\"9\" state=\"full\" entity=\"%s\"><dialog id=\"zx3\"><state>terminated</state><remote><local><identity display=\"%s\">%s</identity></local></remote></dialog></dialog-info>", normalized_uri->s, username, normalized_uri->s);
+                     	else 
+ 					    	snprintf(buf, 1023, "<?xml version=\"1.0\"?><dialog-info xmlns=\"urn:ietf:params:xml:ns:dialog-info\" version=\"169\" state=\"full\" entity=\"%s\"><dialog id=\"zxcnm3\"><state>terminated</state><remote><local><identity display=\"%s\">%s</identity></local></remote></dialog></dialog-info>", normalized_uri->s, username, normalized_uri->s);
+					}
+
  					val = &(ROW_VALUES(row)[pres_state_col]);
  					VAL_TYPE(val) = DB_STRING;
  					VAL_NULL(val) = 0;
