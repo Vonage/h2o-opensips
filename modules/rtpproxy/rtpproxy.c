@@ -2729,7 +2729,7 @@ rtpproxy_answer6_f(struct sip_msg *msg,
 		    param5 = aux_str.s;
         }
 	}
-	
+
 	return force_rtp_proxy(msg, param1, param2, param3, param4, param5, param6, 0);
 }
 
@@ -3327,7 +3327,7 @@ free_opts(struct options *op1, struct options *op2, struct options *op3)
 
 static int
 force_rtp_proxy(struct sip_msg* msg, char* str1, char* str2, char *setid,
-											char *var, char *ipvar, char *use_url, int offer)
+											char *var, char *use_url, char *ipvar, int offer)
 {
 	struct body_part *p;
 	struct force_rtpp_args args;
