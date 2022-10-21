@@ -2485,6 +2485,55 @@ done:
 	return node;
 }
 
+struct rtpp_node *
+search_rtpp_node(struct rtpp_set *set, char * url, int offer, pv_spec_p spec, struct sip_msg * msg)
+{
+	struct rtpp_node* node = NULL;
+	int found;
+	pv_value_t val;
+
+	if (!url) {
+		return NULL;
+	}
+
+	LM_DBG("Searching for node with url=%s\n", url);
+	if (my_version != *list_version && update_rtpp_proxies() < 0) {
+		LM_ERR("cannot update rtpp proxies list\n");
+		return NULL;
+	}
+
+	if (!set) {
+		LM_ERR("no set specified\n");
+		return NULL;
+	}
+
+	found = 0;
+	for (node=set->rn_first; node!=NULL; node=node->rn_next) {
+		if (strcmp(node->rn_url.s, url) == 0) {
+			if (node->rn_disabled && node->rn_recheck_ticks <= get_ticks())
+				node->rn_disabled = rtpp_test(node, 1, 0);
+			if (node->rn_disabled == 0)
+				found = 1;
+			break;
+		}
+	}
+	if (found == 1) {
+		if ( offer == 1 && spec) {
+			memset(&val, 0, sizeof(pv_value_t));
+			val.flags = PV_VAL_STR;
+			val.rs = node->rn_url;
+			if(pv_set_value(msg, spec, (int)EQ_T, &val)<0)
+				LM_ERR("setting PV failed\n");
+        	}
+		LM_DBG("Found node with url=%s\n", url);
+		return node;
+	}
+	else {
+		LM_DBG("Not able to find node with url=%s\n", url);
+		return NULL;
+	}
+}
+
 struct rtpp_node *get_rtpp_node(str *node)
 {
 	struct rtpp_node *rnode;
@@ -3878,12 +3927,23 @@ int force_rtp_proxy_body(struct sip_msg* msg, struct force_rtpp_args *args,
 
 				/* if not successful choose a different rtpproxy */
 				if (!args->node) {
-					args->node = select_rtpp_node(msg, args->callid, args->set, var, 0);
-					if (!args->node) {
-						LM_ERR("no available proxies\n");
-						goto error;
+					if ( use_url) {
+						// for rtpproxy_answer, if provided OFFER stage rtpproxy 
+						// URL, we will search in
+						// the node list to find a matching one and use it
+						args->node = search_rtpp_node(args->set, use_url, args->offer, (pv_spec_p)var, msg);
 					}
-					LM_DBG("trying new rtpproxy node %s\n", args->node->rn_address);
+					if (!args->node) {
+						args->node = select_rtpp_node(msg, args->callid, args->set, var, 0);
+						if (!args->node) {
+							LM_ERR("no available proxies\n");
+							goto error;
+						}
+						LM_DBG("trying new rtpproxy node %s\n", args->node->rn_address);
+					}
+					else {
+						LM_DBG("trying existing rtpproxy node %s\n", args->node->rn_address);	
+					}
 				}
 				/* if we don't have, we should choose a new node */
 				if (rep_opts.oidx > 0) {
