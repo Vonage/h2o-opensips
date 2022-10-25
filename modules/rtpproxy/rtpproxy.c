@@ -2282,6 +2282,7 @@ send_rtpp_command(struct rtpp_node *node, struct iovec *v, int vcnt)
 			goto badproxy;
 		}
 	} else {
+		int rc = 0;
 		fds[0].fd = rtpp_socks[node->idx];
 		fds[0].events = POLLIN;
 		fds[0].revents = 0;
@@ -2293,17 +2294,25 @@ send_rtpp_command(struct rtpp_node *node, struct iovec *v, int vcnt)
 				break;
 			}
 			fds[0].revents = 0;
-			if (recv(rtpp_socks[node->idx], buf, sizeof(buf) - 1, 0) < 0 &&
-					errno != EINTR) {
-				LM_ERR("error while draining rtpproxy %d!\n", errno);
+			rc = recv(rtpp_socks[node->idx], buf, sizeof(buf) - 1, 0);
+			if (rc < 0 && errno != EINTR) {
+				LM_ERR("error while draining rtpproxy socket %d!\n", errno);
+				break;
+			} else if (rc == 0) {
+				LM_ERR("warning end-of-file returned while draining rtpproxy socket %d\n", fds[0].fd);
 				break;
 			}
 		}
 		v[0].iov_base = gencookie();
 		v[0].iov_len = strlen(v[0].iov_base);
 		for (i = 0; i < rtpproxy_retr; i++) {
+			int error_counter = 0;
 			do {
 				len = writev(rtpp_socks[node->idx], v, vcnt);
+				if (errno < 0 && error_counter < 10) {
+					LM_ERR("writev rtpp_socks[%d] len: %d errno: %d\n", node->idx, len, errno);
+					error_counter++;
+				}
 			} while (len == -1 && (errno == EINTR || errno == ENOBUFS));
 			if (len <= 0) {
 				LM_ERR("can't send (#%d iovec buffers) command to a RTP proxy (%d:%s)\n",
@@ -2316,6 +2325,10 @@ send_rtpp_command(struct rtpp_node *node, struct iovec *v, int vcnt)
 
 				do {
 					len = recv(rtpp_socks[node->idx], buf, sizeof(buf)-1, 0);
+					if (errno < 0 && error_counter < 10) {
+						LM_ERR("recv  rtpp_socks[%d] len: %d errno: %d\n", node->idx, len, errno);
+						error_counter++;
+					}
 				} while (len == -1 && errno == EINTR);
 				s_errno = (len < 0) ? errno : 0;
 				if (len <= 0) {
