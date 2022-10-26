@@ -432,7 +432,7 @@ static cmd_export_t cmds[] = {
 		fixup_offer_answer, 0,
 		REQUEST_ROUTE|ONREPLY_ROUTE|FAILURE_ROUTE|BRANCH_ROUTE|LOCAL_ROUTE},
 	{"rtpproxy_offer",        (cmd_function)rtpproxy_offer6_f,      5,
-        fixup_offer_answer, 0,
+		fixup_offer_answer, 0,
         REQUEST_ROUTE|ONREPLY_ROUTE|FAILURE_ROUTE|BRANCH_ROUTE|LOCAL_ROUTE},
 	{"rtpproxy_offer",        (cmd_function)rtpproxy_offer6_f,      6,
 		fixup_offer_answer, 0,
@@ -2531,7 +2531,7 @@ search_rtpp_node(struct rtpp_set *set, char * url, int offer, pv_spec_p spec, st
 		}
 	}
 	if (found == 1) {
-		if ( offer == 1 && spec) {
+		if ( offer == 1 && spec && msg) {
 			memset(&val, 0, sizeof(pv_value_t));
 			val.flags = PV_VAL_STR;
 			val.rs = node->rn_url;
