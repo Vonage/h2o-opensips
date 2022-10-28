@@ -3203,7 +3203,7 @@ engage_rtp_proxy5_f(struct sip_msg *msg,
 	/* is this a late negotiation scenario? */
 	if (msg_has_sdp(msg)) {
 		LM_DBG("message has sdp body -> forcing rtp proxy\n");
-		if(force_rtp_proxy(msg,param1,param2,param3,param4, param5, NULL, 1) < 0) {
+		if(force_rtp_proxy(msg,param1,param2,param3,param4, NULL, param5, 1) < 0) {
 			LM_ERR("error forcing rtp proxy\n");
 			return -1;
 		}
