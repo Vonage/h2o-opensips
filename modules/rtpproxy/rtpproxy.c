@@ -250,12 +250,12 @@ static int engage_rtp_proxy5_f(struct sip_msg *,
 		char *, char *, char *, char *, char *);
 static int fixup_engage(void **param,int param_no);
 static int force_rtp_proxy(struct sip_msg *, char *, char *, char *, char *,
-		char *, int);
+		char *, char *, int);
 static int rtpproxy_recording(struct sip_msg *, char *, char *, char *, char *, char*);
-static int rtpproxy_answer5_f(struct sip_msg *,
-		char *, char *, char *, char *, char *);
-static int rtpproxy_offer5_f(struct sip_msg *,
-		char *, char *, char *, char *, char *);
+static int rtpproxy_answer6_f(struct sip_msg *,
+		char *, char *, char *, char *, char *, char *);
+static int rtpproxy_offer6_f(struct sip_msg *,
+		char *, char *, char *, char *, char *, char *);
 static int rtpproxy_stats_f(struct sip_msg *, char *, char *, char *, char *,
 		char *, char *);
 static int rtpproxy_all_stats_f(struct sip_msg *, char *, char *, char *);
@@ -416,40 +416,46 @@ static cmd_export_t cmds[] = {
 	{"rtpproxy_start_recording", (cmd_function)rtpproxy_recording,      5,
 		fixup_recording, 0,
 		REQUEST_ROUTE|ONREPLY_ROUTE|BRANCH_ROUTE|FAILURE_ROUTE},
-	{"rtpproxy_offer",        (cmd_function)rtpproxy_offer5_f,      0,
+	{"rtpproxy_offer",        (cmd_function)rtpproxy_offer6_f,      0,
 		0, 0,
 		REQUEST_ROUTE|ONREPLY_ROUTE|FAILURE_ROUTE|BRANCH_ROUTE|LOCAL_ROUTE},
-	{"rtpproxy_offer",        (cmd_function)rtpproxy_offer5_f,      1,
+	{"rtpproxy_offer",        (cmd_function)rtpproxy_offer6_f,      1,
 		fixup_spve_null, 0,
 		REQUEST_ROUTE|ONREPLY_ROUTE|FAILURE_ROUTE|BRANCH_ROUTE|LOCAL_ROUTE},
-	{"rtpproxy_offer",        (cmd_function)rtpproxy_offer5_f,      2,
+	{"rtpproxy_offer",        (cmd_function)rtpproxy_offer6_f,      2,
 		fixup_spve_spve, 0,
 		REQUEST_ROUTE|ONREPLY_ROUTE|FAILURE_ROUTE|BRANCH_ROUTE|LOCAL_ROUTE},
-	{"rtpproxy_offer",        (cmd_function)rtpproxy_offer5_f,      3,
+	{"rtpproxy_offer",        (cmd_function)rtpproxy_offer6_f,      3,
 		fixup_offer_answer, 0,
 		REQUEST_ROUTE|ONREPLY_ROUTE|FAILURE_ROUTE|BRANCH_ROUTE|LOCAL_ROUTE},
-	{"rtpproxy_offer",        (cmd_function)rtpproxy_offer5_f,      4,
+	{"rtpproxy_offer",        (cmd_function)rtpproxy_offer6_f,      4,
 		fixup_offer_answer, 0,
 		REQUEST_ROUTE|ONREPLY_ROUTE|FAILURE_ROUTE|BRANCH_ROUTE|LOCAL_ROUTE},
-	{"rtpproxy_offer",        (cmd_function)rtpproxy_offer5_f,      5,
+	{"rtpproxy_offer",        (cmd_function)rtpproxy_offer6_f,      5,
+		fixup_offer_answer, 0,
+        REQUEST_ROUTE|ONREPLY_ROUTE|FAILURE_ROUTE|BRANCH_ROUTE|LOCAL_ROUTE},
+	{"rtpproxy_offer",        (cmd_function)rtpproxy_offer6_f,      6,
 		fixup_offer_answer, 0,
 		REQUEST_ROUTE|ONREPLY_ROUTE|FAILURE_ROUTE|BRANCH_ROUTE|LOCAL_ROUTE},
-	{"rtpproxy_answer",      (cmd_function)rtpproxy_answer5_f,      0,
+	{"rtpproxy_answer",      (cmd_function)rtpproxy_answer6_f,      0,
 		0, 0,
 		REQUEST_ROUTE|ONREPLY_ROUTE|FAILURE_ROUTE|BRANCH_ROUTE|LOCAL_ROUTE},
-	{"rtpproxy_answer",      (cmd_function)rtpproxy_answer5_f,      1,
+	{"rtpproxy_answer",      (cmd_function)rtpproxy_answer6_f,      1,
 		fixup_spve_null, 0,
 		REQUEST_ROUTE|ONREPLY_ROUTE|FAILURE_ROUTE|BRANCH_ROUTE|LOCAL_ROUTE},
-	{"rtpproxy_answer",      (cmd_function)rtpproxy_answer5_f,      2,
+	{"rtpproxy_answer",      (cmd_function)rtpproxy_answer6_f,      2,
 		fixup_spve_spve, 0,
 		REQUEST_ROUTE|ONREPLY_ROUTE|FAILURE_ROUTE|BRANCH_ROUTE|LOCAL_ROUTE},
-	{"rtpproxy_answer",      (cmd_function)rtpproxy_answer5_f,      3,
+	{"rtpproxy_answer",      (cmd_function)rtpproxy_answer6_f,      3,
 		fixup_offer_answer, 0,
 		REQUEST_ROUTE|ONREPLY_ROUTE|FAILURE_ROUTE|BRANCH_ROUTE|LOCAL_ROUTE},
-	{"rtpproxy_answer",      (cmd_function)rtpproxy_answer5_f,      4,
+	{"rtpproxy_answer",      (cmd_function)rtpproxy_answer6_f,      4,
 		fixup_offer_answer, 0,
 		REQUEST_ROUTE|ONREPLY_ROUTE|FAILURE_ROUTE|BRANCH_ROUTE|LOCAL_ROUTE},
-	{"rtpproxy_answer",      (cmd_function)rtpproxy_answer5_f,      5,
+	{"rtpproxy_answer",      (cmd_function)rtpproxy_answer6_f,      5,
+		fixup_offer_answer, 0,
+		REQUEST_ROUTE|ONREPLY_ROUTE|FAILURE_ROUTE|BRANCH_ROUTE|LOCAL_ROUTE},
+	{"rtpproxy_answer",      (cmd_function)rtpproxy_answer6_f,      6,
 		fixup_offer_answer, 0,
 		REQUEST_ROUTE|ONREPLY_ROUTE|FAILURE_ROUTE|BRANCH_ROUTE|LOCAL_ROUTE},
 	{"rtpproxy_stream2uac",(cmd_function)rtpproxy_stream2uac4_f,    2,
@@ -876,7 +882,11 @@ static int fixup_offer_answer(void ** param, int param_no)
 		return fixup_spve(param);
 	if (param_no == 3)
 		return fixup_set_id(param);
-	if (param_no == 4 || param_no == 5)
+	if (param_no == 4 )
+		return fixup_pvar(param);
+	if (param_no == 5)
+		return fixup_spve(param);
+	if(param_no == 6)
 		return fixup_pvar(param);
 	LM_ERR("Too many parameters %d\n", param_no);
 	return E_CFG;
@@ -2272,6 +2282,7 @@ send_rtpp_command(struct rtpp_node *node, struct iovec *v, int vcnt)
 			goto badproxy;
 		}
 	} else {
+		int rc = 0;
 		fds[0].fd = rtpp_socks[node->idx];
 		fds[0].events = POLLIN;
 		fds[0].revents = 0;
@@ -2283,17 +2294,25 @@ send_rtpp_command(struct rtpp_node *node, struct iovec *v, int vcnt)
 				break;
 			}
 			fds[0].revents = 0;
-			if (recv(rtpp_socks[node->idx], buf, sizeof(buf) - 1, 0) < 0 &&
-					errno != EINTR) {
-				LM_ERR("error while draining rtpproxy %d!\n", errno);
+			rc = recv(rtpp_socks[node->idx], buf, sizeof(buf) - 1, 0);
+			if (rc < 0 && errno != EINTR) {
+				LM_ERR("error while draining rtpproxy socket %d!\n", errno);
+				break;
+			} else if (rc == 0) {
+				LM_ERR("warning end-of-file returned while draining rtpproxy socket %d\n", fds[0].fd);
 				break;
 			}
 		}
 		v[0].iov_base = gencookie();
 		v[0].iov_len = strlen(v[0].iov_base);
 		for (i = 0; i < rtpproxy_retr; i++) {
+			int error_counter = 0;
 			do {
 				len = writev(rtpp_socks[node->idx], v, vcnt);
+				if (errno < 0 && error_counter < 10) {
+					LM_ERR("writev rtpp_socks[%d] len: %d errno: %d\n", node->idx, len, errno);
+					error_counter++;
+				}
 			} while (len == -1 && (errno == EINTR || errno == ENOBUFS));
 			if (len <= 0) {
 				LM_ERR("can't send (#%d iovec buffers) command to a RTP proxy (%d:%s)\n",
@@ -2306,6 +2325,10 @@ send_rtpp_command(struct rtpp_node *node, struct iovec *v, int vcnt)
 
 				do {
 					len = recv(rtpp_socks[node->idx], buf, sizeof(buf)-1, 0);
+					if (errno < 0 && error_counter < 10) {
+						LM_ERR("recv  rtpp_socks[%d] len: %d errno: %d\n", node->idx, len, errno);
+						error_counter++;
+					}
 				} while (len == -1 && errno == EINTR);
 				s_errno = (len < 0) ? errno : 0;
 				if (len <= 0) {
@@ -2475,6 +2498,55 @@ done:
 	return node;
 }
 
+struct rtpp_node *
+search_rtpp_node(struct rtpp_set *set, char * url, int offer, pv_spec_p spec, struct sip_msg * msg)
+{
+	struct rtpp_node* node = NULL;
+	int found;
+	pv_value_t val;
+
+	if (!url) {
+		return NULL;
+	}
+
+	LM_DBG("Searching for node with url=%s\n", url);
+	if (my_version != *list_version && update_rtpp_proxies() < 0) {
+		LM_ERR("cannot update rtpp proxies list\n");
+		return NULL;
+	}
+
+	if (!set) {
+		LM_ERR("no set specified\n");
+		return NULL;
+	}
+
+	found = 0;
+	for (node=set->rn_first; node!=NULL; node=node->rn_next) {
+		if (strcmp(node->rn_url.s, url) == 0) {
+			if (node->rn_disabled && node->rn_recheck_ticks <= get_ticks())
+				node->rn_disabled = rtpp_test(node, 1, 0);
+			if (node->rn_disabled == 0)
+				found = 1;
+			break;
+		}
+	}
+	if (found == 1) {
+		if ( offer == 1 && spec && msg) {
+			memset(&val, 0, sizeof(pv_value_t));
+			val.flags = PV_VAL_STR;
+			val.rs = node->rn_url;
+			if(pv_set_value(msg, spec, (int)EQ_T, &val)<0)
+				LM_ERR("setting PV failed\n");
+        	}
+		LM_DBG("Found node with url=%s\n", url);
+		return node;
+	}
+	else {
+		LM_DBG("Not able to find node with url=%s\n", url);
+		return NULL;
+	}
+}
+
 struct rtpp_node *get_rtpp_node(str *node)
 {
 	struct rtpp_node *rnode;
@@ -2622,7 +2694,7 @@ struct rtpp_set * get_rtpp_set(struct sip_msg * msg, nh_set_param_t *pset)
 static int rtpp_get_var_svalue(struct sip_msg *msg, gparam_p gp, str *val, int n)
 {
 	#define MAX_BUF  64
-	static char buf[2][MAX_BUF];
+	static char buf[3][MAX_BUF];
 	str tmp;
 
 	if (gp->type==GPARAM_TYPE_STR) {
@@ -2640,8 +2712,8 @@ static int rtpp_get_var_svalue(struct sip_msg *msg, gparam_p gp, str *val, int n
 }
 
 static int
-rtpproxy_offer5_f(struct sip_msg *msg,
-		char *param1, char *param2, char *param3, char *param4, char *param5)
+rtpproxy_offer6_f(struct sip_msg *msg,
+		char *param1, char *param2, char *param3, char *param4, char *param5, char *param6)
 {
 	str aux_str;
 
@@ -2673,12 +2745,21 @@ rtpproxy_offer5_f(struct sip_msg *msg,
 		param2 = aux_str.s;
 	}
 
-	return force_rtp_proxy(msg, param1, param2, param3, param4, param5, 1);
+	if (param5) {
+		if (rtpp_get_var_svalue(msg, (gparam_p)param5, &aux_str, 2)<0) {
+			LM_INFO("Ignoring url parameter\n");
+		}
+		else {
+			param5 = aux_str.s;
+		}
+	}
+
+	return force_rtp_proxy(msg, param1, param2, param3, param4, param5, param6, 1);
 }
 
 static int
-rtpproxy_answer5_f(struct sip_msg *msg,
-		char *param1, char *param2, char *param3, char *param4, char *param5)
+rtpproxy_answer6_f(struct sip_msg *msg,
+		char *param1, char *param2, char *param3, char *param4, char *param5, char *param6)
 {
 	str aux_str;
 
@@ -2702,7 +2783,16 @@ rtpproxy_answer5_f(struct sip_msg *msg,
 		param2 = aux_str.s;
 	}
 
-	return force_rtp_proxy(msg, param1, param2, param3, param4, param5, 0);
+	if (param5) {
+		if (rtpp_get_var_svalue(msg, (gparam_p)param5, &aux_str, 2)<0) {
+			LM_INFO("Ignoring url parameter\n");
+		}
+        else {
+		    param5 = aux_str.s;
+        }
+	}
+
+	return force_rtp_proxy(msg, param1, param2, param3, param4, param5, param6, 0);
 }
 
 static void engage_callback(struct dlg_cell *dlg, int type,
@@ -2993,7 +3083,7 @@ static int engage_force_rtpproxy(struct dlg_cell *dlg, struct sip_msg *msg)
 	param.v.int_set = setid;
 	param.t = NH_VAL_SET_UNDEF;
 
-	force_rtp_proxy(msg, param1_val.s, param2_val.s, (char *)&param, NULL, NULL, offer);
+	force_rtp_proxy(msg, param1_val.s, param2_val.s, (char *)&param, NULL, NULL, NULL, offer);
 
 	if (alloc) {
 		if (param1_val.s)
@@ -3113,7 +3203,7 @@ engage_rtp_proxy5_f(struct sip_msg *msg,
 	/* is this a late negotiation scenario? */
 	if (msg_has_sdp(msg)) {
 		LM_DBG("message has sdp body -> forcing rtp proxy\n");
-		if(force_rtp_proxy(msg,param1,param2,param3,param4, param5,1) < 0) {
+		if(force_rtp_proxy(msg,param1,param2,param3,param4, NULL, param5, 1) < 0) {
 			LM_ERR("error forcing rtp proxy\n");
 			return -1;
 		}
@@ -3299,7 +3389,7 @@ free_opts(struct options *op1, struct options *op2, struct options *op3)
 
 static int
 force_rtp_proxy(struct sip_msg* msg, char* str1, char* str2, char *setid,
-											char *var, char *ipvar, int offer)
+											char *var, char *use_url, char *ipvar, int offer)
 {
 	struct body_part *p;
 	struct force_rtpp_args args;
@@ -3422,7 +3512,7 @@ force_rtp_proxy(struct sip_msg* msg, char* str1, char* str2, char *setid,
 		}
 
 		LM_DBG("Forcing body:\n[%.*s]\n", args.body.len, args.body.s);
-		ret = force_rtp_proxy_body(msg, &args, (pv_spec_p)var, (pv_spec_p)ipvar);
+		ret = force_rtp_proxy_body(msg, &args, (pv_spec_p)var, (pv_spec_p)ipvar, use_url);
 
 		if (rtpproxy_autobridge) {
 			if (nh_lock)
@@ -3461,7 +3551,7 @@ static inline int rtpp_get_error(char *command)
 static char _rtp_proxy_buf[IP_ADDR_MAX_STR_SIZE + 1/* : */ + 5/* port */];
 
 int force_rtp_proxy_body(struct sip_msg* msg, struct force_rtpp_args *args,
-		pv_spec_p var, pv_spec_p ipvar)
+		pv_spec_p var, pv_spec_p ipvar, char * use_url)
 {
 	str body1, oldport, oldip, newport, newip ,nextport;
 	str from_tag, to_tag, tmp, payload_types;
@@ -3850,12 +3940,23 @@ int force_rtp_proxy_body(struct sip_msg* msg, struct force_rtpp_args *args,
 
 				/* if not successful choose a different rtpproxy */
 				if (!args->node) {
-					args->node = select_rtpp_node(msg, args->callid, args->set, var, 0);
-					if (!args->node) {
-						LM_ERR("no available proxies\n");
-						goto error;
+					if ( use_url) {
+						// for rtpproxy_answer, if provided OFFER stage rtpproxy 
+						// URL, we will search in
+						// the node list to find a matching one and use it
+						args->node = search_rtpp_node(args->set, use_url, args->offer, (pv_spec_p)var, msg);
 					}
-					LM_DBG("trying new rtpproxy node %s\n", args->node->rn_address);
+					if (!args->node) {
+						args->node = select_rtpp_node(msg, args->callid, args->set, var, 0);
+						if (!args->node) {
+							LM_ERR("no available proxies\n");
+							goto error;
+						}
+						LM_DBG("trying new rtpproxy node %s\n", args->node->rn_address);
+					}
+					else {
+						LM_DBG("trying existing rtpproxy node %s\n", args->node->rn_address);	
+					}
 				}
 				/* if we don't have, we should choose a new node */
 				if (rep_opts.oidx > 0) {
