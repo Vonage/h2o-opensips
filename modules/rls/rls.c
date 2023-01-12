@@ -86,7 +86,7 @@ unsigned int xcap_port= 8000;
 int rls_restore_db_subs(void);
 
 /* xcap API */
-str db_url = {NULL, 0};
+static str db_url = {NULL, 0};
 str rls_xcap_table = {NULL, 0};
 int rls_integrated_xcap_server = 0;
 normalize_sip_uri_t normalizeSipUri;
@@ -180,6 +180,7 @@ static cmd_export_t cmds[]=
 
 static param_export_t params[]={
 	{ "server_address",         STR_PARAM, &server_address.s           },
+	{ "db_url",                 STR_PARAM, &db_url.s                   },
 	{ "presence_server",        STR_PARAM, &presence_server.s          },
 	{ "rlsubs_table",           STR_PARAM, &rlsubs_table.s             },
 	{ "rlpres_table",           STR_PARAM, &rlpres_table.s             },
@@ -281,7 +282,6 @@ static int mod_init(void)
                 return -1;
         }
         rls_integrated_xcap_server = xcap_api.integrated_server;
-        db_url = xcap_api.db_url;
         rls_xcap_table = xcap_api.xcap_table;
         normalizeSipUri = xcap_api.normalize_sip_uri;
         xcapParseUri = xcap_api.parse_xcap_uri;
@@ -352,6 +352,7 @@ static int mod_init(void)
 	rls_xcap_table.len= strlen(rls_xcap_table.s);
  	rls_displayname_table.len= strlen(rls_displayname_table.s);
 
+    init_db_url( db_url , 0 /*cannot be null*/);
 	/* binding to mysql module  */
 	if (db_bind_mod(&db_url, &rls_dbf))
 	{
