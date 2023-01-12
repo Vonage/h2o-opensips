@@ -104,7 +104,6 @@ extern struct tm_binds tmb;
 extern struct sig_binds rls_sigb;
 
 /* xcap API */
-extern str db_url;
 extern str rls_xcap_table;
 extern int rls_integrated_xcap_server;
 extern normalize_sip_uri_t normalizeSipUri;
