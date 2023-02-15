@@ -904,10 +904,11 @@ void rls_notify_callback( struct cell *t, int type, struct tmcb_params *ps)
 		db_vals[1].nul = 0;
 		db_vals[1].val.str_val = subs.callid;
 
-
+		/*
 		if (rls_dbf.delete(rls_db, db_keys, 0, db_vals, 2) < 0)
 			LM_ERR("cleaning expired messages\n");
-
+		*/
+	
 		/* delete from cache table */
 		hash_code= core_hash(&subs.callid, &subs.to_tag , hash_size);
 
