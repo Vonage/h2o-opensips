@@ -876,9 +876,11 @@ void rls_notify_callback( struct cell *t, int type, struct tmcb_params *ps)
 
 	if(ps->code >= 300)
 	{
-		/* delete from database table */
+		/* delete from database table
 		db_key_t db_keys[2];
 		db_val_t db_vals[2];
+		*/
+
 		unsigned int hash_code;
 		subs_t subs;
 
@@ -888,6 +890,7 @@ void rls_notify_callback( struct cell *t, int type, struct tmcb_params *ps)
 		subs.from_tag= ((dialog_id_t*)(*ps->param))->from_tag;
 		subs.callid= ((dialog_id_t*)(*ps->param))->callid;
 
+		/*
 		if (rls_dbf.use_table(rls_db, &rlsubs_table) < 0)
 		{
 			LM_ERR("in use_table\n");
@@ -904,11 +907,10 @@ void rls_notify_callback( struct cell *t, int type, struct tmcb_params *ps)
 		db_vals[1].nul = 0;
 		db_vals[1].val.str_val = subs.callid;
 
-		/*
 		if (rls_dbf.delete(rls_db, db_keys, 0, db_vals, 2) < 0)
 			LM_ERR("cleaning expired messages\n");
 		*/
-	
+
 		/* delete from cache table */
 		hash_code= core_hash(&subs.callid, &subs.to_tag , hash_size);
 

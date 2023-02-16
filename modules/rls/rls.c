@@ -610,6 +610,7 @@ int handle_expired_record(subs_t* s)
 
 void rlsubs_table_update(unsigned int ticks,void *param)
 {
+	/*
 	int no_lock= 0;
 
 	if(ticks== 0 && param == NULL)
@@ -620,7 +621,7 @@ void rlsubs_table_update(unsigned int ticks,void *param)
 		LM_ERR("sql use table failed\n");
 		return;
 	}
-	/*
+	
 	pres_update_db_subs(rls_db, &rls_dbf, rls_table, hash_size,
 			no_lock, handle_expired_record);
 	*/
