@@ -452,12 +452,13 @@ static int check_fraud(struct sip_msg *msg, char *_user, char *_number, char *_p
 		param->stats = se;        /* safe to ref, only freed @ shutdown */
 		param->user = shm_user;   /* safe to ref, only freed @ shutdown */
 		param->ruleid = rule->id;
+		param->dlg_terminated = 0;
 
 		param->calldur_warn = thr->call_duration_thr.warning;
 		param->calldur_crit = thr->call_duration_thr.critical;
 		param->interval_id = se->interval_id;
 
-		if (dlgb.register_dlgcb(dlgc, DLGCB_DESTROY,
+		if (dlgb.register_dlgcb(dlgc, DLGCB_FAILED|DLGCB_TERMINATED|DLGCB_EXPIRED,
 					dialog_terminate_CB, param, free_dialog_CB_param) != 0) {
 			LM_ERR("failed to register dialog terminated callback\n");
 			shm_free(param->number.s);

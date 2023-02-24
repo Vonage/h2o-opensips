@@ -74,7 +74,7 @@ static int wss_raw_writev(struct tcp_connection *c, int fd,
 #define _ws_common_tcp_current_req tcp_current_req
 #define _ws_common_current_req wss_current_req
 #define _ws_common_max_msg_chunks wss_max_msg_chunks
-#define _ws_common_read tls_read
+#define _ws_common_read(c, r) tls_read((c), (r), &tls_mgm_api)
 #define _ws_common_writev wss_raw_writev
 #define _ws_common_read_tout wss_hs_read_tout
 /*
@@ -105,7 +105,8 @@ static int mod_init(void);
 static int proto_wss_init(struct proto_info *pi);
 static int proto_wss_init_listener(struct socket_info *si);
 static int proto_wss_send(struct socket_info* send_sock,
-		char* buf, unsigned int len, union sockaddr_union* to, int id);
+		char* buf, unsigned int len, union sockaddr_union* to,
+		unsigned int id);
 static int wss_read_req(struct tcp_connection* con, int* bytes_read);
 static int wss_conn_init(struct tcp_connection* c);
 static void ws_conn_clean(struct tcp_connection* c);
@@ -242,11 +243,8 @@ static int mod_init(void)
 			get_script_route_ID_by_name( trace_filter_route, rlist, RT_NO);
 	}
 
-
-
 	return 0;
 }
-
 
 static int wss_conn_init(struct tcp_connection* c)
 {
@@ -312,7 +310,7 @@ static void ws_conn_clean(struct tcp_connection* c)
 
 	}
 
-	tls_conn_clean(c);
+	tls_conn_clean(c, &tls_mgm_api);
 }
 
 
@@ -433,8 +431,8 @@ error:
 
 /*! \brief Finds a tcpconn & sends on it */
 static int proto_wss_send(struct socket_info* send_sock,
-											char* buf, unsigned int len,
-											union sockaddr_union* to, int id)
+		char* buf, unsigned int len, union sockaddr_union* to,
+		unsigned int id)
 {
 	struct tcp_connection *c;
 	struct tls_domain *dom;
@@ -562,7 +560,7 @@ static int wss_read_req(struct tcp_connection* con, int* bytes_read)
 	struct ws_data* d;
 
 	/* we need to fix the SSL connection before doing anything */
-	if (tls_fix_read_conn(con, t_dst) < 0) {
+	if (tls_fix_read_conn(con, t_dst, &tls_mgm_api) < 0) {
 		LM_ERR("cannot fix read connection\n");
 		if ( (d=con->proto_data) && d->dest && d->tprot ) {
 			if ( d->message ) {
@@ -653,7 +651,7 @@ static int wss_raw_writev(struct tcp_connection *c, int fd,
 		n += iov[i].iov_len;
 	}
 	lock_get(&c->write_lock);
-	n = tls_blocking_write(c, fd, buf, n, &tls_mgm_api);
+	n = tls_blocking_write(c, fd, buf, n, &tls_mgm_api, t_dst);
 #endif /* TLS_DONT_WRITE_FRAGMENTS */
 
 end:

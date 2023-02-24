@@ -400,11 +400,48 @@ static inline char* proto2str(int proto, char *p)
 	return p;
 }
 
+/* Similar to proto2str(), but proto is written in uppercase. The
+   new resulting pointer will be returned (where writing ended) */
+static inline char* proto2upper(int proto, char *p)
+{
+	switch (proto) {
+	case PROTO_UDP:
+		p = memcpy(p, STR_L("UDP")) + sizeof("UDP")-1;
+		break;
+	case PROTO_TCP:
+		p = memcpy(p, STR_L("TCP")) + sizeof("TCP")-1;
+		break;
+	case PROTO_TLS:
+		p = memcpy(p, STR_L("TLS")) + sizeof("TLS")-1;
+		break;
+	case PROTO_SCTP:
+		p = memcpy(p, STR_L("SCTP")) + sizeof("SCTP")-1;
+		break;
+	case PROTO_WS:
+		p = memcpy(p, STR_L("WS")) + sizeof("WS")-1;
+		break;
+	case PROTO_WSS:
+		p = memcpy(p, STR_L("WSS")) + sizeof("WSS")-1;
+		break;
+	case PROTO_BIN:
+		p = memcpy(p, STR_L("BIN")) + sizeof("BIN")-1;
+		break;
+	case PROTO_HEP_UDP:
+		p = memcpy(p, STR_L("HEP_UDP")) + sizeof("HEP_UDP")-1;
+		break;
+	case PROTO_HEP_TCP:
+		p = memcpy(p, STR_L("HEP_TCP")) + sizeof("HEP_TCP")-1;
+		break;
+	default:
+		LM_CRIT("unsupported proto %d\n", proto);
+	}
+
+	return p;
+}
 
 static inline char *proto2a(int proto)
 {
-	static char b[8]; /* IMPORTANT - keep this max aligned with the proto2str
-	                   * with an extra +1 for NULL terminator */
+	static char b[PROTO_NAME_MAX_SIZE+1];
 	char *p;
 
 	/* print the proto name */

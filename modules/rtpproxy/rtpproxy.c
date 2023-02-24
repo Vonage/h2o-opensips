@@ -272,6 +272,7 @@ static int fixup_recording(void ** param, int param_no);
 static struct rtpp_set * select_rtpp_set(int id_set);
 
 static int rtpproxy_set_store(modparam_t type, void * val);
+static int rtpproxy_set_notify(modparam_t type, void * val);
 static int rtpproxy_add_rtpproxy_set( char * rtp_proxies, int set_id);
 static int _add_proxies_from_database();
 static int unforce_rtpproxy(struct sip_msg* msg, str callid,
@@ -333,6 +334,7 @@ static int rtpproxy_tout = -1;
 static char *rtpproxy_timeout = 0;
 static int rtpproxy_autobridge = 0;
 static pid_t mypid;
+static int myrand = 0;
 static unsigned int myseqn = 0;
 static str nortpproxy_str = str_init("a=nortpproxy:yes");
 str rtpp_notify_socket = {0, 0};
@@ -524,7 +526,8 @@ static param_export_t params[] = {
 	{"db_table",              STR_PARAM, &table.s                 },
 	{"rtpp_socket_col",       STR_PARAM, &rtpp_sock_col.s         },
 	{"set_id_col",            STR_PARAM, &set_id_col.s            },
-	{"rtpp_notify_socket",    STR_PARAM, &rtpp_notify_socket.s    },
+	{"rtpp_notify_socket",    STR_PARAM|USE_FUNC_PARAM,
+                             (void*)rtpproxy_set_notify            },
 	{0, 0, 0}
 };
 
@@ -537,7 +540,7 @@ static mi_export_t mi_cmds[] = {
 };
 
 static proc_export_t procs[] = {
-	{"RTPP timeout receiver",  0,  0, timeout_listener_process, 1, 0},
+	{"RTPP timeout receiver",  0,  0, timeout_listener_process, 1, PROC_FLAG_INITCHILD},
 	{0,0,0,0,0,0}
 };
 
@@ -567,7 +570,7 @@ struct module_exports exports = {
 	mi_cmds,     /* exported MI functions */
 	0,           /* exported pseudo-variables */
 	0,			 /* exported transformations */
-	procs,       /* extra processes */
+	0,           /* extra processes */
 	0,
 	mod_init,
 	0,           /* reply processing */
@@ -618,6 +621,24 @@ static int rtpproxy_set_store(modparam_t type, void * val){
 	return 0;
 }
 
+static int rtpproxy_set_notify(modparam_t type, void * val)
+{
+
+	char * p;
+
+	p = (char* )val;
+
+	if(p==0 || *p=='\0'){
+		return 0;
+	}
+
+	rtpp_notify_socket.s = p;
+	rtpp_notify_socket.len = strlen(p);
+
+	exports.procs = procs;
+
+	return 0;
+}
 
 static int add_rtpproxy_socks(struct rtpp_set * rtpp_list,
 										char * rtpproxy){
@@ -1528,6 +1549,7 @@ child_init(int rank)
 		return 0;
 
 	mypid = getpid();
+	myrand = rand()%10000;
 
 	return connect_rtpproxies();
 }
@@ -2054,7 +2076,7 @@ static char * gencookie(void)
 {
 	static char cook[34];
 
-	sprintf(cook, "%d_%u ", (int)mypid, myseqn);
+	sprintf(cook, "%d_%d_%u ", (int)mypid, myrand, myseqn);
 	myseqn++;
 	return cook;
 }
