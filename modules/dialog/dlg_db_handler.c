@@ -184,9 +184,6 @@ int init_dlg_db(const str *db_url, int dlg_hash_size , int db_update_period)
 		LM_ERR("error during table version check.\n");
 		return -1;
 	}
-
-	dialog_dbf.close(dialog_db_handle);
-	dialog_db_handle = 0;
 	
 	if (dlg_db_mode == DB_MODE_DELAYED) {
 		if (register_timer("dlg-dbupdate",dialog_update_db,
