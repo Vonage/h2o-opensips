@@ -1026,7 +1026,7 @@ static int child_init(int rank)
 	LM_ERR("child init AAA (rank=%d)\n",rank);
 	LM_ERR("child init AAA (dlg_db_mode=%d)\n",dlg_db_mode);
 	
-	if ( (dlg_db_mode==DB_MODE_REALTIME || dlg_db_mode==DB_MODE_DELAYED ) &&
+	if ( (dlg_db_mode==DB_MODE_REALTIME || dlg_db_mode==DB_MODE_DELAYED || dlg_db_mode==DB_MODE_SHUTDOWN ) &&
 	(rank>=1 || rank==PROC_MODULE) ) {
 		if ( dlg_connect_db(&db_url)<0 ) {
 			LM_ERR("failed to connect to database (rank=%d)\n",rank);
