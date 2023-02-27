@@ -187,8 +187,6 @@ int init_dlg_db(const str *db_url, int dlg_hash_size , int db_update_period)
 
 	dialog_dbf.close(dialog_db_handle);
 	dialog_db_handle = 0;
-
-	LM_ERR("init dlg closed fd AAA\n");
 	
 	if (dlg_db_mode == DB_MODE_DELAYED) {
 		if (register_timer("dlg-dbupdate",dialog_update_db,
@@ -198,6 +196,22 @@ int init_dlg_db(const str *db_url, int dlg_hash_size , int db_update_period)
 			return -1;
 		}
 	}
+	
+	LM_ERR("loading dialogs from the db AAA\n");
+	if( (load_dialog_info_from_db(dlg_hash_size) ) !=0 ){
+		LM_ERR("unable to load the dialog data\n");
+		return -1;
+	}
+
+	LM_ERR("init dlg going to do cleanup fo shutdown AAA\n");
+	if (dlg_db_mode==DB_MODE_SHUTDOWN && remove_all_dialogs_from_db()!=0) {
+		LM_WARN("failed to properly remove all the dialogs form DB\n");
+	}
+
+	dialog_dbf.close(dialog_db_handle);
+	dialog_db_handle = 0;
+	
+	LM_ERR("init dlg closed fd AAA\n");
 
 	return 0;
 }
