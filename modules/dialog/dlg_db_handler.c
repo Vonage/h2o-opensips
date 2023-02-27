@@ -128,6 +128,7 @@ static int load_dialog_info_from_db(int dlg_hash_size);
 
 int dlg_connect_db(const str *db_url)
 {
+	LM_ERR("dlg_connect_db connecting to dlg db AAA\n");
 	if (dialog_db_handle) {
 		LM_CRIT("BUG - db connection found already open\n");
 		return -1;
@@ -187,6 +188,8 @@ int init_dlg_db(const str *db_url, int dlg_hash_size , int db_update_period)
 	dialog_dbf.close(dialog_db_handle);
 	dialog_db_handle = 0;
 
+	LM_ERR("init dlg closed fd AAA\n");
+	
 	if (dlg_db_mode == DB_MODE_DELAYED) {
 		if (register_timer("dlg-dbupdate",dialog_update_db,
 		(void*)(unsigned long)1 /*do locking*/,
@@ -201,7 +204,9 @@ int init_dlg_db(const str *db_url, int dlg_hash_size , int db_update_period)
 
 void load_dlg_db(int dlg_hash_size)
 {
+	LM_ERR("load_dlg_db attempting AAA\n");
 	if( (load_dialog_info_from_db(dlg_hash_size) ) ==0 ){
+		LM_ERR("load_dlg_db succeeded and zero AAA\n");
 		if (dlg_db_mode==DB_MODE_SHUTDOWN && remove_all_dialogs_from_db()!=0)
 			LM_WARN("failed to properly remove all the dialogs form DB\n");
 	} else
@@ -213,6 +218,7 @@ void load_dlg_db(int dlg_hash_size)
 void destroy_dlg_db(void)
 {
 	/* close the DB connection */
+	LM_ERR("destroy_dlg_db closing handle AAA\n");
 	if (dialog_db_handle) {
 		dialog_dbf.close(dialog_db_handle);
 		dialog_db_handle = 0;
@@ -520,7 +526,9 @@ static int load_dialog_info_from_db(int dlg_hash_size)
 		goto error;
 
 	nr_rows = RES_ROW_N(res);
-
+	
+	LM_DBG("load_dialog_info_from_db is starting! AAA\n");
+	
 	do {
 		LM_DBG("loading information from database for %i dialogs\n", nr_rows);
 
