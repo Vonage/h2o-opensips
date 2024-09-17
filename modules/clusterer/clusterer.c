@@ -241,6 +241,11 @@ void heartbeats_timer(void)
 	lock_start_read(cl_list_lock);
 
 	for (clusters_it = *cluster_list; clusters_it; clusters_it = clusters_it->next) {
+		if (!clusters_it->current_node) {
+			LM_ERR("No current node for cluster [%d]\n", clusters_it->cluster_id);
+			continue;
+		}
+
 		lock_get(clusters_it->current_node->lock);
 		if (!(clusters_it->current_node->flags & NODE_STATE_ENABLED)) {
 			lock_release(clusters_it->current_node->lock);
@@ -920,7 +925,7 @@ int clusterer_check_addr(int cluster_id, str *ip_str,
 		ip_addr2su(&su, &ip, 0);
 
 		rc = ip_check(cluster, &su, NULL);
-		
+
 	} else if (check_type == NODE_SIP_ADDR) {
 		rc = ip_check(cluster, NULL, ip_str);
 	} else {
