@@ -333,6 +333,11 @@ void seed_fb_check_timer(utime_t ticks, void *param)
 	lock_start_read(cl_list_lock);
 
 	for (cl = *cluster_list; cl; cl = cl->next) {
+		if (!cl->current_node) {
+			LM_ERR("No current node for cluster [%d]\n", cl->cluster_id);
+			continue;
+		}
+
 		lock_get(cl->current_node->lock);
 		if (!(cl->current_node->flags & NODE_STATE_ENABLED)) {
 			lock_release(cl->current_node->lock);
