@@ -243,6 +243,14 @@ void heartbeats_timer(void)
 	for (clusters_it = *cluster_list; clusters_it; clusters_it = clusters_it->next) {
 		if (!clusters_it->current_node) {
 			LM_ERR("No current node for cluster [%d]\n", clusters_it->cluster_id);
+
+			if (!clusters_it->next) {
+				LM_ERR("No more clusters, releasing read lock\n");
+				lock_stop_read(cl_list_lock);
+				LM_ERR("cluster read lock released\n");
+				return;
+			}
+
 			continue;
 		}
 
