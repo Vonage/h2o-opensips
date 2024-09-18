@@ -113,7 +113,7 @@ int cl_request_sync(str *capability, int cluster_id, int is_runtime)
 
 	/* if seed fallback setting is 0, the seed is synced from startup */
 	if (!seed_fb_interval && !is_runtime &&
-		(cluster->current_node->flags & NODE_IS_SEED))
+		cluster->current_node && (cluster->current_node->flags & NODE_IS_SEED))
 		return 0;
 
 	lock_get(cluster->lock);
@@ -138,8 +138,15 @@ int cl_request_sync(str *capability, int cluster_id, int is_runtime)
 		lock_get(cluster->lock);
 		lcap->flags |= CAP_SYNC_PENDING;
 
-		if (cluster->current_node->flags & NODE_IS_SEED)
-			gettimeofday(&lcap->sync_req_time, NULL);
+		if (cluster->current_node) {
+			if (cluster->current_node->flags & NODE_IS_SEED) {
+				gettimeofday(&lcap->sync_req_time, NULL);
+			}
+		} else {
+			LM_ERR("No current node, would have segfaulted\n");
+			lock_release(cluster->lock);
+			return -1;
+		}
 
 		lock_release(cluster->lock);
 	} else {
@@ -516,4 +523,3 @@ int buffer_bin_pkt(bin_packet_t *packet, struct local_cap *cap, int src_id)
 
 	return 0;
 }
-
