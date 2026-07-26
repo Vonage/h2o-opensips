@@ -36,6 +36,7 @@
 #include <ctype.h>
 
 #include "../../parser/parse_from.h"
+#include "../../parser/parse_uri.h"
 #include "../../mem/mem.h"
 #include "../../data_lump.h"
 #include "../tm/h_table.h"
@@ -173,6 +174,27 @@ static inline int decode_uri( str *src , str *dst)
 	}
 
 	return 0;
+}
+
+
+static inline int strict_uri_component_ok(const str *in)
+{
+	int i;
+	unsigned char c;
+
+	for (i = 0; i < in->len; i++) {
+		c = (unsigned char)in->s[i];
+		if (c < 32 || c == 127)
+			return 0;
+
+		/* Keep URI restore conservative: reject chars that frequently indicate
+		 * broken XOR/base64 decode output in user/host-like components. */
+		if (c == '\\' || c == '^' || c == '"' || c == '<' || c == '>' ||
+		    c == '{' || c == '}' || c == '|' || c == '`')
+			return 0;
+	}
+
+	return 1;
 }
 
 
@@ -521,10 +543,13 @@ int restore_uri( struct sip_msg *msg, int to, int check_from)
 	str param_val;
 	str old_uri, ou;
 	str new_uri;
+	struct sip_uri parsed_new;
 	str *rr_param;
 	char *p;
 	int i;
 	int flag;
+	int use_fallback_old_uri = 0;
+	char bad_chr = 0;
 
 	/* we should process only sequntial request, but since we are looking
 	 * for Route param, the test is not really required -bogdan */
@@ -547,6 +572,8 @@ int restore_uri( struct sip_msg *msg, int to, int check_from)
 		LM_ERR("failed to decode uri\n");
 		goto failed;
 	}
+	LM_DBG("decoded raw route uri candidate len=%d val=[%.*s]\n",
+		new_uri.len, new_uri.len, new_uri.s);
 
 	/* dencrypt parameter ;) */
 	if (uac_passwd.len)
@@ -595,6 +622,8 @@ int restore_uri( struct sip_msg *msg, int to, int check_from)
 	}
 	for( i=0 ; i<old_uri.len ; i++ )
 		new_uri.s[i] ^= old_uri.s[i];
+	LM_DBG("after xor mix: hdr=%s old_uri=[%.*s] candidate_new=[%.*s]\n",
+		(to ? "to" : "from"), old_uri.len, old_uri.s, new_uri.len, new_uri.s);
 	if (new_uri.len==old_uri.len) {
 		for( ; new_uri.len && (new_uri.s[new_uri.len-1]==0) ; new_uri.len-- );
 		if (new_uri.len==0) {
@@ -602,6 +631,74 @@ int restore_uri( struct sip_msg *msg, int to, int check_from)
 			goto failed;
 		}
 	}
+
+	/*
+	 * Corrupted Route params may decode into garbage. Avoid poisoning
+	 * in-dialog To/From rewriting with invalid URI content.
+	 */
+	if (parse_uri(new_uri.s, new_uri.len, &parsed_new) < 0) {
+		LM_DBG("parse_uri() failed for candidate_new=[%.*s]\n",
+			new_uri.len, new_uri.s);
+		if (to)
+			LM_WARN("decoded TO URI is invalid, restoring original URI instead\n");
+		else
+			LM_WARN("decoded FROM URI is invalid, restoring original URI instead\n");
+		use_fallback_old_uri = 1;
+		new_uri = old_uri;
+	} else {
+		int strict_fail = 0;
+		int user_ok;
+		int old_has_at;
+
+		LM_DBG("parse_uri() ok: user=[%.*s] passwd=[%.*s] host=[%.*s] port=[%.*s]\n",
+			parsed_new.user.len, parsed_new.user.s,
+			parsed_new.passwd.len, parsed_new.passwd.s,
+			parsed_new.host.len, parsed_new.host.s,
+			parsed_new.port.len, parsed_new.port.s);
+		LM_DBG("parse_uri() extras: params=[%.*s] headers=[%.*s] type=%d\n",
+			parsed_new.params.len, parsed_new.params.s,
+			parsed_new.headers.len, parsed_new.headers.s,
+			parsed_new.type);
+
+		for (i = 0; i < new_uri.len; i++) {
+			if ((unsigned char)new_uri.s[i] < 32 || (unsigned char)new_uri.s[i] == 127) {
+				bad_chr = new_uri.s[i];
+				break;
+			}
+		}
+
+		if (!strict_uri_component_ok(&parsed_new.user) ||
+		    !strict_uri_component_ok(&parsed_new.passwd) ||
+		    !strict_uri_component_ok(&parsed_new.host) ||
+		    !strict_uri_component_ok(&parsed_new.params) ||
+		    !strict_uri_component_ok(&parsed_new.headers))
+			strict_fail = 1;
+
+		/* SIP/SIPS URIs must keep a host part after restore. */
+		if ((parsed_new.type == SIP_URI_T || parsed_new.type == SIPS_URI_T) &&
+		    parsed_new.host.len == 0)
+			strict_fail = 1;
+
+		/* If the original URI was user@host, keep that shape after restore. */
+		old_has_at = (memchr(old_uri.s, '@', old_uri.len) != NULL);
+		if (old_has_at && (parsed_new.user.len == 0 || parsed_new.host.len == 0))
+			strict_fail = 1;
+
+		user_ok = is_username_str(&parsed_new.user);
+		LM_DBG("strict checks: bad_chr=%d strict_fail=%d user_ok=%d old_has_at=%d\n",
+			(int)(unsigned char)bad_chr, strict_fail, user_ok, old_has_at);
+
+		if (bad_chr || strict_fail || !user_ok) {
+			if (to)
+				LM_WARN("decoded TO URI failed strict validation (bad_chr=%d strict_fail=%d), restoring original URI\n", (int)(unsigned char)bad_chr, strict_fail);
+			else
+				LM_WARN("decoded FROM URI failed strict validation (bad_chr=%d strict_fail=%d), restoring original URI\n", (int)(unsigned char)bad_chr, strict_fail);
+			use_fallback_old_uri = 1;
+			new_uri = old_uri;
+		}
+	}
+	LM_DBG("validation result: fallback=%d final_new=[%.*s] old=[%.*s]\n",
+		use_fallback_old_uri, new_uri.len, new_uri.s, old_uri.len, old_uri.s);
 
 	LM_DBG("decoded uris are: new=[%.*s] old=[%.*s]\n",
 		new_uri.len, new_uri.s, old_uri.len, old_uri.s);
@@ -631,6 +728,18 @@ int restore_uri( struct sip_msg *msg, int to, int check_from)
 	if (insert_new_lump_after( l, new_uri.s, new_uri.len, 0)==0) {
 		LM_ERR("insert new lump failed\n");
 		goto failed1;
+	}
+
+	LM_NOTICE("uac restore_uri: method=%.*s dir=%s hdr=%s fallback=%d old=[%.*s] new=[%.*s]\n",
+		msg->first_line.u.request.method.len,
+		msg->first_line.u.request.method.s,
+		uac_rrb.is_direction(msg, RR_FLOW_UPSTREAM) ? "upstream" : "downstream",
+		(to ? "to" : "from"), use_fallback_old_uri,
+		old_uri.len, old_uri.s, new_uri.len, new_uri.s);
+
+	if (use_fallback_old_uri) {
+		msg->msg_flags |= flag;
+		return 0;
 	}
 
 	msg->msg_flags |= flag;
@@ -735,6 +844,8 @@ static void replace_callback(struct dlg_cell *dlg, int type,
 		LM_DBG("<%.*s> param not found\n", rr_param->len, rr_param->s);
 		return;
 	}
+	LM_DBG("replace_callback fetched dlg value: rr_param=%.*s val_type=%d len=%d\n",
+		rr_param->len, rr_param->s, val_type, new_uri.s.len);
 
 	LM_DBG("decoded uris are: new=[%.*s] old=[%.*s]\n",
 		new_uri.s.len, new_uri.s.s, old_uri.len, old_uri.s);
@@ -765,6 +876,13 @@ static void replace_callback(struct dlg_cell *dlg, int type,
 		LM_ERR("insert new lump failed\n");
 		goto free;
 	}
+
+	LM_NOTICE("uac replace_callback: method=%.*s dir=%s hdr=%s rr_param=%.*s old=[%.*s] new=[%.*s]\n",
+		msg->first_line.u.request.method.len,
+		msg->first_line.u.request.method.s,
+		(_params->direction == DLG_DIR_UPSTREAM ? "upstream" : "downstream"),
+		(to ? "to" : "from"), rr_param->len, rr_param->s,
+		old_uri.len, old_uri.s, new_uri.s.len, new_uri.s.s);
 
 	/* change replies but only if not registered earlier */
 	if (!(msg->msg_flags & (FL_USE_UAC_FROM|FL_USE_UAC_TO)) &&
