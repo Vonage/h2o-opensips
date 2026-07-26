@@ -177,83 +177,50 @@ static inline int decode_uri( str *src , str *dst)
 
 
 static inline struct lump* get_display_anchor(struct sip_msg *msg,
-							struct hdr_field *hdr, str *dsp, int add_laquotes)
+							struct to_body *body, str *dsp, int *is_enclosed)
 {
 	struct lump* l;
-	struct to_body *body = (struct to_body *)hdr->parsed;
-	char *p, *lim;
+	char *p1;
 
-	/* is URI enclosed or not? */
-	for (p = body->uri.s-1, lim = hdr->name.s+hdr->name.len; p>=lim; p--) {
-		if (*p=='<') {
-			l = anchor_lump( msg, (body->uri.s-1) - msg->buf, 0);
-			if (l==0) {
-				LM_ERR("unable to build lump anchor\n");
-				return 0;
-			}
-			dsp->s[dsp->len++] = ' ';
-			return l;
-		}
-	}
-
-	if (add_laquotes) {
-		/* place the closing angle quote */
-		l = anchor_lump( msg, (body->uri.s+body->uri.len) - msg->buf, 0);
+	if (*is_enclosed) {
+		l = anchor_lump( msg, (body->uri.s-1) - msg->buf, 0);
 		if (l==0) {
 			LM_ERR("unable to build lump anchor\n");
 			return 0;
 		}
-		p = (char*)pkg_malloc(1);
-		if (p==0) {
-			LM_ERR("no more pkg mem \n");
-			return 0;
-		}
-		*p = '>';
-		if (insert_new_lump_after( l, p, 1, 0)==0) {
-			LM_ERR("insert lump failed\n");
-			pkg_free(p);
-			return 0;
-		}
+		dsp->s[dsp->len++] = ' ';
+		return l;
 	}
 
+	/* not enclosed - more complicated....must place the closing bracket */
+	l = anchor_lump( msg, (body->uri.s+body->uri.len) - msg->buf, 0);
+	if (l==0) {
+		LM_ERR("unable to build lump anchor\n");
+		return 0;
+	}
+	p1 = (char*)pkg_malloc(1);
+	if (p1==0) {
+		LM_ERR("no more pkg mem \n");
+		return 0;
+	}
+	*p1 = '>';
+	if (insert_new_lump_after( l, p1, 1, 0)==0) {
+		LM_ERR("insert lump failed\n");
+		pkg_free(p1);
+		return 0;
+	}
 	/* build anchor for display */
 	l = anchor_lump( msg, body->uri.s - msg->buf, 0);
 	if (l==0) {
 		LM_ERR("unable to build lump anchor\n");
 		return 0;
 	}
+	dsp->s[dsp->len++] = ' ';
+	dsp->s[dsp->len++] = '<';
 
-	if (add_laquotes) {
-		/* ... and the opening angle quote */
-		dsp->s[dsp->len++] = ' ';
-		dsp->s[dsp->len++] = '<';
-	}
+	*is_enclosed = 1;
 
 	return l;
-}
-
-
-/*
- * Expand the @uri buffer to include its enclosing left-angle quotes
- * (< and >), if they are present within the given @llim and @rlim boundaries.
- */
-static void expand_laquotes(str *uri, const char *llim, const char *rlim)
-{
-	char *p;
-
-	for (p = uri->s; p >= llim; p--) {
-		if (*p == '<') {
-			uri->len += (uri->s - p);
-			uri->s = p;
-
-			/* we are guaranteed to find a '>', since parse_header() worked */
-			for (p = uri->s + uri->len - 1; p < rlim; p++, uri->len++)
-				if (*p == '>')
-					return;
-
-			return;
-		}
-	}
 }
 
 
@@ -267,13 +234,17 @@ int replace_uri( struct sip_msg *msg, str *display, str *uri,
 	struct to_body *body;
 	struct lump* l;
 	struct cell *Trans;
-	str *rr_param, replace, old_uri;
-	str param, buf;
+	str *rr_param;
+	str replace;
 	char *p;
-	int uac_flag, i, ret;
+	str param;
+	str buf;
+	int uac_flag;
+	int i;
 	struct dlg_cell *dlg = NULL;
 	pv_value_t val;
 	int_str isval;
+	int ret, is_enclosed;
 
 	/* consistency check! in AUTO mode, do NOT allow URI changing
 	 * in sequential request */
@@ -283,13 +254,18 @@ int replace_uri( struct sip_msg *msg, str *display, str *uri,
 			goto error;
 		}
 		if (get_to(msg)->tag_value.len!=0) {
-			LM_ERR("decline FROM/TO replacing in sequential request "
+			LM_ERR("decline FROM replacing in sequential request "
 				"in auto mode (has TO tag)\n");
 			goto error;
 		}
 	}
 
 	body = (struct to_body*)hdr->parsed;
+
+	/* is URI enclosed or not? */
+	for( p=body->uri.s-1 ;
+	p>=(hdr->name.s + hdr->name.len) && *p!='<' ; p--);
+	is_enclosed = (*p=='<')? 1 : 0 ;
 
 	/* first deal with display name */
 	if (display) {
@@ -316,7 +292,7 @@ int replace_uri( struct sip_msg *msg, str *display, str *uri,
 			}
 			memcpy( buf.s, display->s, display->len);
 			buf.len =  display->len;
-			if (l==0 && (l=get_display_anchor(msg, hdr, &buf, ZSTRP(uri)))==0)
+			if (l==0 && (l=get_display_anchor(msg,body,&buf,&is_enclosed))==0)
 			{
 				LM_ERR("failed to insert anchor\n");
 				goto error;
@@ -335,31 +311,27 @@ int replace_uri( struct sip_msg *msg, str *display, str *uri,
 		/* do not touch URI part */
 		return 0;
 
-	p = pkg_malloc(1 + uri->len + 1 + 1);
-	if (!p) {
-		LM_ERR("no more pkg mem\n");
-		goto error;
-	}
-
-	uri->len = sprintf(p, "<%.*s>", uri->len, uri->s);
-	uri->s = p;
-
-	/* trim away any <, > (the replacement URI always includes them) */
-	old_uri = body->uri;
-	expand_laquotes(&old_uri,
-			hdr->name.s + hdr->name.len,
-			hdr->body.s + hdr->body.len);
-
-	LM_DBG("uri to replace [%.*s], replacement is [%.*s]\n",
-		old_uri.len, old_uri.s, uri->len, uri->s);
+	LM_DBG("uri to replace [%.*s], replacement is [%.*s], enclosed=%d\n",
+		body->uri.len, body->uri.s, uri->len, uri->s, is_enclosed);
 
 	/* build del/add lumps */
-	if ((l=del_lump( msg, old_uri.s - msg->buf, old_uri.len, 0))==0) {
+	if ((l=del_lump( msg, body->uri.s-msg->buf, body->uri.len, 0))==0) {
 		LM_ERR("del lump failed\n");
 		goto error;
 	}
-
-	if (insert_new_lump_after(l, uri->s, uri->len, 0)==0) {
+	p = pkg_malloc( uri->len + (is_enclosed?0:2) );
+	if (p==0) {
+		LM_ERR("no more pkg mem\n");
+		goto error;
+	}
+	i = 0;
+	if (!is_enclosed)
+		p[i++] = '<';
+	memcpy( p+i, uri->s, uri->len);
+	i += uri->len;
+	if (!is_enclosed)
+		p[i++] = '>';
+	if (insert_new_lump_after( l, p, i, 0)==0) {
 		LM_ERR("insert new lump failed\n");
 		pkg_free(p);
 		goto error;
@@ -516,7 +488,6 @@ error:
  */
 int restore_uri( struct sip_msg *msg, int to, int check_from)
 {
-	struct hdr_field *old_hdr;
 	struct lump* l;
 	str param_val;
 	str old_uri;
@@ -562,7 +533,6 @@ int restore_uri( struct sip_msg *msg, int to, int check_from)
 			goto failed;
 		}
 		old_uri = ((struct to_body*)msg->to->parsed)->uri;
-		old_hdr = msg->to;
 		flag = FL_USE_UAC_TO;
 	} else {
 		/* replace the FROM URI */
@@ -571,7 +541,6 @@ int restore_uri( struct sip_msg *msg, int to, int check_from)
 			goto failed;
 		}
 		old_uri = ((struct to_body*)msg->from->parsed)->uri;
-		old_hdr = msg->from;
 		flag = FL_USE_UAC_FROM;
 	}
 
@@ -609,11 +578,6 @@ int restore_uri( struct sip_msg *msg, int to, int check_from)
 	}
 	memcpy( p, new_uri.s, new_uri.len);
 	new_uri.s = p;
-
-	/* trim away any <, > (the replacement URI always includes them) */
-	expand_laquotes(&old_uri,
-			old_hdr->name.s + old_hdr->name.len,
-			old_hdr->body.s + old_hdr->body.len);
 
 	/* build del/add lumps */
 	l = del_lump( msg, old_uri.s-msg->buf, old_uri.len, 0);
@@ -673,7 +637,6 @@ static void replace_callback(struct dlg_cell *dlg, int type,
 {
 	struct lump* l;
 	struct sip_msg *msg;
-	struct hdr_field *old_hdr;
 	str *rr_param;
 	str old_uri;
 	int_str new_uri;
@@ -697,7 +660,6 @@ static void replace_callback(struct dlg_cell *dlg, int type,
 			return;
 		}
 		old_uri = ((struct to_body*)msg->to->parsed)->uri;
-		old_hdr = msg->to;
 		flag = FL_USE_UAC_TO;
 	} else {
 		/* replace the FROM URI */
@@ -706,7 +668,6 @@ static void replace_callback(struct dlg_cell *dlg, int type,
 			return;
 		}
 		old_uri = ((struct to_body*)msg->from->parsed)->uri;
-		old_hdr = msg->from;
 		flag = FL_USE_UAC_FROM;
 	}
 
@@ -741,11 +702,6 @@ static void replace_callback(struct dlg_cell *dlg, int type,
 	}
 	memcpy( p, new_uri.s.s, new_uri.s.len);
 	new_uri.s.s = p;
-
-	/* trim away any <, > (the replacement URI always includes them) */
-	expand_laquotes(&old_uri,
-			old_hdr->name.s + old_hdr->name.len,
-			old_hdr->body.s + old_hdr->body.len);
 
 	/* build del/add lumps */
 	l = del_lump( msg, old_uri.s-msg->buf, old_uri.len, 0);
